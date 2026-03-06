@@ -22,3 +22,13 @@ According to organizer info, SKUs here are the SKUs that are part of `plis_train
 - Expect high cardinality and sparse coverage across keys; prefer aggregation or feature hashing/encoding rather than wide one-hot expansion at full scale.
 - Useful for level-3 style abstraction and clustering where product characteristics matter beyond `eclass`.
 - Coverage is tied to training SKUs, so expect missing feature rows for SKUs that only appear in held-out/evaluation PLIs.
+
+## Pairwise Relationships
+Sanity-check basis: sample only (first 200k rows), not full-file verified.
+
+- `sku` <-> `safe_synonym`: many-to-many (`N:M`) in sample.
+- `sku` <-> `key`: many-to-many (`N:M`) in sample.
+- `key` <-> `fvalue`: many-to-many (`N:M`) in sample.
+- `key` <-> `fvalue_set`: many-to-many (`N:M`) in sample.
+
+Treat these as heuristic cardinalities for modeling decisions; strict constraints should be verified with a dedicated full pass if required.

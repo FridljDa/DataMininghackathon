@@ -22,3 +22,12 @@ Reference lookup for NACE industry taxonomy. Use this file to map NACE codes to 
 - Join by `nace_code` from buyer/order tables to derive robust industry features.
 - `nace_code -> n_nace_description` is one-to-one in this file.
 - `n_nace_description -> nace_code` is not one-to-one (same label can appear at multiple code granularities).
+
+## Pairwise Relationships
+Sanity-check basis: exact (full file).
+
+- `nace_code` -> `n_nace_description`: many-to-one (`N:1` overall), with functional dependency from code to description.
+- `nace_code` -> `nace_2digits`: many-to-one (`N:1`).
+- `nace_code` -> `nace_3digits`: many-to-one (`N:1`).
+- `nace_2digits` <-> `nace_2digits_description`: one-to-one (`1:1`).
+- `nace_3digits` <-> `nace_3digits_description`: one-to-one (`1:1`).

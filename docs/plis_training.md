@@ -32,3 +32,14 @@ Organizer definition: this is the DE PLI universe after applying the challenge s
   - Level 1 candidate key: `eclass`
   - Level 2 candidate key: (`eclass`, `manufacturer`)
 - Combine with NACE and company-size metadata for cold-start similarity features.
+
+## Pairwise Relationships
+Sanity-check basis: sample only (first 200k rows), not full-file verified.
+
+- `set_id` <-> `legal_entity_id`: many-to-many (`N:M`) in sample.
+- `set_id` <-> `orderdate`: many-to-many (`N:M`) in sample.
+- `sku` <-> `eclass`: many-to-many (`N:M`) in sample.
+- `sku` <-> `manufacturer`: many-to-many (`N:M`) in sample.
+- `eclass` <-> `manufacturer`: many-to-many (`N:M`) in sample.
+
+Use these as practical assumptions for feature engineering; re-check exact cardinality if a strict constraint is needed in production logic.

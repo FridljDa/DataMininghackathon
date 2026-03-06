@@ -28,3 +28,12 @@ Customer split-definition file for evaluation setup. Each row marks one legal en
   - `cold start` <-> `cs = 0`
   - `predict future` <-> `cs = 1`
 - This file is the canonical source for determining cold-start vs predict-future behavior.
+
+## Pairwise Relationships
+Sanity-check basis: exact (full file).
+
+- `legal_entity_id` -> `cs`: many-to-one (`N:1`).
+- `cs` -> `legal_entity_id`: one-to-many (`1:N`) by definition.
+- Cross-file with `customer_test.csv`:
+  - `legal_entity_id` sets are 1:1 aligned.
+  - `cs` <-> `task` is 1:1 at value level (`0` <-> `cold start`, `1` <-> `predict future`).

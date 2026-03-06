@@ -24,3 +24,15 @@ Metadata table for the challenge customer set (legal entities in `les_cs.csv`). 
   - `predict future` <-> `cs = 1` in `les_cs.csv`
 - This file is metadata-only (no PLIs). Link to transactional behavior via `legal_entity_id` in `plis_training.csv`.
 - Join `nace_code` and `secondary_nace_code` with `nace_codes.csv` for hierarchical industry features.
+
+## Pairwise Relationships
+Sanity-check basis: exact (full file).
+
+- `legal_entity_id` -> `task`: many-to-one (`N:1`).
+- `legal_entity_id` -> `nace_code`: many-to-one (`N:1`).
+- `task` <-> `nace_code`: many-to-many (`N:M`).
+- Cross-file (`customer_test.csv` vs `les_cs.csv`):
+  - `legal_entity_id` sets align 1:1 (same 100 entities).
+  - `task` <-> `cs` is 1:1 at value level:
+    - `cold start` <-> `0`
+    - `predict future` <-> `1`

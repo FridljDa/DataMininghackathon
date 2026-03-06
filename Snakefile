@@ -31,6 +31,11 @@ PLOTS_DIR = PLOTS["dir"]
 PLOT_FILES = PLOTS["files"]
 PLOT_OUTPUTS = expand(f"{PLOTS_DIR}/{{f}}", f=PLOT_FILES)
 
+MODELLING = config["modelling"]
+CANDIDATES_PARQUET = MODELLING["candidates_parquet"]
+SCORES_PARQUET = MODELLING["scores_parquet"]
+PORTFOLIO_PARQUET = MODELLING["portfolio_parquet"]
+
 rule all:
     input:
         SUBMISSION_CSV,
@@ -67,6 +72,75 @@ rule split_plis_training_validation:
         "uv run src/split_plis_training_validation.py --input {input.plis} --customer-meta {input.customer} "
         "--train {output.train} --test {output.test} --cutoff-date {params.cutoff}"
 
+rule build_features:
+    """Candidate generation and feature engineering for Level 1 (warm buyers, E-Class)."""
+    input:
+        plis = PLIS_TRAINING_SPLIT,
+        customer = CUSTOMER_META_CSV,
+    output:
+        candidates = CANDIDATES_PARQUET,
+    params:
+        train_end = MODELLING["train_end"],
+        lookback_months = MODELLING["lookback_months"],
+        min_spend_singleton = MODELLING["min_spend_singleton"],
+    shell:
+        "uv run src/build_features.py --plis {input.plis} --customer {input.customer} "
+        "--output {output.candidates} --train-end {params.train_end} "
+        "--lookback-months {params.lookback_months} --min-spend-singleton {params.min_spend_singleton}"
+
+rule train_baseline:
+    """Baseline scorer and validation labels; outputs scores.parquet."""
+    input:
+        candidates = CANDIDATES_PARQUET,
+        plis = PLIS_TRAINING_SPLIT,
+    output:
+        scores = SCORES_PARQUET,
+    params:
+        val_start = MODELLING["val_start"],
+        val_end = MODELLING["val_end"],
+        n_min_label = MODELLING["n_min_label"],
+        alpha = MODELLING["alpha"],
+        beta = MODELLING["beta"],
+        gamma = MODELLING["gamma"],
+        savings_rate = SCORING_PARAMS["savings_rate"],
+        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
+        val_months = MODELLING["val_months"],
+    shell:
+        "uv run src/train_baseline.py --candidates {input.candidates} --plis {input.plis} "
+        "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
+        "--n-min-label {params.n_min_label} --alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
+        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
+
+rule select_portfolio:
+    """Apply threshold, guardrails and per-buyer cap K to produce portfolio.parquet."""
+    input:
+        scores = SCORES_PARQUET,
+    output:
+        portfolio = PORTFOLIO_PARQUET,
+    params:
+        score_threshold = MODELLING["score_threshold"],
+        min_orders_guardrail = MODELLING["min_orders_guardrail"],
+        min_months_guardrail = MODELLING["min_months_guardrail"],
+        high_spend_guardrail = MODELLING["high_spend_guardrail"],
+        top_k_per_buyer = MODELLING["top_k_per_buyer"],
+    shell:
+        "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
+        "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
+        "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
+        "--top-k-per-buyer {params.top_k_per_buyer}"
+
+rule write_submission_warm:
+    """Format portfolio into submission CSV (Level 1: cluster=eclass); cold-start fallback to global default."""
+    input:
+        portfolio = PORTFOLIO_PARQUET,
+        customer_test = INPUTS["customer_test"],
+        plis = PLIS_TRAINING_SPLIT,
+    output:
+        submission = SUBMISSION_CSV,
+    shell:
+        "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
+        "--customer-test {input.customer_test} --plis-training {input.plis} --output {output.submission}"
+
 rule build_customer_meta:
     """Build customer metadata from plis_training (all unique customers, task from customer_test or none)."""
     input:
@@ -78,12 +152,12 @@ rule build_customer_meta:
         "uv run src/build_customer_meta.py --plis {input.plis} --customer-test {input.customer_test} --output {output.customer}"
 
 rule write_submission:
-    """Write baseline submission CSV with required header (legal_entity_id,cluster)."""
+    """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/10_submission/submission_baseline.csv' to run."""
     input:
         customer_test = INPUTS["customer_test"],
         plis = PLIS_TRAINING_CSV,
     output:
-        submission = SUBMISSION_CSV,
+        submission = "data/10_submission/submission_baseline.csv",
     shell:
         "uv run src/write_submission.py --output {output.submission} "
         "--customer-test {input.customer_test} --plis-training {input.plis}"

@@ -25,6 +25,26 @@ score_outputs:
   summary: "data/11_scores/score_summary.csv"
   details: "data/11_scores/score_details.parquet"
 
+modelling:
+  train_end: "2024-12-31"
+  val_start: "2025-01-01"
+  val_end: "2025-06-30"
+  n_min_label: 2
+  lookback_months: 18
+  min_spend_singleton: 50.0
+  alpha: 1.0
+  beta: 1.0
+  gamma: 0.5
+  score_threshold: 0.0
+  min_orders_guardrail: 3
+  min_months_guardrail: 2
+  high_spend_guardrail: 500.0
+  top_k_per_buyer: 15
+  val_months: 6.0
+  candidates_parquet: "data/05_features/candidates.parquet"
+  scores_parquet: "data/06_predictions/scores.parquet"
+  portfolio_parquet: "data/07_portfolio/portfolio.parquet"
+
 plots:
   dir: "data/04_plots"
   files:

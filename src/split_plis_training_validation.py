@@ -1,31 +1,25 @@
 """
 Split plis_training.csv into training and testing by customer and cutoff date.
 
-Selects a random sample of customers with task=none from customer metadata.
-For those customers only, rows with orderdate >= cutoff_date go to the test set;
-all other rows go to the training set. Schema and delimiter are preserved.
+Uses customer metadata with task=testing as the test customer set. For those
+customers only, rows with orderdate >= cutoff_date go to the test set; all
+other rows go to the training set. Schema and delimiter are preserved.
 """
 
 import argparse
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="Path to plis_training CSV/TSV")
-    parser.add_argument("--customer-meta", required=True, dest="customer_meta", help="Path to customer metadata CSV/TSV (must have legal_entity_id, task)")
+    parser.add_argument("--customer-meta", required=True, dest="customer_meta", help="Path to customer metadata (must have legal_entity_id, task; task=testing marks test customers)")
     parser.add_argument("--train", required=True, help="Path to output training file")
     parser.add_argument("--test", required=True, help="Path to output test file")
-    parser.add_argument("--cutoff-date", required=True, dest="cutoff_date", help="Cutoff date (YYYY-MM-DD); rows >= this from selected customers go to test")
-    parser.add_argument("--test-customers-count", type=int, required=True, dest="test_customers_count", help="Number of task=none customers to sample for test set")
-    parser.add_argument("--random-seed", type=int, required=True, dest="random_seed", help="Random seed for reproducible sampling")
+    parser.add_argument("--cutoff-date", required=True, dest="cutoff_date", help="Cutoff date (YYYY-MM-DD); rows >= this from test customers go to test")
     args = parser.parse_args()
-
-    if args.test_customers_count < 1:
-        raise ValueError("test_customers_count must be at least 1")
 
     cutoff = pd.Timestamp(args.cutoff_date)
     input_path = Path(args.input)
@@ -33,19 +27,12 @@ def main() -> None:
     train_path = Path(args.train)
     test_path = Path(args.test)
 
-    # Load customer metadata and sample task=none customers
     meta = pd.read_csv(customer_meta_path, sep="\t", dtype=str)
     for col in ("legal_entity_id", "task"):
         if col not in meta.columns:
             raise ValueError(f"Customer metadata must contain '{col}'. Got: {list(meta.columns)}")
-    none_customers = meta.loc[meta["task"].str.strip().str.lower() == "none", "legal_entity_id"].astype(str).unique()
-    if len(none_customers) < args.test_customers_count:
-        raise ValueError(
-            f"Not enough customers with task=none: found {len(none_customers)}, need {args.test_customers_count}"
-        )
-    rng = np.random.default_rng(args.random_seed)
-    selected = rng.choice(none_customers, size=args.test_customers_count, replace=False)
-    selected_ids = set(selected.tolist())
+    testing_customers = meta.loc[meta["task"].str.strip().str.lower() == "testing", "legal_entity_id"].astype(str).unique()
+    selected_ids = set(testing_customers.tolist())
 
     # Load plis and ensure required columns
     df = pd.read_csv(input_path, sep="\t", low_memory=False)
@@ -67,7 +54,7 @@ def main() -> None:
     train_df.to_csv(train_path, sep="\t", index=False)
     test_df.to_csv(test_path, sep="\t", index=False)
 
-    print(f"Training rows: {len(train_df)}, test rows: {len(test_df)} (customers in test: {args.test_customers_count}, cutoff {args.cutoff_date})")
+    print(f"Training rows: {len(train_df)}, test rows: {len(test_df)} (test customers: {len(selected_ids)}, cutoff {args.cutoff_date})")
 
 
 if __name__ == "__main__":

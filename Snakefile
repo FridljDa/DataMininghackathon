@@ -19,6 +19,7 @@ SUBMISSION_CSV = config["submission_csv"]
 SPLIT = config["training_validation_split"]
 PLIS_TRAINING_SPLIT = SPLIT["plis_training"]
 PLIS_TESTING_SPLIT = SPLIT["plis_testing"]
+SPLIT_CUSTOMER_CSV = f"{DATA_DIR}/03_customer/customer.csv"
 
 SCORE_OUTPUTS = config["score_outputs"]
 SCORE_SUMMARY = SCORE_OUTPUTS["summary"]
@@ -38,22 +39,33 @@ rule all:
         SCORE_SUMMARY,
         SCORE_DETAILS,
 
+rule prepare_split_customer_meta:
+    """Relabel 50 random task=none customers (total purchase value >= 15k) to task=testing for split."""
+    input:
+        customer = CUSTOMER_META_CSV,
+        plis = PLIS_TRAINING_CSV,
+    output:
+        customer = SPLIT_CUSTOMER_CSV,
+    params:
+        n_testing = SPLIT["test_customers_count"],
+        seed = SPLIT["random_seed"],
+    shell:
+        "uv run src/prepare_split_customer_meta.py --customer-meta {input.customer} --plis {input.plis} "
+        "--output {output.customer} --n-testing {params.n_testing} --random-seed {params.seed}"
+
 rule split_plis_training_validation:
-    """Split plis_training into training and testing: 50 random task=none customers; their rows with orderdate >= cutoff go to test, rest to training."""
+    """Split plis_training into training and testing: customers with task=testing; their rows with orderdate >= cutoff go to test, rest to training."""
     input:
         plis = PLIS_TRAINING_CSV,
-        customer = CUSTOMER_META_CSV,
+        customer = SPLIT_CUSTOMER_CSV,
     output:
         train = PLIS_TRAINING_SPLIT,
         test = PLIS_TESTING_SPLIT,
     params:
         cutoff = SPLIT["cutoff_date"],
-        n_customers = SPLIT["test_customers_count"],
-        seed = SPLIT["random_seed"],
     shell:
         "uv run src/split_plis_training_validation.py --input {input.plis} --customer-meta {input.customer} "
-        "--train {output.train} --test {output.test} --cutoff-date {params.cutoff} "
-        "--test-customers-count {params.n_customers} --random-seed {params.seed}"
+        "--train {output.train} --test {output.test} --cutoff-date {params.cutoff}"
 
 rule build_customer_meta:
     """Build customer metadata from plis_training (all unique customers, task from customer_test or none)."""
@@ -100,7 +112,7 @@ rule generate_exploration_plots:
         plis = PLIS_TRAINING_CSV,
         customer_test = INPUTS["customer_test"],
         les_cs = INPUTS["les_cs"],
-        customer_meta = CUSTOMER_META_CSV,
+        customer_meta = SPLIT_CUSTOMER_CSV,
     output:
         plots = PLOT_OUTPUTS,
     params:

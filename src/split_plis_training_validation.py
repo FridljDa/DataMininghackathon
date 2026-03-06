@@ -9,6 +9,7 @@ all other rows go to the training set. Schema and delimiter are preserved.
 import argparse
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 
@@ -42,7 +43,7 @@ def main() -> None:
         raise ValueError(
             f"Not enough customers with task=none: found {len(none_customers)}, need {args.test_customers_count}"
         )
-    rng = pd.random.default_rng(args.random_seed)
+    rng = np.random.default_rng(args.random_seed)
     selected = rng.choice(none_customers, size=args.test_customers_count, replace=False)
     selected_ids = set(selected.tolist())
 

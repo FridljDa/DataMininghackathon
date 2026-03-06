@@ -20,6 +20,11 @@ SPLIT = config["training_validation_split"]
 PLIS_TRAINING_SPLIT = SPLIT["plis_training"]
 PLIS_TESTING_SPLIT = SPLIT["plis_testing"]
 
+SCORE_OUTPUTS = config["score_outputs"]
+SCORE_SUMMARY = SCORE_OUTPUTS["summary"]
+SCORE_DETAILS = SCORE_OUTPUTS["details"]
+SCORING_PARAMS = config["scoring_parameters"]
+
 PLOTS = config["plots"]
 PLOTS_DIR = PLOTS["dir"]
 PLOT_FILES = PLOTS["files"]
@@ -30,6 +35,8 @@ rule all:
         SUBMISSION_CSV,
         CUSTOMER_META_CSV,
         PLOT_OUTPUTS,
+        SCORE_SUMMARY,
+        SCORE_DETAILS,
 
 rule split_plis_training_validation:
     """Split plis_training into training and testing: 50 random task=none customers; their rows with orderdate >= cutoff go to test, rest to training."""
@@ -68,6 +75,24 @@ rule write_submission:
     shell:
         "uv run src/write_submission.py --output {output.submission} "
         "--customer-test {input.customer_test} --plis-training {input.plis}"
+
+rule score_submission:
+    """Score submission against plis_testing holdout; write summary and details to data/11_scores."""
+    input:
+        submission = SUBMISSION_CSV,
+        plis_testing = PLIS_TESTING_SPLIT,
+    output:
+        summary = SCORE_SUMMARY,
+        details = SCORE_DETAILS,
+    params:
+        savings_rate = SCORING_PARAMS["savings_rate"],
+        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
+        scoring_months = SCORING_PARAMS["scoring_months"],
+    shell:
+        "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
+        "--summary {output.summary} --details {output.details} "
+        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
+        "--scoring-months {params.scoring_months}"
 
 rule generate_exploration_plots:
     """Generate EDA plots from raw CSVs and customer metadata into data/04_plots."""

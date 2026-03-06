@@ -29,6 +29,26 @@ def _normalize_cluster(eclass: str | float, manufacturer: str | float) -> str:
     return f"{e}|{m}"
 
 
+def _normalize_cluster_str(cluster: str) -> str:
+    """Normalize a 'eclass|manufacturer' string to match truth keys (e.g. 41080401.0 -> 41080401)."""
+    if pd.isna(cluster) or not isinstance(cluster, str):
+        return ""
+    parts = cluster.strip().split("|", 1)
+    if len(parts) != 2:
+        return ""
+    e, m = parts[0].strip(), parts[1].strip()
+    if e and e != "nan":
+        try:
+            e = str(int(float(e)))
+        except (ValueError, TypeError):
+            pass
+    else:
+        e = ""
+    if m == "nan":
+        m = ""
+    return f"{e}|{m}" if e and m else ""
+
+
 def _read_plis(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, sep="\t", low_memory=False)
     for col in ("legal_entity_id", "orderdate", "eclass", "manufacturer", "quantityvalue", "vk_per_item"):
@@ -83,6 +103,7 @@ def main() -> None:
             raise ValueError(f"Submission must contain '{col}'. Got: {list(sub.columns)}")
     sub["legal_entity_id"] = sub["legal_entity_id"].astype(str)
     sub["cluster"] = sub["cluster"].astype(str).str.strip()
+    sub["_cluster_norm"] = sub["cluster"].map(_normalize_cluster_str)
 
     plis = _read_plis(plis_path)
     pair_spend, total_ground_spend = _build_truth_spend(plis)
@@ -90,8 +111,8 @@ def main() -> None:
     num_predictions = len(sub)
     hit_pairs: set[tuple[str, str]] = set()
     for _, row in sub.iterrows():
-        key = (row["legal_entity_id"], row["cluster"])
-        if key in pair_spend:
+        key = (row["legal_entity_id"], row["_cluster_norm"])
+        if key[1] and key in pair_spend:
             hit_pairs.add(key)
 
     num_hits = len(hit_pairs)

@@ -147,10 +147,8 @@ class TestSubmit:
         """Challenge 1 has no level toggle; submit should not raise."""
         parquet2 = tmp_path / "sub2.parquet"
         parquet2.write_bytes(b"PAR1")
-        l2 = _make_button("Level 2 — E-Class + Manufacturer")
-        page2 = self._page_with_buttons([l2])
+        page2 = self._page_with_buttons([])
         submit(page2, challenge_id=1, file_path=parquet2, level=2)
-        l2.click.assert_called_once()
 
     # --- file upload ---
 
@@ -259,7 +257,7 @@ class TestMain:
         csv.write_text("a,b\n")
         with patch("sys.argv", ["submit", "--challenge", "2", "--file", str(csv), "--level", "3"]):
             with patch("submit.load_dotenv"):
-                with patch.dict("os.environ", {"TEAM": "t", "PASSWOR": "p"}):
+                with patch.dict("os.environ", {"TEAM": "t", "PASSWORD": "p"}):
                     with patch("submit.sync_playwright") as mock_pw:
                         # Make the browser/page chain raise RuntimeError (level 3 not found)
                         mock_page = MagicMock()

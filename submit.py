@@ -8,7 +8,7 @@ Usage:
 
 Credentials are read from .env:
     TEAM=<your team name>
-    PASSWOR=<your password>
+    PASSWORD=<your password>
 """
 
 import argparse
@@ -37,7 +37,7 @@ def login(page, team: str, password: str) -> None:
     page.wait_for_load_state("networkidle")
 
     if "/login" in page.url:
-        raise RuntimeError("Login failed — check TEAM / PASSWOR in your .env file")
+        raise RuntimeError("Login failed — check TEAM / PASSWORD in your .env file")
 
     print(f"✓ Logged in as {team}")
 
@@ -56,24 +56,25 @@ def submit(
     print(f"✓ Opened challenge {challenge_id}")
 
     # Select matching granularity (only relevant for challenge 2 which has Level buttons).
-    level_labels = {1: "Level 1", 2: "Level 2", 3: "Level 3"}
-    target_label = level_labels.get(level, "Level 2")
-    matched = False
-    for btn in page.locator("button[type=button]").all():
-        if target_label in btn.inner_text():
-            if btn.is_disabled():
-                raise RuntimeError(
-                    f"Level {level} is not yet available on the portal (button is disabled)."
-                )
-            btn.click()
-            print(f"✓ Selected {target_label}")
-            matched = True
-            break
-    if not matched and level in level_labels:
-        raise RuntimeError(
-            f"Level {level} button not found on this challenge page — "
-            "it may not be available yet."
-        )
+    if challenge_id == 2:
+        level_labels = {1: "Level 1", 2: "Level 2", 3: "Level 3"}
+        target_label = level_labels.get(level, "Level 2")
+        matched = False
+        for btn in page.locator("button[type=button]").all():
+            if target_label in btn.inner_text():
+                if btn.is_disabled():
+                    raise RuntimeError(
+                        f"Level {level} is not yet available on the portal (button is disabled)."
+                    )
+                btn.click()
+                print(f"✓ Selected {target_label}")
+                matched = True
+                break
+        if not matched and level in level_labels:
+            raise RuntimeError(
+                f"Level {level} button not found on this challenge page — "
+                "it may not be available yet."
+            )
 
     # Upload file.
     file_input = page.locator("input[type=file]")
@@ -153,9 +154,9 @@ def main() -> None:
 
     load_dotenv()
     team = os.getenv("TEAM")
-    password = os.getenv("PASSWOR")
+    password = os.getenv("PASSWORD")
     if not team or not password:
-        print("Error: TEAM and PASSWOR must be set in .env", file=sys.stderr)
+        print("Error: TEAM and PASSWORD must be set in .env", file=sys.stderr)
         sys.exit(1)
 
     with sync_playwright() as p:

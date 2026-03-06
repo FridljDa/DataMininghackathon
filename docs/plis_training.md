@@ -2,6 +2,7 @@
 
 ## Purpose
 Historical transaction-level training data. Each row is a purchased item line, used to learn recurring demand patterns and build candidate Core Demand portfolios.
+Organizer definition: this is the DE PLI universe after applying the challenge split logic from `les_cs.csv`.
 
 ## File Format
 - Delimiter: tab (`\t`)
@@ -23,6 +24,9 @@ Historical transaction-level training data. Each row is a purchased item line, u
 - `secondary_nace_code`: optional secondary NACE code.
 
 ## Modeling Notes
+- Split logic with `les_cs.csv` (cutoff `2025-07-01`):
+  - For `cs = 0` customers: all PLIs are removed from this training file.
+  - For `cs = 1` customers: only PLIs before the cutoff are included.
 - Core grain is line-item level, so aggregate to buyer-time and buyer-category views for stable recurring-demand signals.
 - Main hierarchy options for prediction levels:
   - Level 1 candidate key: `eclass`

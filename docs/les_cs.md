@@ -17,13 +17,14 @@ Customer split-definition file for evaluation setup. Each row marks one legal en
 ## How This Drives the Train/Test Split
 - `cs = 0`:
   - `plis_training.csv` excludes all PLIs for this customer.
-  - `plis_test.csv` contains all PLIs for this customer.
+  - Held-out evaluation side contains all PLIs for this customer.
 - `cs = 1`:
   - `plis_training.csv` contains PLIs only up to `2025-07-01` (exclusive of later dates).
-  - `plis_test.csv` contains PLIs after `2025-07-01`.
+  - Held-out evaluation side contains PLIs after `2025-07-01`.
 
 ## Consistency Notes
 - `customer_test.csv` should align to this population of legal entities.
 - `task` in `customer_test.csv` maps naturally to this flag:
   - `cold start` <-> `cs = 0`
   - `predict future` <-> `cs = 1`
+- This file is the canonical source for determining cold-start vs predict-future behavior.

@@ -2,6 +2,7 @@
 
 ## Purpose
 Product-attribute table for SKU enrichment. This file maps each SKU to one or more normalized feature key/value pairs.
+According to organizer info, SKUs here are the SKUs that are part of `plis_training.csv`.
 
 ## File Format
 - Delimiter: tab (`\t`)
@@ -20,3 +21,4 @@ Product-attribute table for SKU enrichment. This file maps each SKU to one or mo
 - Treat this as a long-form key-value feature store (multiple rows per SKU).
 - Expect high cardinality and sparse coverage across keys; prefer aggregation or feature hashing/encoding rather than wide one-hot expansion at full scale.
 - Useful for level-3 style abstraction and clustering where product characteristics matter beyond `eclass`.
+- Coverage is tied to training SKUs, so expect missing feature rows for SKUs that only appear in held-out/evaluation PLIs.

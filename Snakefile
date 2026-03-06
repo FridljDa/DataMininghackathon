@@ -24,6 +24,8 @@ SPLIT_CUSTOMER_CSV = f"{DATA_DIR}/03_customer/customer.csv"
 SCORE_OUTPUTS = config["score_outputs"]
 SCORE_SUMMARY = SCORE_OUTPUTS["summary"]
 SCORE_DETAILS = SCORE_OUTPUTS["details"]
+SCORE_SUMMARY_OFFLINE = SCORE_OUTPUTS["summary_offline"]
+SCORE_DETAILS_OFFLINE = SCORE_OUTPUTS["details_offline"]
 SCORING_PARAMS = config["scoring_parameters"]
 
 PLOTS = config["plots"]
@@ -34,7 +36,12 @@ PLOT_OUTPUTS = expand(f"{PLOTS_DIR}/{{f}}", f=PLOT_FILES)
 MODELLING = config["modelling"]
 CANDIDATES_PARQUET = MODELLING["candidates_parquet"]
 SCORES_PARQUET = MODELLING["scores_parquet"]
+SCORES_LGBM_PARQUET = MODELLING["scores_lgbm_parquet"]
 PORTFOLIO_PARQUET = MODELLING["portfolio_parquet"]
+CANDIDATES_OFFLINE_PARQUET = MODELLING["candidates_offline_parquet"]
+SCORES_OFFLINE_PARQUET = MODELLING["scores_offline_parquet"]
+PORTFOLIO_OFFLINE_PARQUET = MODELLING["portfolio_offline_parquet"]
+SUBMISSION_OFFLINE_CSV = MODELLING["submission_offline_csv"]
 
 rule all:
     input:
@@ -111,6 +118,26 @@ rule train_baseline:
         "--n-min-label {params.n_min_label} --alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
 
+rule train_lgbm:
+    """Two-stage LightGBM (recurrence classifier + value regressor); outputs scores_lgbm.parquet."""
+    input:
+        candidates = CANDIDATES_PARQUET,
+        plis = PLIS_TRAINING_SPLIT,
+    output:
+        scores = SCORES_LGBM_PARQUET,
+    params:
+        val_start = MODELLING["val_start"],
+        val_end = MODELLING["val_end"],
+        n_min_label = MODELLING["n_min_label"],
+        savings_rate = SCORING_PARAMS["savings_rate"],
+        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
+        val_months = MODELLING["val_months"],
+    shell:
+        "uv run src/train_lgbm.py --candidates {input.candidates} --plis {input.plis} "
+        "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
+        "--n-min-label {params.n_min_label} "
+        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
+
 rule select_portfolio:
     """Apply threshold, guardrails and per-buyer cap K to produce portfolio.parquet."""
     input:
@@ -139,7 +166,7 @@ rule write_submission_warm:
         submission = SUBMISSION_CSV,
     shell:
         "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
-        "--customer-test {input.customer_test} --plis-training {input.plis} --output {output.submission}"
+        "--buyer-source customer-test --customer-test {input.customer_test} --plis-training {input.plis} --output {output.submission}"
 
 rule build_customer_meta:
     """Build customer metadata from plis_training (all unique customers, task from customer_test or none)."""
@@ -177,6 +204,94 @@ rule score_submission:
     shell:
         "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
         "--summary {output.summary} --details {output.details} "
+        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
+        "--scoring-months {params.scoring_months}"
+
+# --- Offline scoring: predict for testing buyers only, score with Level-1 (eclass) matching ---
+rule build_features_offline:
+    """Build candidates including task=testing buyers (for offline holdout evaluation)."""
+    input:
+        plis = PLIS_TRAINING_SPLIT,
+        customer = SPLIT_CUSTOMER_CSV,
+    output:
+        candidates = CANDIDATES_OFFLINE_PARQUET,
+    params:
+        train_end = MODELLING["train_end"],
+        lookback_months = MODELLING["lookback_months"],
+        min_spend_singleton = MODELLING["min_spend_singleton"],
+    shell:
+        "uv run src/build_features.py --plis {input.plis} --customer {input.customer} "
+        "--output {output.candidates} --train-end {params.train_end} "
+        "--lookback-months {params.lookback_months} --min-spend-singleton {params.min_spend_singleton}"
+
+rule train_baseline_offline:
+    """Baseline scorer for offline pipeline (same as train_baseline, different input/output)."""
+    input:
+        candidates = CANDIDATES_OFFLINE_PARQUET,
+        plis = PLIS_TRAINING_SPLIT,
+    output:
+        scores = SCORES_OFFLINE_PARQUET,
+    params:
+        val_start = MODELLING["val_start"],
+        val_end = MODELLING["val_end"],
+        n_min_label = MODELLING["n_min_label"],
+        alpha = MODELLING["alpha"],
+        beta = MODELLING["beta"],
+        gamma = MODELLING["gamma"],
+        savings_rate = SCORING_PARAMS["savings_rate"],
+        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
+        val_months = MODELLING["val_months"],
+    shell:
+        "uv run src/train_baseline.py --candidates {input.candidates} --plis {input.plis} "
+        "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
+        "--n-min-label {params.n_min_label} --alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
+        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
+
+rule select_portfolio_offline:
+    """Select portfolio for offline pipeline."""
+    input:
+        scores = SCORES_OFFLINE_PARQUET,
+    output:
+        portfolio = PORTFOLIO_OFFLINE_PARQUET,
+    params:
+        score_threshold = MODELLING["score_threshold"],
+        min_orders_guardrail = MODELLING["min_orders_guardrail"],
+        min_months_guardrail = MODELLING["min_months_guardrail"],
+        high_spend_guardrail = MODELLING["high_spend_guardrail"],
+        top_k_per_buyer = MODELLING["top_k_per_buyer"],
+    shell:
+        "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
+        "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
+        "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
+        "--top-k-per-buyer {params.top_k_per_buyer}"
+
+rule write_submission_offline:
+    """Build submission from portfolio for testing buyers only (offline scoring)."""
+    input:
+        portfolio = PORTFOLIO_OFFLINE_PARQUET,
+        customer_split = SPLIT_CUSTOMER_CSV,
+        plis = PLIS_TRAINING_SPLIT,
+    output:
+        submission = SUBMISSION_OFFLINE_CSV,
+    shell:
+        "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
+        "--buyer-source customer-split --customer-split {input.customer_split} --plis-training {input.plis} --output {output.submission}"
+
+rule score_submission_offline:
+    """Score offline submission against plis_testing with Level-1 (eclass-only) matching."""
+    input:
+        submission = SUBMISSION_OFFLINE_CSV,
+        plis_testing = PLIS_TESTING_SPLIT,
+    output:
+        summary = SCORE_SUMMARY_OFFLINE,
+        details = SCORE_DETAILS_OFFLINE,
+    params:
+        savings_rate = SCORING_PARAMS["savings_rate"],
+        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
+        scoring_months = SCORING_PARAMS["scoring_months"],
+    shell:
+        "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
+        "--summary {output.summary} --details {output.details} --level 1 "
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
         "--scoring-months {params.scoring_months}"
 

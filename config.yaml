@@ -24,6 +24,8 @@ scores_dir: "data/11_scores"
 score_outputs:
   summary: "data/11_scores/score_summary.csv"
   details: "data/11_scores/score_details.parquet"
+  summary_offline: "data/11_scores/score_summary_offline.csv"
+  details_offline: "data/11_scores/score_details_offline.parquet"
 
 modelling:
   train_end: "2024-12-31"
@@ -43,7 +45,12 @@ modelling:
   val_months: 6.0
   candidates_parquet: "data/05_features/candidates.parquet"
   scores_parquet: "data/06_predictions/scores.parquet"
+  scores_lgbm_parquet: "data/06_predictions/scores_lgbm.parquet"
   portfolio_parquet: "data/07_portfolio/portfolio.parquet"
+  candidates_offline_parquet: "data/05_features/candidates_offline.parquet"
+  scores_offline_parquet: "data/06_predictions/scores_offline.parquet"
+  portfolio_offline_parquet: "data/07_portfolio/portfolio_offline.parquet"
+  submission_offline_csv: "data/10_submission/submission_offline.csv"
 
 plots:
   dir: "data/04_plots"

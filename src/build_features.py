@@ -87,7 +87,10 @@ def main() -> None:
     customer["legal_entity_id"] = customer["legal_entity_id"].astype(str)
     task_norm = customer["task"].str.strip().str.lower()
     warm_ids = set(
-        customer.loc[task_norm == "predict future", "legal_entity_id"].unique().tolist()
+        customer.loc[
+            task_norm.isin(["predict future", "testing"]),
+            "legal_entity_id",
+        ].unique().tolist()
     )
 
     plis_train = plis[plis["orderdate"] <= train_end].copy()

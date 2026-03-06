@@ -165,12 +165,13 @@ def _upload_csv(page, csv_path: Path) -> None:
                 continue
 
             candidate.set_input_files(str(csv_path))
+            upload_bound = True
             files_len = candidate.evaluate("el => (el.files ? el.files.length : 0)")
             print(f"Input #{idx} files length after set: {files_len}")
-            if files_len > 0:
-                upload_bound = True
-                break
-        except PlaywrightTimeoutError:
+            # Some components clear the hidden input after internal processing.
+            break
+        except Exception as exc:
+            print(f"Input #{idx} set_input_files failed: {exc}")
             continue
 
     if not upload_bound:
@@ -193,6 +194,10 @@ def _upload_csv(page, csv_path: Path) -> None:
 
     if not clicked_button:
         print("No enabled submit-like button found. Continuing in case auto-upload is used.")
+        # Emit page body text snippet for diagnostics when submit remains disabled.
+        body_text = page.locator("body").inner_text()
+        compact = " ".join(body_text.split())
+        print(f"Page text snippet after upload: {compact[:400]}")
 
     # Give backend a brief moment to process and render a result.
     page.wait_for_timeout(3000)

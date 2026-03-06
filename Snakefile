@@ -3,7 +3,7 @@ Snakemake workflow for Core Demand Challenge.
 
 All input/output paths are defined here. Python scripts receive paths only via
 CLI arguments. Final deliverable: outputs/submission.csv with header
-buyer_id,predicted_id.
+legal_entity_id,cluster.
 """
 
 configfile: "config.yaml"
@@ -51,8 +51,12 @@ rule build_customer_meta:
         "uv run src/build_customer_meta.py --plis {input.plis} --customer-test {input.customer_test} --output {output.customer}"
 
 rule write_submission:
-    """Write minimal submission CSV with required header (buyer_id,predicted_id)."""
+    """Write baseline submission CSV with required header (legal_entity_id,cluster)."""
+    input:
+        customer_test = INPUTS["customer_test"],
+        plis = PLIS_TRAINING_CSV,
     output:
         submission = SUBMISSION_CSV,
     shell:
-        "uv run src/write_submission.py --output {output.submission}"
+        "uv run src/write_submission.py --output {output.submission} "
+        "--customer-test {input.customer_test} --plis-training {input.plis}"

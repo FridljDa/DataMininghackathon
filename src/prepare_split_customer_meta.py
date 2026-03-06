@@ -1,8 +1,10 @@
 """
 Prepare split-specific customer metadata: copy data/02_meta/customer.csv and relabel
-50 random task=none customers (with total purchase value >= 15k) as task=testing.
+task=none customers to task=testing so their purchase-value distribution matches warm.
 
 Total purchase value per customer = sum(quantityvalue * vk_per_item) from plis_training.
+Selection uses log-scale stratified bins from the warm (predict future) distribution;
+customers are sampled from task=none to fill each bin proportionally.
 Output is written to data/03_customer/customer.csv for use by split_plis_training_validation.
 """
 
@@ -12,7 +14,105 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-MIN_PURCHASE_VALUE = 15_000
+
+def _task_normalized(series: pd.Series) -> pd.Series:
+    """Normalize task to lowercase; map 'predict future' -> 'warm'."""
+    s = series.str.strip().str.lower()
+    return s.replace({"predict future": "warm"})
+
+
+def select_testing_match_warm(
+    meta: pd.DataFrame,
+    n_testing: int,
+    random_seed: int,
+    n_bins: int = 10,
+) -> set[str]:
+    """
+    Select n_testing task=none customer IDs so their purchase value distribution
+    matches the warm (predict future) distribution, using log-scale stratified bins.
+    """
+    task_norm = _task_normalized(meta["task"])
+    none_df = (
+        meta.loc[task_norm == "none", ["legal_entity_id", "value"]]
+        .copy()
+        .drop_duplicates(subset=["legal_entity_id"])
+    )
+    warm_df = (
+        meta.loc[task_norm == "warm", ["legal_entity_id", "value"]]
+        .copy()
+        .drop_duplicates(subset=["legal_entity_id"])
+    )
+
+    if len(warm_df) == 0:
+        raise ValueError(
+            "No warm (predict future) customers in metadata; cannot match distribution."
+        )
+    if len(none_df) < n_testing:
+        raise ValueError(
+            f"Not enough task=none customers to select {n_testing}; found {len(none_df)}."
+        )
+
+    none_df["lv"] = np.log1p(none_df["value"].astype(float))
+    warm_df["lv"] = np.log1p(warm_df["value"].astype(float))
+
+    edges = np.quantile(warm_df["lv"], np.linspace(0, 1, n_bins + 1))
+    edges = np.unique(edges)
+    if len(edges) < 2:
+        raise ValueError(
+            "Warm purchase distribution has no spread; cannot define bins for matching."
+        )
+
+    none_df["bin"] = pd.cut(
+        none_df["lv"],
+        bins=edges,
+        include_lowest=True,
+        labels=range(len(edges) - 1),
+    )
+    warm_df["bin"] = pd.cut(
+        warm_df["lv"],
+        bins=edges,
+        include_lowest=True,
+        labels=range(len(edges) - 1),
+    )
+
+    warm_counts = warm_df["bin"].value_counts(normalize=True).sort_index()
+    target = (warm_counts * n_testing).round().astype(int)
+    diff = n_testing - int(target.sum())
+    if diff != 0:
+        frac = warm_counts * n_testing - np.floor(warm_counts * n_testing)
+        order = frac.sort_values(ascending=(diff < 0)).index.tolist()
+        for i, b in enumerate(order):
+            if i >= abs(diff):
+                break
+            if diff > 0:
+                target[b] = target.get(b, 0) + 1
+            elif target.get(b, 0) > 0:
+                target[b] = target[b] - 1
+
+    rng = np.random.default_rng(random_seed)
+    selected_ids: list[str] = []
+    for b in target.index:
+        k = int(target[b])
+        if k <= 0:
+            continue
+        cand = none_df.loc[none_df["bin"] == b, "legal_entity_id"].astype(str)
+        cand = cand[~cand.isin(selected_ids)]
+        if len(cand) == 0:
+            continue
+        take = min(k, len(cand))
+        chosen = rng.choice(cand.to_numpy(), size=take, replace=False)
+        selected_ids.extend(chosen.tolist())
+
+    if len(selected_ids) < n_testing:
+        remaining = none_df.loc[
+            ~none_df["legal_entity_id"].astype(str).isin(selected_ids),
+            "legal_entity_id",
+        ].astype(str)
+        fill_count = n_testing - len(selected_ids)
+        fill = rng.choice(remaining.to_numpy(), size=fill_count, replace=False)
+        selected_ids.extend(fill.tolist())
+
+    return set(selected_ids[:n_testing])
 
 
 def main() -> None:
@@ -20,8 +120,8 @@ def main() -> None:
     parser.add_argument("--customer-meta", required=True, dest="customer_meta", help="Path to data/02_meta/customer.csv")
     parser.add_argument("--plis", required=True, help="Path to plis_training.csv")
     parser.add_argument("--output", required=True, help="Path to output customer.csv (e.g. data/03_customer/customer.csv)")
-    parser.add_argument("--n-testing", type=int, default=50, dest="n_testing", help="Number of eligible customers to relabel to task=testing")
-    parser.add_argument("--random-seed", type=int, default=42, dest="random_seed", help="Random seed for reproducible selection")
+    parser.add_argument("--n-testing", type=int, default=50, dest="n_testing", help="Number of customers to relabel to task=testing (warm-matched)")
+    parser.add_argument("--random-seed", type=int, default=42, dest="random_seed", help="Random seed for reproducible within-bin selection")
     args = parser.parse_args()
 
     if args.n_testing < 1:
@@ -52,27 +152,18 @@ def main() -> None:
     meta = meta.merge(total_value, on="legal_entity_id", how="left")
     meta["value"] = meta["value"].fillna(0)
 
-    none_mask = meta["task"].str.strip().str.lower() == "none"
-    eligible_mask = none_mask & (meta["value"] >= MIN_PURCHASE_VALUE)
-    eligible_ids = meta.loc[eligible_mask, "legal_entity_id"].astype(str).unique()
+    selected_set = select_testing_match_warm(
+        meta, n_testing=args.n_testing, random_seed=args.random_seed
+    )
 
-    if len(eligible_ids) < args.n_testing:
-        raise ValueError(
-            f"Not enough eligible customers (task=none and total purchase value >= {MIN_PURCHASE_VALUE}): "
-            f"found {len(eligible_ids)}, need {args.n_testing}"
-        )
-
-    rng = np.random.default_rng(args.random_seed)
-    selected = rng.choice(eligible_ids, size=args.n_testing, replace=False)
-    selected_set = set(selected.tolist())
-
+    none_mask = _task_normalized(meta["task"]) == "none"
     relabel = meta["legal_entity_id"].astype(str).isin(selected_set) & none_mask
     meta.loc[relabel, "task"] = "testing"
     meta = meta.drop(columns=["value"])
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     meta.to_csv(out_path, sep="\t", index=False)
-    print(f"Wrote {out_path}: {args.n_testing} customers relabeled to task=testing (eligible: {len(eligible_ids)})")
+    print(f"Wrote {out_path}: {args.n_testing} customers relabeled to task=testing (warm-matched)")
 
 
 if __name__ == "__main__":

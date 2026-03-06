@@ -40,7 +40,7 @@ rule all:
         SCORE_DETAILS,
 
 rule prepare_split_customer_meta:
-    """Relabel 50 random task=none customers (total purchase value >= 15k) to task=testing for split."""
+    """Relabel task=none customers to task=testing so their purchase-value distribution matches warm (warm-matched selection)."""
     input:
         customer = CUSTOMER_META_CSV,
         plis = PLIS_TRAINING_CSV,

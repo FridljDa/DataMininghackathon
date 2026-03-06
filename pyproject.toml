@@ -4,11 +4,20 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
+    "lark>=1.3.1",
     "lightgbm",
     "matplotlib",
     "pandas",
     "playwright",
     "pyarrow",
+    "pytest>=8.0.0",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
     "seaborn",
     "snakemake",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-p no:launch_pytest"

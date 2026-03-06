@@ -36,6 +36,8 @@ Customer split-definition file for evaluation setup. Each row marks one legal en
   - `cold start` <-> `cs = 0`
   - `predict future` <-> `cs = 1`
 - This file is the canonical source for determining cold-start vs predict-future behavior.
+- `plis_training.csv` includes many legal entities outside this file; those non-challenge entities may have rows after `2025-07-01`.
+- For split interpretation on scored buyers, always filter to entities in `les_cs.csv` / `customer_test.csv`.
 
 ## Pairwise Relationships
 Sanity-check basis: exact (full file).

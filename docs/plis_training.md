@@ -35,6 +35,11 @@ Organizer definition: this is the DE PLI universe after applying the challenge s
 - Split logic with `les_cs.csv` (cutoff `2025-07-01`):
   - For `cs = 0` customers: all PLIs are removed from this training file.
   - For `cs = 1` customers: only PLIs before the cutoff are included.
+- Observed date coverage (full file): `2023-01-01` to `2025-12-31`.
+- Scope clarification for scored challenge entities (`les_cs.csv` / `customer_test.csv`):
+  - For warm (`cs = 1`) entities, rows in `plis_training.csv` end at `2025-06-30`.
+  - Data after `2025-07-01` for these warm entities is held out for evaluation.
+- The full file also contains many non-challenge entities; those rows can extend beyond the warm cutoff and should not be used to infer the scored split horizon.
 - Core grain is line-item level, so aggregate to buyer-time and buyer-category views for stable recurring-demand signals.
 - Main hierarchy options for prediction levels:
   - Level 1 candidate key: `eclass`

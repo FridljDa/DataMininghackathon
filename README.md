@@ -24,3 +24,10 @@ That command runs the default `all` target in `Snakefile` and produces:
   - `data/01_raw/plis_training.csv`
   - `data/01_raw/customer_test.csv`
   - `data/01_raw/les_cs.csv`
+
+## Env
+Create a file `.env` at the root of the project with credentials:
+```sh
+TEAM=...
+PASSWORD=...
+```

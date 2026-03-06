@@ -1,10 +1,13 @@
 """
-Build data/02_meta/customer.csv from plis_training.csv.
+Build data/02_meta/customer.csv from plis_training.csv and customer_test.csv.
 
-One row per unique legal_entity_id in plis_training. Metadata columns
-(estimated_number_employees, nace_code, secondary_nace_code) use the first
-non-null value per customer (by orderdate). task is taken from customer_test
-when present, else "none". Output has same schema as customer_test.csv.
+Starts with one row per unique legal_entity_id in plis_training. Metadata
+columns (estimated_number_employees, nace_code, secondary_nace_code) use the
+first non-null value per customer (by orderdate). task is taken from
+customer_test when present, else "none".
+
+Cold-start customers from customer_test are appended when they are missing from
+plis_training, so output contains them even without purchasing history.
 """
 
 import argparse
@@ -40,12 +43,17 @@ def main() -> None:
     agg = {c: first_nonnull for c in meta_cols}
     customers = plis.groupby("legal_entity_id", as_index=False).agg(agg)
 
-    test = pd.read_csv(customer_test_path, sep="\t", usecols=["legal_entity_id", "task"])
+    out_cols = ["legal_entity_id", "estimated_number_employees", "nace_code", "secondary_nace_code", "task"]
+    test = pd.read_csv(customer_test_path, sep="\t", usecols=out_cols)
     customers = customers.merge(test[["legal_entity_id", "task"]], on="legal_entity_id", how="left")
     customers["task"] = customers["task"].fillna("none")
 
+    # Ensure missing cold-start customers are present even without purchase rows.
+    cold_start = test[test["task"] == "cold start"]
+    missing_cold_start = cold_start[~cold_start["legal_entity_id"].isin(customers["legal_entity_id"])]
+    customers = pd.concat([customers, missing_cold_start[out_cols]], ignore_index=True)
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_cols = ["legal_entity_id", "estimated_number_employees", "nace_code", "secondary_nace_code", "task"]
     customers[out_cols].to_csv(out_path, sep="\t", index=False)
 
 

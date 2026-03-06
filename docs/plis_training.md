@@ -10,6 +10,14 @@ Organizer definition: this is the DE PLI universe after applying the challenge s
 - Rows: 8,373,695 data rows (8,373,696 lines including header)
 - Size: large (approximately 796 MB)
 
+## Top 3 Rows (Raw Sample)
+
+| orderdate | legal_entity_id | set_id | sku | eclass | manufacturer | quantityvalue | vk_per_item | estimated_number_employees | nace_code | secondary_nace_code |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2023-01-11 | 10063702 | 20240502211517-189794 | 5497-2606083 | 27141104 | WAGO Kontakttechnik | 50 | 0.29 | 2 | 3513 | 2712 |
+| 2023-01-11 | 10063702 | 20240502211517-17767700 | 5497-6404351 | 27141104 | WAGO Kontakttechnik | 25 | 0.464 | 2 | 3513 | 2712 |
+| 2023-01-11 | 10063702 | 20240502211517-13291417 | 721-01914478 | 27242202 | Siemens | 1 | 293.01 | 2 | 3513 | 2712 |
+
 ## Columns
 - `orderdate`: transaction date (`YYYY-MM-DD`).
 - `legal_entity_id`: buyer/company identifier.

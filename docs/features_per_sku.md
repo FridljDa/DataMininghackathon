@@ -10,6 +10,14 @@ According to organizer info, SKUs here are the SKUs that are part of `plis_train
 - Rows: 18,115,013 data rows (18,115,014 lines including header)
 - Size: very large (approximately 1.8 GB)
 
+## Top 3 Rows (Raw Sample)
+
+| safe_synonym | sku | key | fvalue | fvalue_set |
+|---|---|---|---|---|
+| 1000_10_zusatzzeichen_ | 114-7428 | Folie-_verkehrsschilder_folie | RA0 | RA0 |
+| 1000_10_zusatzzeichen_ | 164-74054 | Folie-_verkehrsschilder_folie | RA1 | RA1 |
+| 1000_10_zusatzzeichen_ | 5921-A120.20.405 | Folie-_verkehrsschilder_folie | RA1 | RA1 |
+
 ## Columns
 - `safe_synonym`: normalized product synonym/group label.
 - `sku`: product SKU identifier.

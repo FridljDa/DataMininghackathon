@@ -8,6 +8,14 @@ Reference lookup for NACE industry taxonomy. Use this file to map NACE codes to 
 - Header: yes
 - Rows: 975 data rows (976 lines including header)
 
+## Top 3 Rows (Raw Sample)
+
+| nace_code | n_nace_description | toplevel_section | toplevel_section_description | nace_2digits | nace_2digits_description | nace_3digits | nace_3digits_description |
+|---|---|---|---|---|---|---|---|
+| 01 | Crop and animal production, hunting and related service activities | A | Agriculture, Forestry and Fishing | 01 | Crop and animal production, hunting and related service activities |  |  |
+| 011 | Growing of non-perennial crops | A | Agriculture, Forestry and Fishing | 01 | Crop and animal production, hunting and related service activities | 011 | Growing of non-perennial crops |
+| 0111 | Growing of cereals (except rice), leguminous crops and oil seeds | A | Agriculture, Forestry and Fishing | 01 | Crop and animal production, hunting and related service activities | 011 | Growing of non-perennial crops |
+
 ## Columns
 - `nace_code`: NACE code for the row (can be different granularities, e.g. 2/3/4 digits).
 - `n_nace_description`: description of `nace_code`.

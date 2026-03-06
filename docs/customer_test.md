@@ -8,6 +8,14 @@ Metadata table for the challenge customer set (legal entities in `les_cs.csv`). 
 - Header: yes
 - Rows: 100 data rows (101 lines including header)
 
+## Top 3 Rows (Raw Sample)
+
+| legal_entity_id | estimated_number_employees | nace_code | secondary_nace_code | task |
+|---|---|---|---|---|
+| 41361768 | 6546 | 861 |  | cold start |
+| 41525307 | 630 | 3511 |  | cold start |
+| 60218513 | 1919 | 1089 |  | cold start |
+
 ## Columns
 - `legal_entity_id`: customer (legal entity) identifier.
 - `estimated_number_employees`: approximate buyer company size; may be missing.

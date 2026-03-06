@@ -8,6 +8,14 @@ Customer split-definition file for evaluation setup. Each row marks one legal en
 - Header: yes
 - Rows: 101 data rows (102 lines including header)
 
+## Top 3 Rows (Raw Sample)
+
+| legal_entity_id | cs |
+|---|---|
+| 41361768 | 0 |
+| 41525307 | 0 |
+| 60218513 | 0 |
+
 ## Columns
 - `legal_entity_id`: customer (legal entity) identifier.
 - `cs`: scenario flag.

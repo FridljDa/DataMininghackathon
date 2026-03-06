@@ -23,7 +23,6 @@ Organizer definition: this is the DE PLI universe after applying the challenge s
 - `legal_entity_id`: buyer/company identifier.
 - `set_id`: order/set identifier used to tie multiple row-level PLIs into one purchase event (basket/order session).  
   Practical interpretation: if several rows share the same `set_id`, they were bought together as part of the same checkout/order context, even when SKUs differ.  
-  Use in modeling: aggregate per (`legal_entity_id`, `set_id`) to build basket-level features (basket size, category mix, co-purchase patterns), and avoid counting each line item as an independent event.
 - `sku`: product SKU identifier.
 - `eclass`: E-Class category identifier.
 - `manufacturer`: product brand/manufacturer name.

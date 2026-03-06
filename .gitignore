@@ -4,3 +4,4 @@
 /data/01_raw/nace_codes.csv
 /data/01_raw/plis_training.csv
 .idea
+/.snakemake/

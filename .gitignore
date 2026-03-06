@@ -1,4 +1,5 @@
 /.venv/
+/data
 /data/01_raw/customer_test.csv
 /data/01_raw/features_per_sku.csv
 /data/01_raw/nace_codes.csv

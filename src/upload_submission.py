@@ -24,6 +24,27 @@ DEFAULT_CHALLENGE_ID = "2"
 DEFAULT_TIMEOUT_MS = 20_000
 
 
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if (
+            len(value) >= 2
+            and value[0] == value[-1]
+            and value[0] in ("'", '"')
+        ):
+            value = value[1:-1]
+        if key:
+            os.environ.setdefault(key, value)
+
+
 def _parse_cookie_header(cookie_header: str, domain: str) -> list[dict[str, Any]]:
     cookies: list[dict[str, Any]] = []
     parts = [chunk.strip() for chunk in cookie_header.split(";") if chunk.strip()]
@@ -70,11 +91,23 @@ def _is_login_page(page) -> bool:
 
 
 def _do_login(page, team_name: str, password: str) -> None:
-    page.get_by_label("Team Name").fill(team_name)
-    page.get_by_label("Password").fill(password)
+    team_field = page.get_by_label("Team Name")
+    if team_field.count() == 0:
+        team_field = page.get_by_placeholder("Your team name")
+    password_field = page.get_by_label("Password")
+    if password_field.count() == 0:
+        password_field = page.get_by_placeholder("Your password")
+
+    team_field.first.fill(team_name)
+    password_field.first.fill(password)
     page.get_by_role("button", name="Sign In").click()
     try:
-        page.wait_for_timeout(1000)
+        page.wait_for_timeout(1500)
+        page.wait_for_url("**/challenges/**", timeout=5000)
+    except PlaywrightTimeoutError:
+        # It may redirect somewhere else first or remain on login if auth failed.
+        pass
+    try:
         page.wait_for_load_state("networkidle", timeout=DEFAULT_TIMEOUT_MS)
     except PlaywrightTimeoutError:
         # Some apps keep long-lived requests open; this is fine.
@@ -85,22 +118,46 @@ def _upload_csv(page, csv_path: Path) -> None:
     file_input = page.locator("input[type='file']").first
     file_input.wait_for(state="attached", timeout=DEFAULT_TIMEOUT_MS)
     file_input.set_input_files(str(csv_path))
+    page.screenshot(path="outputs/upload_after_file_select.png", full_page=True)
 
     # Some UIs auto-submit on file selection. Try explicit buttons if present.
     button_patterns = ("Submit", "Upload", "Send", "Evaluate")
+    clicked_button = False
     for label in button_patterns:
         button = page.get_by_role("button", name=label)
         if button.count() > 0:
-            button.first.click()
-            break
+            first = button.first
+            if first.is_enabled():
+                first.click()
+                clicked_button = True
+                break
+            print(f"Found '{label}' button but it is disabled.")
+
+    if not clicked_button:
+        print("No enabled submit-like button found. Continuing in case auto-upload is used.")
 
     # Give backend a brief moment to process and render a result.
     page.wait_for_timeout(3000)
 
 
 def parse_args() -> argparse.Namespace:
+    # Load .env values before building defaults for CLI flags.
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument(
+        "--env-file",
+        default=".env",
+        help="Path to .env file for credentials/cookies (default: .env).",
+    )
+    pre_args, _ = pre_parser.parse_known_args()
+    _load_env_file(Path(pre_args.env_file).expanduser())
+
     parser = argparse.ArgumentParser(
         description="Upload outputs/submission.csv to Unite evaluator."
+    )
+    parser.add_argument(
+        "--env-file",
+        default=pre_args.env_file,
+        help="Path to .env file for credentials/cookies (default: .env).",
     )
     parser.add_argument(
         "--csv",
@@ -149,6 +206,7 @@ def main() -> None:
     csv_path = Path(args.csv).expanduser().resolve()
     if not csv_path.exists():
         raise FileNotFoundError(f"Submission CSV not found: {csv_path}")
+    Path("outputs").mkdir(parents=True, exist_ok=True)
 
     challenge_url = f"{args.base_url.rstrip('/')}/challenges/{args.challenge_id}"
     login_url = f"{args.base_url.rstrip('/')}/login"
@@ -184,6 +242,7 @@ def main() -> None:
             page.goto(challenge_url, wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT_MS)
 
         if _is_login_page(page):
+            page.screenshot(path="outputs/login_failed.png", full_page=True)
             raise RuntimeError("Still on login page after authentication attempt.")
 
         _upload_csv(page, csv_path)

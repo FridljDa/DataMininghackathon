@@ -90,17 +90,51 @@ def _is_login_page(page) -> bool:
     )
 
 
+def _extract_login_error(page) -> str | None:
+    # Try typical error containers first.
+    selectors = (
+        "[role='alert']",
+        ".text-red-500",
+        ".text-destructive",
+        ".error",
+        "[data-error]",
+    )
+    for selector in selectors:
+        loc = page.locator(selector)
+        if loc.count() > 0:
+            text = loc.first.inner_text().strip()
+            if text:
+                return text
+
+    # Fallback: include form text to aid debugging.
+    form = page.locator("form")
+    if form.count() > 0:
+        text = form.first.inner_text().strip()
+        if text:
+            return text
+    return None
+
+
 def _do_login(page, team_name: str, password: str) -> None:
-    team_field = page.get_by_label("Team Name")
+    team_field = page.get_by_placeholder("Your team name")
     if team_field.count() == 0:
-        team_field = page.get_by_placeholder("Your team name")
-    password_field = page.get_by_label("Password")
+        team_field = page.get_by_label("Team Name")
+    password_field = page.get_by_placeholder("Your password")
     if password_field.count() == 0:
-        password_field = page.get_by_placeholder("Your password")
+        password_field = page.get_by_label("Password")
 
     team_field.first.fill(team_name)
     password_field.first.fill(password)
-    page.get_by_role("button", name="Sign In").click()
+
+    team_value = team_field.first.input_value()
+    password_value = password_field.first.input_value()
+    if not team_value or not password_value:
+        raise RuntimeError("Login fields were not filled correctly before submit.")
+
+    submit_button = page.get_by_role("button", name="Sign In").first
+    if not submit_button.is_enabled():
+        raise RuntimeError("Sign In button is disabled after filling credentials.")
+    submit_button.click()
     try:
         page.wait_for_timeout(1500)
         page.wait_for_url("**/challenges/**", timeout=5000)
@@ -115,9 +149,33 @@ def _do_login(page, team_name: str, password: str) -> None:
 
 
 def _upload_csv(page, csv_path: Path) -> None:
-    file_input = page.locator("input[type='file']").first
-    file_input.wait_for(state="attached", timeout=DEFAULT_TIMEOUT_MS)
-    file_input.set_input_files(str(csv_path))
+    all_file_inputs = page.locator("input[type='file']")
+    input_count = all_file_inputs.count()
+    if input_count == 0:
+        raise RuntimeError("No file input found on the challenge page.")
+
+    print(f"Found {input_count} file input(s).")
+    upload_bound = False
+    for idx in range(input_count):
+        candidate = all_file_inputs.nth(idx)
+        candidate.wait_for(state="attached", timeout=DEFAULT_TIMEOUT_MS)
+        try:
+            accept_attr = candidate.get_attribute("accept") or ""
+            if accept_attr and ".csv" not in accept_attr.lower():
+                continue
+
+            candidate.set_input_files(str(csv_path))
+            files_len = candidate.evaluate("el => (el.files ? el.files.length : 0)")
+            print(f"Input #{idx} files length after set: {files_len}")
+            if files_len > 0:
+                upload_bound = True
+                break
+        except PlaywrightTimeoutError:
+            continue
+
+    if not upload_bound:
+        raise RuntimeError("Failed to bind CSV file to any file input.")
+
     page.screenshot(path="outputs/upload_after_file_select.png", full_page=True)
 
     # Some UIs auto-submit on file selection. Try explicit buttons if present.
@@ -243,6 +301,12 @@ def main() -> None:
 
         if _is_login_page(page):
             page.screenshot(path="outputs/login_failed.png", full_page=True)
+            login_error = _extract_login_error(page)
+            if login_error:
+                raise RuntimeError(
+                    "Still on login page after authentication attempt. "
+                    f"Page feedback: {login_error}"
+                )
             raise RuntimeError("Still on login page after authentication attempt.")
 
         _upload_csv(page, csv_path)

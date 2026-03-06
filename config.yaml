@@ -1,0 +1,8 @@
+data_dir: "data"
+inputs:
+  customer_test: "data/01_raw/customer_test.csv"
+  nace_codes: "data/nace_codes.csv"
+plis_training_csv: "data/01_raw/plis_training.csv"
+customer_meta_csv: "data/02_meta/customer.csv"
+output_dir: "outputs"
+submission_csv: "outputs/submission.csv"

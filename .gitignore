@@ -7,3 +7,4 @@
 .idea
 /.snakemake/
 .env
+/data/

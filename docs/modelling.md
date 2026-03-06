@@ -10,11 +10,7 @@ $$
 
 where \( F = €10 \) is the fixed monthly fee per predicted element and savings are realised only when prediction \( e \) matches actual future purchases.
 
-Savings per hit are defined as:
-
-$$
-\text{Savings}(b, e) = r \cdot \text{Spend}_{\text{future}}(b, e), \quad r = 0.10
-$$
+Savings per hit are a function of future spend (exact formula is a black box — savings scale non-linearly with spend, roughly with its square root, combined with demand frequency). The scoring function may change; do not hardcode a fixed savings rate.
 
 Selection is precision-first: every element that is not a true recurring need pays a fee with zero return.
 
@@ -57,6 +53,8 @@ Evaluate using an approximation of the euro score on validation:
 $$
 \widehat{\text{Score}}_{\text{val}} = \sum_{b} \left[ \sum_{e \in \hat{S}_b} r \cdot s_{\text{val}}(b,e) \cdot \mathbf{1}[\text{label}=1] - |\hat{S}_b| \cdot F \right]
 $$
+
+> **Important:** The validation window is 6 months but the hidden evaluation covers approximately 1 month. When using \(\widehat{\text{Score}}_{\text{val}}\) to tune thresholds (EU threshold, \(K\), etc.), divide spend by 6 to obtain a per-month estimate. Without this normalisation the local score will be ~6× the real evaluation score, causing the EU threshold to be set too low (too many elements included).
 
 ---
 
@@ -185,18 +183,16 @@ In order of expected impact on validation euro score:
 
 | Parameter | Value |
 |---|---|
-| Savings rate \( r \) | 10% |
-| Fixed fee \( F \) | €10 per predicted element |
-| Scoring months | 1 |
+| Savings function | Black box — scales non-linearly with spend (approx. \(\sqrt{\text{spend}}\) × frequency) |
+| Fixed fee \( F \) | €10 per predicted element per month |
+| Scoring window | ~1 month (hidden) |
 
-> Parameters may be adjusted by organizers. Model should be robust to changes in \( F \) and \( r \) — do not hardcode a fixed ratio.
+> The exact savings formula and fee may be adjusted by organizers. Treat the scorer as a black box and do not hardcode a fixed savings rate. Solutions should remain robust under changes to both savings scaling and fee levels.
 
-The break-even condition for including \( e \) for buyer \( b \) is:
+The break-even condition (illustrative, assuming linear savings with effective rate \( r \)) is:
 
 $$
-\hat{p}(b,e) \cdot E[s_{\text{future}}] \cdot r > F
-\quad \Longrightarrow \quad
-\hat{p}(b,e) \cdot E[s_{\text{future}}] > €100
+\hat{p}(b,e) \cdot E[s_{\text{future,monthly}}] \cdot r > F
 $$
 
-Any predicted element with expected future spend (probability-weighted) below €100 is expected to lose money.
+In practice, use the validation euro score (per-month normalised) as the optimisation target rather than a fixed analytical threshold.

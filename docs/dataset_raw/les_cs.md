@@ -1,28 +1,34 @@
 # `data/01_raw/les_cs.csv`
 
 ## Purpose
+
 Customer split-definition file for evaluation setup. Each row marks one legal entity (`legal_entity_id`) as either cold-start or predict-future scenario.
 
 ## File Format
+
 - Delimiter: comma (`,`)
 - Header: yes
 - Rows: 101 data rows (102 lines including header)
 
 ## Top 3 Rows (Raw Sample)
 
-| legal_entity_id | cs |
-|---|---|
-| 41361768 | 0 |
-| 41525307 | 0 |
-| 60218513 | 0 |
+
+| legal_entity_id | cs  |
+| --------------- | --- |
+| 41361768        | 0   |
+| 41525307        | 0   |
+| 60218513        | 0   |
+
 
 ## Columns
+
 - `legal_entity_id`: customer (legal entity) identifier.
 - `cs`: scenario flag.
   - `0`: cold start customer.
   - `1`: predict-future (warm) customer.
 
 ## How This Drives the Train/Test Split
+
 - `cs = 0`:
   - `plis_training.csv` excludes all PLIs for this customer.
   - Held-out evaluation side contains all PLIs for this customer.
@@ -31,6 +37,7 @@ Customer split-definition file for evaluation setup. Each row marks one legal en
   - Held-out evaluation side contains PLIs after `2025-07-01`.
 
 ## Consistency Notes
+
 - `customer_test.csv` should align to this population of legal entities.
 - `task` in `customer_test.csv` maps naturally to this flag:
   - `cold start` <-> `cs = 0`
@@ -40,6 +47,7 @@ Customer split-definition file for evaluation setup. Each row marks one legal en
 - For split interpretation on scored buyers, always filter to entities in `les_cs.csv` / `customer_test.csv`.
 
 ## Pairwise Relationships
+
 Sanity-check basis: exact (full file).
 
 - `legal_entity_id` -> `cs`: many-to-one (`N:1`).
@@ -47,3 +55,4 @@ Sanity-check basis: exact (full file).
 - Cross-file with `customer_test.csv`:
   - `legal_entity_id` sets are 1:1 aligned.
   - `cs` <-> `task` is 1:1 at value level (`0` <-> `cold start`, `1` <-> `predict future`).
+

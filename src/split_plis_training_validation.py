@@ -1,10 +1,9 @@
 """
-Split plis_training.csv into training and testing by cutoff date.
+Split plis_training.csv into training and testing by customer and cutoff date.
 
-Rows with orderdate >= cutoff_date are eligible for the test set. A configurable
-fraction of those eligible rows is sampled (with a fixed seed) into the test
-output; all other rows go to the training output. Schema and delimiter are
-preserved.
+Selects a random sample of customers with task=none from customer metadata.
+For those customers only, rows with orderdate >= cutoff_date go to the test set;
+all other rows go to the training set. Schema and delimiter are preserved.
 """
 
 import argparse
@@ -16,31 +15,49 @@ import pandas as pd
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="Path to plis_training CSV/TSV")
+    parser.add_argument("--customer-meta", required=True, dest="customer_meta", help="Path to customer metadata CSV/TSV (must have legal_entity_id, task)")
     parser.add_argument("--train", required=True, help="Path to output training file")
     parser.add_argument("--test", required=True, help="Path to output test file")
-    parser.add_argument("--cutoff-date", required=True, dest="cutoff_date", help="Cutoff date (YYYY-MM-DD); rows >= this are eligible for test")
-    parser.add_argument("--test-fraction", type=float, required=True, dest="test_fraction", help="Fraction of eligible rows to put in test (0–1)")
+    parser.add_argument("--cutoff-date", required=True, dest="cutoff_date", help="Cutoff date (YYYY-MM-DD); rows >= this from selected customers go to test")
+    parser.add_argument("--test-customers-count", type=int, required=True, dest="test_customers_count", help="Number of task=none customers to sample for test set")
     parser.add_argument("--random-seed", type=int, required=True, dest="random_seed", help="Random seed for reproducible sampling")
     args = parser.parse_args()
 
-    if not (0 <= args.test_fraction <= 1):
-        raise ValueError("test_fraction must be between 0 and 1")
+    if args.test_customers_count < 1:
+        raise ValueError("test_customers_count must be at least 1")
 
     cutoff = pd.Timestamp(args.cutoff_date)
     input_path = Path(args.input)
+    customer_meta_path = Path(args.customer_meta)
     train_path = Path(args.train)
     test_path = Path(args.test)
 
+    # Load customer metadata and sample task=none customers
+    meta = pd.read_csv(customer_meta_path, sep="\t", dtype=str)
+    for col in ("legal_entity_id", "task"):
+        if col not in meta.columns:
+            raise ValueError(f"Customer metadata must contain '{col}'. Got: {list(meta.columns)}")
+    none_customers = meta.loc[meta["task"].str.strip().str.lower() == "none", "legal_entity_id"].astype(str).unique()
+    if len(none_customers) < args.test_customers_count:
+        raise ValueError(
+            f"Not enough customers with task=none: found {len(none_customers)}, need {args.test_customers_count}"
+        )
+    rng = pd.random.default_rng(args.random_seed)
+    selected = rng.choice(none_customers, size=args.test_customers_count, replace=False)
+    selected_ids = set(selected.tolist())
+
+    # Load plis and ensure required columns
     df = pd.read_csv(input_path, sep="\t", low_memory=False)
-    if "orderdate" not in df.columns:
-        raise ValueError("Input must contain an 'orderdate' column")
-
+    for col in ("legal_entity_id", "orderdate"):
+        if col not in df.columns:
+            raise ValueError(f"Input must contain '{col}'. Got: {list(df.columns)}")
     df["orderdate"] = pd.to_datetime(df["orderdate"], format="%Y-%m-%d")
-    eligible = df["orderdate"] >= cutoff
-    eligible_df = df.loc[eligible]
+    df["_legal_entity_id_str"] = df["legal_entity_id"].astype(str)
 
-    test_df = eligible_df.sample(frac=args.test_fraction, random_state=args.random_seed)
-    train_df = df.drop(index=test_df.index)
+    # Test set: selected customers AND orderdate >= cutoff
+    test_mask = df["_legal_entity_id_str"].isin(selected_ids) & (df["orderdate"] >= cutoff)
+    test_df = df.loc[test_mask].drop(columns=["_legal_entity_id_str"])
+    train_df = df.loc[~test_mask].drop(columns=["_legal_entity_id_str"])
 
     for frame in (train_df, test_df):
         frame["orderdate"] = frame["orderdate"].dt.strftime("%Y-%m-%d")
@@ -48,6 +65,8 @@ def main() -> None:
     train_path.parent.mkdir(parents=True, exist_ok=True)
     train_df.to_csv(train_path, sep="\t", index=False)
     test_df.to_csv(test_path, sep="\t", index=False)
+
+    print(f"Training rows: {len(train_df)}, test rows: {len(test_df)} (customers in test: {args.test_customers_count}, cutoff {args.cutoff_date})")
 
 
 if __name__ == "__main__":

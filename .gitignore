@@ -1,9 +1,9 @@
 /.venv/
-/data
-/data/01_raw/customer_test.csv
-/data/01_raw/features_per_sku.csv
-/data/01_raw/nace_codes.csv
-/data/01_raw/plis_training.csv
+/data/01_raw/
+/data/02_meta/
+/data/03_training_validation/
+/data/05_model/
+/data/10_submission/
 .idea
 /.snakemake/
 .env

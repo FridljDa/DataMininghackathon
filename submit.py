@@ -91,16 +91,36 @@ def submit(
     ) as response_info:
         page.locator("button[type=submit]").click()
 
+    response = response_info.value
     try:
-        submission_result = response_info.value.json()
-    except Exception:
-        pass
+        submission_result = response.json()
+    except (ValueError, TypeError, AttributeError) as exc:
+        print("✗ Failed to parse submission API response as JSON:", exc)
+        try:
+            status = getattr(response, "status", None)
+            if status is not None:
+                print("  HTTP status:", status)
+            body_preview = response.text()
+            if len(body_preview) > 300:
+                body_preview = body_preview[:300] + "…"
+            print("  Response text (truncated):", body_preview)
+        except Exception as inner_exc:
+            print("  Additionally failed to read raw response text:", inner_exc)
+        return
 
     if not submission_result.get("success"):
         print("✗ Submission API did not confirm success:", submission_result)
         return
 
-    print(f"✓ Submission accepted (id: {submission_result['submission']['id']})")
+    submission = submission_result.get("submission")
+    submission_id = submission.get("id") if isinstance(submission, dict) else None
+    if submission_id is not None:
+        print(f"✓ Submission accepted (id: {submission_id})")
+    else:
+        print(
+            "⚠ Submission API reported success but did not include a submission id:",
+            submission_result,
+        )
     print("⏳ Waiting for scoring results…")
 
     # Wait for "Your Submissions" section to appear with a score (not just "evaluating").

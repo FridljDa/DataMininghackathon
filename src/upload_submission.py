@@ -215,7 +215,7 @@ def parse_args() -> argparse.Namespace:
     _load_env_file(Path(pre_args.env_file).expanduser())
 
     parser = argparse.ArgumentParser(
-        description="Upload outputs/submission.csv to Unite evaluator."
+        description="Upload data/10_submission/submission.csv to Unite evaluator."
     )
     parser.add_argument(
         "--env-file",
@@ -224,8 +224,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--csv",
-        default="outputs/submission.csv",
-        help="Path to submission CSV (default: outputs/submission.csv).",
+        default="data/10_submission/submission.csv",
+        help="Path to submission CSV (default: data/10_submission/submission.csv).",
     )
     parser.add_argument(
         "--base-url",

@@ -6,3 +6,10 @@ plis_training_csv: "data/01_raw/plis_training.csv"
 customer_meta_csv: "data/02_meta/customer.csv"
 output_dir: "outputs"
 submission_csv: "outputs/submission.csv"
+
+training_validation_split:
+  cutoff_date: "2025-07-01"
+  test_fraction: 0.5
+  random_seed: 42
+  plis_training: "data/03_training_validation/plis_training.csv"
+  plis_testing: "data/03_training_validation/plis_testing.csv"

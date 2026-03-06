@@ -16,10 +16,29 @@ CUSTOMER_META_CSV = config["customer_meta_csv"]
 OUTPUT_DIR = config["output_dir"]
 SUBMISSION_CSV = config["submission_csv"]
 
+SPLIT = config["training_validation_split"]
+PLIS_TRAINING_SPLIT = SPLIT["plis_training"]
+PLIS_TESTING_SPLIT = SPLIT["plis_testing"]
+
 rule all:
     input:
         SUBMISSION_CSV,
         CUSTOMER_META_CSV,
+
+rule split_plis_training_validation:
+    """Split plis_training into training and testing by cutoff date; test holds a configurable fraction of rows >= cutoff."""
+    input:
+        plis = PLIS_TRAINING_CSV,
+    output:
+        train = PLIS_TRAINING_SPLIT,
+        test = PLIS_TESTING_SPLIT,
+    params:
+        cutoff = SPLIT["cutoff_date"],
+        fraction = SPLIT["test_fraction"],
+        seed = SPLIT["random_seed"],
+    shell:
+        "uv run src/split_plis_training_validation.py --input {input.plis} --train {output.train} --test {output.test} "
+        "--cutoff-date {params.cutoff} --test-fraction {params.fraction} --random-seed {params.seed}"
 
 rule build_customer_meta:
     """Build customer metadata from plis_training (all unique customers, task from customer_test or none)."""

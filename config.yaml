@@ -13,3 +13,8 @@ training_validation_split:
   random_seed: 42
   plis_training: "data/03_training_validation/plis_training.csv"
   plis_testing: "data/03_training_validation/plis_testing.csv"
+
+scoring_parameters:
+  savings_rate: 0.10
+  fixed_fee_eur: 10.00
+  scoring_months: 1

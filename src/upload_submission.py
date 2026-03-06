@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
@@ -170,7 +171,7 @@ def _upload_csv(page, csv_path: Path) -> None:
             print(f"Input #{idx} files length after set: {files_len}")
             # Some components clear the hidden input after internal processing.
             break
-        except Exception as exc:
+        except PlaywrightError as exc:
             print(f"Input #{idx} set_input_files failed: {exc}")
             continue
 

@@ -7,6 +7,7 @@ and portal_credentials.password to be set in config.yaml.
 
 from __future__ import annotations
 
+import csv
 import os
 import subprocess
 import sys
@@ -64,6 +65,7 @@ def test_submit_challenge_2_live(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,
     )
 
     assert result.returncode == 0, (
@@ -75,4 +77,13 @@ def test_submit_challenge_2_live(tmp_path: Path) -> None:
     assert summary_csv.exists(), f"Live summary CSV not written: {summary_csv}"
     content = summary_csv.read_text()
     assert "total_score" in content, f"score_summary_live.csv must contain total_score. Got:\n{content}"
+    assert "total_fees" in content, f"score_summary_live.csv must contain total_fees. Got:\n{content}"
     assert "submission_id" in content, f"score_summary_live.csv must contain submission_id. Got:\n{content}"
+
+    rows = list(csv.DictReader(content.splitlines()))
+    assert rows, f"score_summary_live.csv must contain at least one data row. Got:\n{content}"
+
+    score = float(rows[0]["total_score"])
+    fees = float(rows[0]["total_fees"])
+    assert fees == 10.0, f"Expected total_fees=10.0 for one prediction. Got {fees}. CSV:\n{content}"
+    assert score == -10.0, f"Expected total_score=-10.0 for one prediction with no savings. Got {score}. CSV:\n{content}"

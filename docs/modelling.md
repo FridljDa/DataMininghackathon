@@ -163,7 +163,7 @@ The exact active columns for any run are controlled by pipeline configuration an
 - `feature_redundancy.csv` — Pairs of numeric features with high Spearman correlation (e.g. |ρ| ≥ 0.85) for redundancy pruning.
 - `feature_suggestions.yaml` — Advisory list of suggested features: hard filters (null rate, variance, cardinality) are applied, then one representative per correlated group is kept (ranked by target signal). For manual copy into `config.yaml` under `modelling.features.selected`.
 
-**Refreshing the feature list:** `feature_suggestions.yaml` answers “which features look best for modelling?”; `modelling.features.selected` and the resulting `data/10_features_selected` output are the explicit contract used by training and scoring. Copy from the suggestion file into config when you want to align the pipeline with the heuristic; the pipeline does not modify config automatically.
+**Refreshing the feature list:** `feature_suggestions.yaml` answers “which features look best for modelling?”; `modelling.features.selected` and the resulting `data/11_features_selected` output are the explicit contract used by training and scoring. Copy from the suggestion file into config when you want to align the pipeline with the heuristic; the pipeline does not modify config automatically.
 
 ---
 

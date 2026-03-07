@@ -3,7 +3,7 @@ Snakemake workflow for Core Demand Challenge.
 
 All input/output paths are defined here. Python scripts receive paths only via
 CLI arguments. Deliverables: one portfolio and submission per enabled approach
-under data/12_portfolio/{mode}/{approach}/ and data/13_submission/{mode}/{approach}/.
+under data/13_portfolio/{mode}/{approach}/ and data/14_submission/{mode}/{approach}/.
 """
 
 configfile: "config.yaml"
@@ -24,7 +24,7 @@ PLIS_TRAINING_SPLIT = f"{DATA_DIR}/05_training_validation/plis_training.csv"
 PLIS_TESTING_SPLIT = f"{DATA_DIR}/05_training_validation/plis_testing.csv"
 
 # Score outputs and archive (per mode and approach)
-SCORES_DIR = f"{DATA_DIR}/14_scores"
+SCORES_DIR = f"{DATA_DIR}/15_scores"
 SCORE_RUN_ARCHIVE = {
     "online_runs_dir": f"{SCORES_DIR}/online/runs",
     "offline_runs_dir": f"{SCORES_DIR}/offline/runs",
@@ -55,7 +55,7 @@ FEAT = MODELLING["features"]
 APP = MODELLING["approaches"]
 
 # Feature analysis
-FEATURE_ANALYSIS_DIR = f"{DATA_DIR}/09_feature_analysis"
+FEATURE_ANALYSIS_DIR = f"{DATA_DIR}/10_feature_analysis"
 FEATURE_ANALYSIS_SUMMARY_CSV = f"{FEATURE_ANALYSIS_DIR}/online/feature_summary.csv"
 FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV = f"{FEATURE_ANALYSIS_DIR}/offline/feature_summary.csv"
 FEATURE_ANALYSIS_PLOT_FILES = ["online/feature_distributions.png", "online/feature_correlations.png"]
@@ -89,18 +89,19 @@ MODE_CFG = {
 }
 # Path patterns for mode-wildcarded rules
 CANDIDATES_RAW_PATTERN = f"{DATA_DIR}/07_candidates/{{mode}}/candidates_raw.parquet"
-FEATURES_ALL_PATTERN = f"{DATA_DIR}/08_features/{{mode}}/features_all.parquet"
-FEATURES_SELECTED_PATTERN = f"{DATA_DIR}/10_features_selected/{{mode}}/features_selected.parquet"
-# Per-approach: scores, portfolio, submission, and scores (data/11–14 by {mode}/{approach}/)
+FEATURES_RAW_PATTERN = f"{DATA_DIR}/08_features_raw/{{mode}}/features_raw.parquet"
+FEATURES_ALL_PATTERN = f"{DATA_DIR}/09_features_derived/{{mode}}/features_all.parquet"
+FEATURES_SELECTED_PATTERN = f"{DATA_DIR}/11_features_selected/{{mode}}/features_selected.parquet"
+# Per-approach: scores, portfolio, submission, and scores (data/12–15 by {mode}/{approach}/)
 ENABLED_APPROACHES = MODELLING["enabled_approaches"]
 APPROACH_RE = "|".join(ENABLED_APPROACHES)
-SCORES_APPROACH_PATTERN = f"{DATA_DIR}/11_predictions/{{mode}}/{{approach}}/scores.parquet"
-PORTFOLIO_PATTERN = f"{DATA_DIR}/12_portfolio/{{mode}}/{{approach}}/portfolio.parquet"
-SUBMISSION_PATTERN = f"{DATA_DIR}/13_submission/{{mode}}/{{approach}}/submission.csv"
+SCORES_APPROACH_PATTERN = f"{DATA_DIR}/12_predictions/{{mode}}/{{approach}}/scores.parquet"
+PORTFOLIO_PATTERN = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/portfolio.parquet"
+SUBMISSION_PATTERN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/submission.csv"
 SCORE_SUMMARY_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/score_summary.csv"
 SCORE_DETAILS_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/score_details.parquet"
 ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/{{mode}}/runs/{{approach}}/.last_archived"
-SUBMITTED_SENTINEL_PATTERN = f"{DATA_DIR}/13_submission/.submitted_challenge2_{{approach}}"
+SUBMITTED_SENTINEL_PATTERN = f"{DATA_DIR}/14_submission/.submitted_challenge2_{{approach}}"
 SCORE_SUMMARY_LIVE_PATTERN = f"{SCORES_DIR}/online/{{approach}}/score_summary_live.csv"
 FEATURE_ANALYSIS_SUMMARY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_summary.csv"
 
@@ -206,10 +207,21 @@ rule generate_candidates:
         "--lookback-months {params.lookback_months} --min-order-frequency {params.min_order_frequency} "
         "--min-lookback-spend {params.min_lookback_spend}"
 
-rule engineer_features:
-    """Feature engineering from raw candidates: all modelling features."""
+rule engineer_features_raw:
+    """Pass-through raw feature columns from candidates (no derivation)."""
     input:
         candidates_raw = CANDIDATES_RAW_PATTERN,
+    output:
+        features_raw = FEATURES_RAW_PATTERN,
+    wildcard_constraints:
+        mode = MODE_RE,
+    shell:
+        "uv run src/engineer_features_raw.py --candidates-raw {input.candidates_raw} --output {output.features_raw}"
+
+rule engineer_features_derived:
+    """Derived feature engineering: raw features + plis/customer/nace -> full feature matrix."""
+    input:
+        features_raw = FEATURES_RAW_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
         customer = lambda w: MODE_CFG[w.mode]["customer_csv"],
         nace_codes = INPUTS["nace_codes"],
@@ -221,7 +233,7 @@ rule engineer_features:
     wildcard_constraints:
         mode = MODE_RE,
     shell:
-        "uv run src/engineer_features.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
+        "uv run src/engineer_features_derived.py --features-raw {input.features_raw} --plis {input.plis} "
         "--customer {input.customer} --nace-codes {input.nace_codes} --output {output.features_all} --train-end {params.train_end} --lookback-months {params.lookback_months}"
 
 FEATURE_ANALYSIS_REDUNDANCY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_redundancy.csv"
@@ -354,18 +366,18 @@ rule write_submission_warm:
 
 
 rule write_submission:
-    """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/13_submission/submission_baseline.csv' to run."""
+    """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/14_submission/submission_baseline.csv' to run."""
     input:
         customer_test = INPUTS["customer_test"],
         plis = PLIS_TRAINING_CSV,
     output:
-        submission = f"{DATA_DIR}/13_submission/submission_baseline.csv",
+        submission = f"{DATA_DIR}/14_submission/submission_baseline.csv",
     shell:
         "uv run src/write_submission.py --output {output.submission} "
         "--customer-test {input.customer_test} --plis-training {input.plis}"
 
 rule score_submission:
-    """Score submission against plis_testing holdout; write summary and details per approach to data/14_scores/{mode}/{approach}/."""
+    """Score submission against plis_testing holdout; write summary and details per approach to data/15_scores/{mode}/{approach}/."""
     input:
         submission = SUBMISSION_PATTERN,
         plis_testing = PLIS_TESTING_SPLIT,
@@ -406,7 +418,7 @@ rule archive_score_run:
 rule submit_to_portal:
     """Upload online submission to Unite evaluator (challenge 2) per approach. Requires portal_credentials in config.yaml."""
     input:
-        submission = f"{DATA_DIR}/13_submission/online/{{approach}}/submission.csv",
+        submission = f"{DATA_DIR}/14_submission/online/{{approach}}/submission.csv",
     output:
         summary = SCORE_SUMMARY_LIVE_PATTERN,
         sentinel = SUBMITTED_SENTINEL_PATTERN,

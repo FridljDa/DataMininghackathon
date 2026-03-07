@@ -5,7 +5,7 @@
 Intermediate candidate table for Level 1 (E-Class) recommendation modelling.
 
 Each row is one buyer-candidate pair: (`legal_entity_id`, `eclass`) that passed candidate eligibility filters in the lookback window.  
-This is the first downstream dataset after split preparation and is the direct input to `src/engineer_features.py`.
+This is the first downstream dataset after split preparation and is the direct input to the feature pipeline: `src/engineer_features_raw.py` writes non-derived columns to `data/08_features_raw/{mode}/features_raw.parquet`, then `src/engineer_features_derived.py` adds derived features and writes `data/09_features_derived/{mode}/features_all.parquet`.
 
 Practical definition from `src/generate_candidates.py`:
 
@@ -58,7 +58,7 @@ Sample from `data/07_candidates/online/candidates_raw.parquet`:
   - global `orderdate_min`: `2023-01-01`
   - global `orderdate_max`: `2024-12-31`
 - Main downstream dependency:
-  - consumed by `src/engineer_features.py`, which reconstructs periods from `orderdates_str` and derives recurrence/recency/trend/economic features.
+  - consumed by `src/engineer_features_raw.py` (pass-through to `data/08_features_raw`), then `src/engineer_features_derived.py` reconstructs periods from `orderdates_str` and derives recurrence/recency/trend/economic features into `data/09_features_derived`.
 - Why this dataset exists:
   - shrinks the modelling space to buyer-category pairs with minimal historical signal before expensive feature engineering and training.
 

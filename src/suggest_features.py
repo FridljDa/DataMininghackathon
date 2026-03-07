@@ -2,10 +2,10 @@
 Suggest modelling features from feature-analysis summary (machine-readable).
 
 Reads feature_summary.csv (and optionally feature_redundancy.csv) from
-data/09_feature_analysis. Applies hard filters (null rate, variance, cardinality),
+data/10_feature_analysis. Applies hard filters (null rate, variance, cardinality),
 then redundancy pruning so one representative per correlated group is kept.
 Writes a YAML suggestion file for manual copy into config.yaml modelling.features.selected.
-Output is advisory only; the pipeline contract is config modelling.features.selected / data/10_features_selected.
+Output is advisory only; the pipeline contract is config modelling.features.selected / data/11_features_selected.
 """
 
 from __future__ import annotations

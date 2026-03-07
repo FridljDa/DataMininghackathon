@@ -9,6 +9,17 @@ dependencies = [
     "pandas",
     "playwright",
     "pyarrow",
+    "python-dotenv>=1.2.2",
     "seaborn",
     "snakemake",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-p no:launch_pytest"

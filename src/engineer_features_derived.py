@@ -1,9 +1,9 @@
 """
-Feature engineering for Level 1 (E-Class) candidates.
+Derived feature engineering: raw features + plis/customer/nace -> full feature matrix.
 
-Reads raw candidates parquet (from generate_candidates), plis and customer metadata.
-Computes all modelling features: m_active, rho_freq, delta_recency, gap stats,
-economic features, trend, buyer context. Output: full feature matrix parquet.
+Reads data/08_features_raw/{mode}/features_raw.parquet and adds all derived
+features (m_active, rho_freq, delta_recency, gap stats, economic, trend,
+buyer context, etc.). Output: data/09_features_derived/{mode}/features_all.parquet.
 """
 
 from __future__ import annotations
@@ -33,18 +33,17 @@ def _read_customer(path: Path) -> pd.DataFrame:
 
 def _read_nace_codes(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, sep="\t", dtype=str)
-    # Ensure nace_code is string for joining
     df["nace_code"] = df["nace_code"].astype(str).str.strip()
     return df
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--candidates-raw", required=True, dest="candidates_raw", help="Path to raw candidates parquet.")
+    parser.add_argument("--features-raw", required=True, dest="features_raw", help="Path to features_raw parquet.")
     parser.add_argument("--plis", required=True, help="Path to plis_training (split) TSV.")
     parser.add_argument("--customer", required=True, help="Path to customer metadata TSV.")
     parser.add_argument("--nace-codes", required=False, dest="nace_codes", help="Path to nace_codes.csv reference.")
-    parser.add_argument("--output", required=True, help="Path to output features parquet.")
+    parser.add_argument("--output", required=True, help="Path to output features_all parquet.")
     parser.add_argument(
         "--train-end",
         required=True,
@@ -60,19 +59,18 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    raw_path = Path(args.candidates_raw)
+    raw_path = Path(args.features_raw)
     plis_path = Path(args.plis)
     customer_path = Path(args.customer)
     out_path = Path(args.output)
     train_end = pd.Timestamp(args.train_end)
     lookback_months = args.lookback_months
 
-    candidates = pd.read_parquet(raw_path)
+    df = pd.read_parquet(raw_path)
     for col in ("legal_entity_id", "eclass", "n_orders", "historical_purchase_value_total", "orderdate_min", "orderdate_max", "orderdates_str"):
-        if col not in candidates.columns:
-            raise ValueError(f"candidates_raw must contain '{col}'. Got: {list(candidates.columns)}")
+        if col not in df.columns:
+            raise ValueError(f"features_raw must contain '{col}'. Got: {list(df.columns)}")
 
-    # Restore orderdates as list of periods for feature computation (parquet may give list or ndarray)
     def _str_to_periods(ss) -> list:
         if ss is None:
             return []
@@ -82,20 +80,20 @@ def main() -> None:
             return []
         return [pd.Period(s, freq="M") for s in ss if isinstance(s, str)]
 
-    candidates["orderdates"] = candidates["orderdates_str"].apply(_str_to_periods)
+    df["orderdates"] = df["orderdates_str"].apply(_str_to_periods)
 
     # m_active, m_observed, rho_freq
-    candidates["m_active"] = candidates["orderdates"].apply(len)
-    candidates["_span_months"] = (
-        (candidates["orderdate_max"] - candidates["orderdate_min"]).dt.days / 30.44
+    df["m_active"] = df["orderdates"].apply(len)
+    df["_span_months"] = (
+        (df["orderdate_max"] - df["orderdate_min"]).dt.days / 30.44
     ).clip(lower=1)
-    candidates["m_observed"] = candidates["_span_months"].round().astype(int).clip(lower=1)
-    candidates["rho_freq"] = candidates["m_active"] / candidates["m_observed"]
+    df["m_observed"] = df["_span_months"].round().astype(int).clip(lower=1)
+    df["rho_freq"] = df["m_active"] / df["m_observed"]
 
     # delta_recency
-    candidates["t_last"] = candidates["orderdate_max"]
-    candidates["delta_recency"] = (
-        (train_end - candidates["t_last"]).dt.days / 30.44
+    df["t_last"] = df["orderdate_max"]
+    df["delta_recency"] = (
+        (train_end - df["t_last"]).dt.days / 30.44
     ).round().astype(int).clip(lower=0)
 
     # Inter-purchase gaps
@@ -111,19 +109,19 @@ def main() -> None:
             return np.nan, np.nan
         return float(np.mean(gaps)), float(np.std(gaps)) if len(gaps) > 1 else 0.0
 
-    gap_results = list(zip(*candidates["orderdates"].map(_gaps)))
-    candidates["_gap_mean"] = gap_results[0]
-    candidates["_gap_std"] = gap_results[1]
-    candidates["sigma_gap"] = candidates["_gap_std"]
-    candidates["mu_gap"] = candidates["_gap_mean"]
-    candidates["CV_gap"] = np.where(
-        candidates["mu_gap"] > 0,
-        candidates["sigma_gap"] / candidates["mu_gap"],
+    gap_results = list(zip(*df["orderdates"].map(_gaps)))
+    df["_gap_mean"] = gap_results[0]
+    df["_gap_std"] = gap_results[1]
+    df["sigma_gap"] = df["_gap_std"]
+    df["mu_gap"] = df["_gap_mean"]
+    df["CV_gap"] = np.where(
+        df["mu_gap"] > 0,
+        df["sigma_gap"] / df["mu_gap"],
         np.nan,
     )
 
     # Economic
-    candidates["historical_purchase_value_sqrt"] = np.sqrt(candidates["historical_purchase_value_total"])
+    df["historical_purchase_value_sqrt"] = np.sqrt(df["historical_purchase_value_total"])
 
     plis = _read_plis(plis_path)
     plis["orderdate"] = pd.to_datetime(plis["orderdate"], format="%Y-%m-%d")
@@ -133,7 +131,6 @@ def main() -> None:
     v = pd.to_numeric(plis["vk_per_item"], errors="coerce").fillna(0)
     plis["_spend"] = q * v
 
-    # Phase 3 exact lookback features (n_orders_in_lookback, lookback_spend, avg_spend_per_order, days_since_last, history_cohort)
     lookback_start = train_end - pd.DateOffset(months=lookback_months)
     plis_lookback = plis[
         (plis["orderdate"] >= lookback_start) & (plis["orderdate"] <= train_end)
@@ -146,15 +143,13 @@ def main() -> None:
         )
         .reset_index()
     )
-    candidates = candidates.merge(
-        lookback_agg, on=["legal_entity_id", "eclass"], how="left"
+    df = df.merge(lookback_agg, on=["legal_entity_id", "eclass"], how="left")
+    df["avg_spend_per_order"] = (
+        df["lookback_spend"]
+        / df["n_orders_in_lookback"].clip(lower=1)
     )
-    candidates["avg_spend_per_order"] = (
-        candidates["lookback_spend"]
-        / candidates["n_orders_in_lookback"].clip(lower=1)
-    )
-    candidates["days_since_last"] = (
-        train_end - candidates["orderdate_max"]
+    df["days_since_last"] = (
+        train_end - df["orderdate_max"]
     ).dt.days
 
     plis_train = plis[plis["orderdate"] <= train_end]
@@ -168,51 +163,45 @@ def main() -> None:
         .min()
         .reset_index(name="buyer_first_seen")
     )
-    candidates = candidates.merge(
-        buyer_active_months, on="legal_entity_id", how="left"
-    )
-    candidates = candidates.merge(
-        buyer_first_seen, on="legal_entity_id", how="left"
-    )
-    candidates["history_cohort"] = candidates["buyer_active_months_total"].fillna(0).apply(
+    df = df.merge(buyer_active_months, on="legal_entity_id", how="left")
+    df = df.merge(buyer_first_seen, on="legal_entity_id", how="left")
+    df["history_cohort"] = df["buyer_active_months_total"].fillna(0).apply(
         lambda m: "sparse_history"
         if 0 < m <= 3
         else ("cold_start" if m == 0 else "rich_history")
     )
 
-    # Tenure denominators (no leakage: only data <= train_end)
-    candidates["buyer_tenure_months"] = (
-        (train_end - candidates["buyer_first_seen"]).dt.days / 30.44
+    df["buyer_tenure_months"] = (
+        (train_end - df["buyer_first_seen"]).dt.days / 30.44
     ).clip(lower=1)
-    candidates["pair_tenure_months"] = (
-        (train_end - candidates["orderdate_min"]).dt.days / 30.44
+    df["pair_tenure_months"] = (
+        (train_end - df["orderdate_min"]).dt.days / 30.44
     ).clip(lower=1)
     effective_start = np.maximum(
         lookback_start,
-        candidates["buyer_first_seen"].fillna(lookback_start),
+        df["buyer_first_seen"].fillna(lookback_start),
     )
-    candidates["effective_lookback_months"] = (
+    df["effective_lookback_months"] = (
         (train_end - effective_start).dt.days / 30.44
     ).clip(lower=1)
 
-    # Average monthly normalizations (quotients by tenure so late joiners are comparable)
-    candidates["avg_monthly_orders_buyer_tenure"] = (
-        candidates["n_orders"] / candidates["buyer_tenure_months"]
+    df["avg_monthly_orders_buyer_tenure"] = (
+        df["n_orders"] / df["buyer_tenure_months"]
     )
-    candidates["avg_monthly_orders_pair_tenure"] = (
-        candidates["n_orders"] / candidates["pair_tenure_months"]
+    df["avg_monthly_orders_pair_tenure"] = (
+        df["n_orders"] / df["pair_tenure_months"]
     )
-    candidates["avg_monthly_spend_buyer_tenure"] = (
-        candidates["historical_purchase_value_total"] / candidates["buyer_tenure_months"]
+    df["avg_monthly_spend_buyer_tenure"] = (
+        df["historical_purchase_value_total"] / df["buyer_tenure_months"]
     )
-    candidates["avg_monthly_spend_pair_tenure"] = (
-        candidates["historical_purchase_value_total"] / candidates["pair_tenure_months"]
+    df["avg_monthly_spend_pair_tenure"] = (
+        df["historical_purchase_value_total"] / df["pair_tenure_months"]
     )
-    candidates["avg_monthly_orders_in_lookback"] = (
-        candidates["n_orders_in_lookback"].fillna(0) / candidates["effective_lookback_months"]
+    df["avg_monthly_orders_in_lookback"] = (
+        df["n_orders_in_lookback"].fillna(0) / df["effective_lookback_months"]
     )
-    candidates["avg_monthly_spend_in_lookback"] = (
-        candidates["lookback_spend"].fillna(0) / candidates["effective_lookback_months"]
+    df["avg_monthly_spend_in_lookback"] = (
+        df["lookback_spend"].fillna(0) / df["effective_lookback_months"]
     )
 
     line_median = (
@@ -221,9 +210,7 @@ def main() -> None:
         .reset_index()
         .rename(columns={"_spend": "s_median_line"})
     )
-    candidates = candidates.merge(
-        line_median, on=["legal_entity_id", "eclass"], how="left"
-    )
+    df = df.merge(line_median, on=["legal_entity_id", "eclass"], how="left")
 
     buyer_total = (
         plis.groupby("legal_entity_id")["_spend"]
@@ -231,14 +218,13 @@ def main() -> None:
         .reset_index()
         .rename(columns={"_spend": "s_total_buyer"})
     )
-    candidates = candidates.merge(buyer_total, on="legal_entity_id", how="left")
-    candidates["w_e_b"] = np.where(
-        candidates["s_total_buyer"] > 0,
-        candidates["historical_purchase_value_total"] / candidates["s_total_buyer"],
+    df = df.merge(buyer_total, on="legal_entity_id", how="left")
+    df["w_e_b"] = np.where(
+        df["s_total_buyer"] > 0,
+        df["historical_purchase_value_total"] / df["s_total_buyer"],
         0.0,
     )
 
-    # Trend
     def _month_diff(end: pd.Period, p: pd.Period) -> int:
         return (end.year - p.year) * 12 + (end.month - p.month)
 
@@ -250,11 +236,8 @@ def main() -> None:
         prior_6 = sum(1 for p in periods if 3 < _month_diff(end, p) <= 9)
         return float(last_3 - prior_6 / 2.0)
 
-    candidates["delta_trend"] = candidates["orderdates"].map(
-        lambda x: _trend(x, train_end)
-    )
+    df["delta_trend"] = df["orderdates"].map(lambda x: _trend(x, train_end))
 
-    # Calendar and momentum (aggregated per candidate)
     end_period = train_end.to_period("M")
 
     def _last_order_month_cos_sin(periods: list) -> tuple[float, float]:
@@ -292,29 +275,28 @@ def main() -> None:
         n_12 = sum(1 for p in periods if _month_diff(end, p) <= 11)
         return float(n_12) / 12.0
 
-    last_month_results = list(zip(*candidates["orderdates"].map(_last_order_month_cos_sin)))
-    candidates["last_order_month_cos"] = last_month_results[0]
-    candidates["last_order_month_sin"] = last_month_results[1]
+    last_month_results = list(zip(*df["orderdates"].map(_last_order_month_cos_sin)))
+    df["last_order_month_cos"] = last_month_results[0]
+    df["last_order_month_sin"] = last_month_results[1]
 
-    last_quarter_results = list(zip(*candidates["orderdates"].map(_last_order_quarter_cos_sin)))
-    candidates["last_order_quarter_cos"] = last_quarter_results[0]
-    candidates["last_order_quarter_sin"] = last_quarter_results[1]
+    last_quarter_results = list(zip(*df["orderdates"].map(_last_order_quarter_cos_sin)))
+    df["last_order_quarter_cos"] = last_quarter_results[0]
+    df["last_order_quarter_sin"] = last_quarter_results[1]
 
-    candidates["q4_share"] = candidates["orderdates"].map(_q4_share)
+    df["q4_share"] = df["orderdates"].map(_q4_share)
 
-    recent_results = list(zip(*candidates["orderdates"].map(lambda x: _recent_counts(x, end_period))))
-    candidates["recent_3m_count"] = recent_results[0]
-    candidates["recent_6m_count"] = recent_results[1]
-    candidates["recent_3_over_6"] = np.where(
-        candidates["recent_6m_count"] >= 1,
-        candidates["recent_3m_count"] / candidates["recent_6m_count"],
+    recent_results = list(zip(*df["orderdates"].map(lambda x: _recent_counts(x, end_period))))
+    df["recent_3m_count"] = recent_results[0]
+    df["recent_6m_count"] = recent_results[1]
+    df["recent_3_over_6"] = np.where(
+        df["recent_6m_count"] >= 1,
+        df["recent_3m_count"] / df["recent_6m_count"],
         np.nan,
     )
-    candidates["active_month_share_12m"] = candidates["orderdates"].map(
+    df["active_month_share_12m"] = df["orderdates"].map(
         lambda x: _active_month_share_12m(x, end_period)
     )
 
-    # Explicit year features (relative to train_end)
     def _first_last_year(periods: list) -> tuple[float, float]:
         if not periods:
             return np.nan, np.nan
@@ -322,34 +304,34 @@ def main() -> None:
         last = max(periods).year
         return float(first), float(last)
 
-    year_results = list(zip(*candidates["orderdates"].map(_first_last_year)))
-    candidates["first_order_year"] = year_results[0]
-    candidates["last_order_year"] = year_results[1]
+    year_results = list(zip(*df["orderdates"].map(_first_last_year)))
+    df["first_order_year"] = year_results[0]
+    df["last_order_year"] = year_results[1]
     train_year = end_period.year
-    candidates["years_since_last_order"] = np.where(
-        candidates["last_order_year"].notna(),
-        train_year - candidates["last_order_year"],
+    df["years_since_last_order"] = np.where(
+        df["last_order_year"].notna(),
+        train_year - df["last_order_year"],
         np.nan,
     )
-    candidates["active_year_span"] = np.where(
-        candidates["first_order_year"].notna() & candidates["last_order_year"].notna(),
-        (candidates["last_order_year"] - candidates["first_order_year"]).astype(int) + 1,
+    df["active_year_span"] = np.where(
+        df["first_order_year"].notna() & df["last_order_year"].notna(),
+        (df["last_order_year"] - df["first_order_year"]).astype(int) + 1,
         np.nan,
     )
 
-    candidates["recency_to_gap_ratio"] = np.where(
-        (candidates["mu_gap"] > 0) & candidates["mu_gap"].notna(),
-        candidates["delta_recency"] / candidates["mu_gap"],
+    df["recency_to_gap_ratio"] = np.where(
+        (df["mu_gap"] > 0) & df["mu_gap"].notna(),
+        df["delta_recency"] / df["mu_gap"],
         np.nan,
     )
-    candidates["delta_vs_expected_gap"] = np.where(
-        candidates["mu_gap"].notna(),
-        candidates["delta_recency"] - candidates["mu_gap"],
+    df["delta_vs_expected_gap"] = np.where(
+        df["mu_gap"].notna(),
+        df["delta_recency"] - df["mu_gap"],
         np.nan,
     )
-    candidates["is_overdue"] = np.where(
-        (candidates["mu_gap"] > 0) & candidates["mu_gap"].notna(),
-        (candidates["delta_recency"] > candidates["mu_gap"]).astype(float),
+    df["is_overdue"] = np.where(
+        (df["mu_gap"] > 0) & df["mu_gap"].notna(),
+        (df["delta_recency"] > df["mu_gap"]).astype(float),
         np.nan,
     )
 
@@ -382,20 +364,13 @@ def main() -> None:
         spend_recent["spend_recent_3m"] / spend_recent["spend_recent_6m"],
         np.nan,
     )
-    candidates = candidates.merge(
-        spend_recent,
-        on=["legal_entity_id", "eclass"],
-        how="left",
-    )
+    df = df.merge(spend_recent, on=["legal_entity_id", "eclass"], how="left")
 
-    # Buyer context
     customer = _read_customer(customer_path)
     customer["legal_entity_id"] = customer["legal_entity_id"].astype(str)
-    
-    # Enrich with NACE hierarchy if reference is provided
+
     if args.nace_codes:
         nace_ref = _read_nace_codes(Path(args.nace_codes))
-        # Keep only hierarchy columns for primary NACE
         nace_hierarchy = nace_ref[["nace_code", "toplevel_section", "nace_3digits"]].drop_duplicates(subset="nace_code")
         customer = customer.merge(nace_hierarchy, on="nace_code", how="left")
         customer = customer.rename(columns={
@@ -403,44 +378,39 @@ def main() -> None:
             "nace_3digits": "nace_3"
         })
 
-    # Keep relevant context columns
     context_cols = ["legal_entity_id", "estimated_number_employees", "nace_code", "secondary_nace_code"]
     if "nace_section" in customer.columns:
         context_cols += ["nace_section", "nace_3"]
-    
+
     cust_sub = customer[[c for c in context_cols if c in customer.columns]].drop_duplicates(
         subset="legal_entity_id"
     )
-    candidates = candidates.merge(cust_sub, on="legal_entity_id", how="left")
-    
-    emp = pd.to_numeric(candidates["estimated_number_employees"], errors="coerce").fillna(0)
-    candidates["log_employees"] = np.log1p(emp)
-    
-    # Primary NACE features
-    candidates["nace_2"] = candidates["nace_code"].astype(str).str.strip().str[:2].replace("nan", "")
-    
-    # Secondary NACE features
-    candidates["secondary_nace_2"] = candidates["secondary_nace_code"].astype(str).str.strip().str[:2].replace("nan", "")
-    candidates["nace_mismatch"] = (
-        (candidates["nace_2"] != "") & 
-        (candidates["secondary_nace_2"] != "") & 
-        (candidates["nace_2"] != candidates["secondary_nace_2"])
+    df = df.merge(cust_sub, on="legal_entity_id", how="left")
+
+    emp = pd.to_numeric(df["estimated_number_employees"], errors="coerce").fillna(0)
+    df["log_employees"] = np.log1p(emp)
+
+    df["nace_2"] = df["nace_code"].astype(str).str.strip().str[:2].replace("nan", "")
+    df["secondary_nace_2"] = df["secondary_nace_code"].astype(str).str.strip().str[:2].replace("nan", "")
+    df["nace_mismatch"] = (
+        (df["nace_2"] != "")
+        & (df["secondary_nace_2"] != "")
+        & (df["nace_2"] != df["secondary_nace_2"])
     ).astype(float)
 
-    # Missingness / history flags (preserve undefined vs zero for downstream fillna(0))
-    candidates["has_gap_history"] = (
-        candidates["mu_gap"].notna() & candidates["sigma_gap"].notna()
+    df["has_gap_history"] = (
+        df["mu_gap"].notna() & df["sigma_gap"].notna()
     ).astype(float)
-    candidates["has_recent_6m_activity"] = (
-        candidates["recent_6m_count"].fillna(0) > 0
+    df["has_recent_6m_activity"] = (
+        df["recent_6m_count"].fillna(0) > 0
     ).astype(float)
-    candidates["has_recent_spend_6m"] = (
-        candidates["spend_recent_6m"].fillna(0) > 0
+    df["has_recent_spend_6m"] = (
+        df["spend_recent_6m"].fillna(0) > 0
     ).astype(float)
-    sec_nace = candidates["secondary_nace_code"].astype(str).str.strip().replace("nan", "")
-    candidates["has_secondary_nace"] = (sec_nace != "").astype(float)
-    candidates["has_multi_year_history"] = (
-        candidates["active_year_span"].fillna(0) > 1
+    sec_nace = df["secondary_nace_code"].astype(str).str.strip().replace("nan", "")
+    df["has_secondary_nace"] = (sec_nace != "").astype(float)
+    df["has_multi_year_history"] = (
+        df["active_year_span"].fillna(0) > 1
     ).astype(float)
 
     out_cols = [
@@ -508,10 +478,10 @@ def main() -> None:
         "avg_monthly_spend_in_lookback",
     ]
 
-    candidates = candidates[[c for c in out_cols if c in candidates.columns]]
+    df = df[[c for c in out_cols if c in df.columns]]
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    candidates.to_parquet(out_path, index=False)
-    print(f"Wrote {len(candidates)} feature rows to {out_path}")
+    df.to_parquet(out_path, index=False)
+    print(f"Wrote {len(df)} feature rows to {out_path}")
 
 
 if __name__ == "__main__":

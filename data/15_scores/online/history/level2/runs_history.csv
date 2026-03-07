@@ -1,0 +1,2 @@
+run_id,approach,level,created_at,commit_sha,branch,dirty,run_dir,total_score,total_savings,total_fees,num_hits,num_predictions,spend_capture_rate,total_ground_spend
+20260307_183005_aba318e_dirty,lgbm_two_stage,2,2026-03-07T18:30:05Z,aba318e810db110ec081e82de33662c0c1169177,main,true,data/15_scores/online/runs/lgbm_two_stage/level2/20260307_183005_aba318e_dirty,-22860.0,0.0,22860.0,0,2286,0.0,9908835.52011004

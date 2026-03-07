@@ -1,0 +1,2 @@
+total_score,total_savings,total_fees,num_hits,num_predictions,spend_capture_rate,total_ground_spend,submission_id,approach,run_id,run_dir,commit_sha,branch,dirty,created_at
+333042.78,355902.78,22860.0,1440,,0.142,,4e92a998-0e26-4160-a3c6-fc05f34120cd,lgbm_two_stage,20260307_183007_aba318e_dirty,data/15_scores/online/runs/lgbm_two_stage/level1/20260307_183007_aba318e_dirty,aba318e810db110ec081e82de33662c0c1169177,main,true,2026-03-07T18:30:07Z

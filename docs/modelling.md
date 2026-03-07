@@ -66,14 +66,7 @@ To simulate the hidden evaluation, create an internal temporal split within the 
 Label a buyer-eclass pair $ (b, e) $ as **positive** in validation if it is bought again at least once:
 
 $$
-\text{label} : \mathcal{B}_{\text{warm}} \times \mathcal{E} \to \{0,1\}, \qquad
-\text{label}(b,e) = \mathbf{1}\!\left[(b,e)\in \mathcal{P}_{\text{val}}^{+}\right]
-$$
-
-where
-
-$$
-\mathcal{P}_{\text{val}}^{+}=\{(b,e)\in \mathcal{B}_{\text{warm}}\times\mathcal{E}\mid \text{orders in val}(b,e)\ge 1\}.
+\text{label}(b, e) = \mathbf{1}\left[\text{orders in val}(b, e) \geq 1\right], \quad b \in \mathcal{B}_{\text{warm}},\ e \in \mathcal{E}
 $$
 
 Use binary recurrence target by default: bought again vs not bought again.

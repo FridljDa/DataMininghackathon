@@ -3,6 +3,7 @@ suggested_features:
 - active_year_span
 - avg_monthly_orders_pair_tenure
 - avg_monthly_spend_pair_tenure
+- avg_price_per_unit
 - buyer_tenure_months
 - delta_trend
 - eclass_n_buyers_global
@@ -25,7 +26,7 @@ suggested_features:
 meta:
   source: data/10_feature_analysis/online/level2/feature_summary.csv
   redundancy_source: data/10_feature_analysis/online/level2/feature_redundancy.csv
-  n_suggested: 23
+  n_suggested: 24
   n_dropped: 40
   dropped:
   - feature: sigma_gap
@@ -96,15 +97,15 @@ meta:
     reason: redundant with active_year_span
   - feature: order_value_cv
     reason: redundant with active_year_span
+  - feature: pair_tenure_months
+    reason: redundant with first_order_year
+  - feature: effective_lookback_months
+    reason: redundant with buyer_tenure_months
   - feature: years_since_last_order
     reason: redundant with last_order_year
   - feature: delta_recency
     reason: redundant with last_order_year
   - feature: days_since_last
     reason: redundant with last_order_year
-  - feature: pair_tenure_months
-    reason: redundant with first_order_year
   - feature: n_distinct_manufacturers
     reason: redundant with top_manufacturer_share
-  - feature: effective_lookback_months
-    reason: redundant with buyer_tenure_months

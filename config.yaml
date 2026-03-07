@@ -215,6 +215,7 @@ modelling:
       - top_manufacturer_share
       - n_distinct_manufacturers
       - eclass_n_buyers_global
+      - avg_price_per_unit
 
   # Per-approach hyperparameters (output paths: data/11_predictions/{mode}/{approach}/scores.parquet)
   approaches:

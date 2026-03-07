@@ -397,6 +397,7 @@ rule write_submission_warm:
         submission = SUBMISSION_PATTERN,
     params:
         buyer_source = lambda w: MODE_CFG[w.mode]["buyer_source"],
+        cold_start_top_k = config["submission"]["cold_start_top_k"],
     wildcard_constraints:
         mode = MODE_RE,
         approach = APPROACH_RE,
@@ -406,7 +407,8 @@ rule write_submission_warm:
         shell(
             "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
             "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} "
-            "--nace-codes {input.nace_codes} --level {wildcards.level} --output {output.submission}"
+            "--nace-codes {input.nace_codes} --level {wildcards.level} "
+            "--cold-start-top-k {params.cold_start_top_k} --output {output.submission}"
         )
 
 

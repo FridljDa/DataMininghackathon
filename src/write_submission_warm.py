@@ -22,8 +22,6 @@ from typing import Optional
 
 import pandas as pd
 
-NACE_TOP_K = 3
-
 # Hierarchy levels for cold-start lookup (most specific first)
 NACE_LEVELS = ("nace_4", "nace_3", "nace_2", "section", "global")
 
@@ -65,10 +63,13 @@ def _build_cold_start_rankings(
     nace_codes_df: pd.DataFrame,
     level: int,
     warm_ids: set[str],
+    cold_start_top_k: int = 3,
+    min_buyers_in_nace: int = 2,
 ) -> tuple[dict[tuple[str, str], list[str]], dict[tuple[str, str], list[str]]]:
     """
     Build per-NACE-level top-K eclass and cluster rankings from warm-buyer plis.
-    Keys are (level_name, level_value) e.g. ("nace_2", "86"). Score = total_spend * n_buyers.
+    Keys are (level_name, level_value) e.g. ("nace_2", "86").
+    NACE-level rankings use lift = P(eclass|nace_group) / P(eclass|global); global fallback uses n_buyers.
     Returns (rankings_eclass, rankings_cluster) for Level 1 and Level 2.
     """
     plis_warm = plis[plis["legal_entity_id"].astype(str).isin(warm_ids)].copy()
@@ -96,38 +97,44 @@ def _build_cold_start_rankings(
         plis_warm["nace_4"] = plis_warm["nace_code"].where(plis_warm["nace_code"].str.len() == 4, "")
         plis_warm["section"] = plis_warm["toplevel_section"].fillna("")
 
+    total_warm_buyers = plis_warm["legal_entity_id"].nunique()
+
+    def global_rates_for(value_col: str) -> pd.Series:
+        n_buyers_per = plis_warm.groupby(value_col, dropna=False)["legal_entity_id"].nunique()
+        return (n_buyers_per / total_warm_buyers).rename("global_rate")
+
     def agg_and_rank(level_name: Optional[str], value_col: str) -> dict[tuple[str, str], list[str]]:
         key_cols = [level_name] if level_name and level_name in plis_warm.columns else []
         rankings: dict[tuple[str, str], list[str]] = {}
         if not key_cols:
-            # Global ranking
+            # Global fallback: rank by n_buyers (no lift)
             agg = (
                 plis_warm.groupby(value_col, dropna=False)
-                .agg(
-                    total_spend=("_spend", "sum"),
-                    n_buyers=("legal_entity_id", "nunique"),
-                )
+                .agg(n_buyers=("legal_entity_id", "nunique"))
                 .reset_index()
             )
-            agg["score"] = agg["total_spend"] * agg["n_buyers"]
-            global_top = agg.nlargest(NACE_TOP_K, "score")[value_col].tolist()
+            global_top = agg.nlargest(cold_start_top_k, "n_buyers")[value_col].tolist()
             if global_top:
                 rankings[("global", "")] = global_top
             return rankings
         agg = (
             plis_warm.groupby(key_cols + [value_col], dropna=False)
-            .agg(
-                total_spend=("_spend", "sum"),
-                n_buyers=("legal_entity_id", "nunique"),
-            )
+            .agg(n_buyers=("legal_entity_id", "nunique"))
             .reset_index()
         )
-        agg["score"] = agg["total_spend"] * agg["n_buyers"]
+        nace_value_buyers = plis_warm.groupby(key_cols[0])["legal_entity_id"].nunique()
+        agg["nace_buyers"] = agg[key_cols[0]].map(nace_value_buyers)
+        agg["group_rate"] = agg["n_buyers"] / agg["nace_buyers"]
+        global_rate = global_rates_for(value_col)
+        agg = agg.merge(global_rate.rename("global_rate"), left_on=value_col, right_index=True, how="left")
+        agg["global_rate"] = agg["global_rate"].fillna(1.0 / total_warm_buyers)
+        agg["lift"] = agg["group_rate"] / agg["global_rate"]
+        agg = agg[agg["n_buyers"] >= min_buyers_in_nace]
         for grp_key, grp in agg.groupby(key_cols[0]):
             if grp_key == "" or (isinstance(grp_key, float) and pd.isna(grp_key)):
                 continue
             level_val = str(grp_key).strip()
-            top = grp.nlargest(NACE_TOP_K, "score")[value_col].tolist()
+            top = grp.nlargest(cold_start_top_k, "lift")[value_col].tolist()
             if top and level_name:
                 rankings[(level_name, level_val)] = top
         return rankings
@@ -156,8 +163,9 @@ def _hierarchical_lookup(
     secondary_nace: Optional[str],
     nace_codes_df: pd.DataFrame,
     rankings: dict[tuple[str, str], list[str]],
+    top_k: int,
 ) -> list[str]:
-    """Return up to NACE_TOP_K unique items by looking up hierarchy (nace_4 -> nace_3 -> nace_2 -> section -> global), then secondary_nace if needed."""
+    """Return up to top_k unique items by looking up hierarchy (nace_4 -> nace_3 -> nace_2 -> section -> global), then secondary_nace if needed."""
     if not rankings:
         return []
     hierarchy = _resolve_nace_hierarchy(nace_codes_df, nace_code)
@@ -174,9 +182,9 @@ def _hierarchical_lookup(
             for item in rankings[key]:
                 if item and item not in seen:
                     seen.add(item)
-                    if len(seen) >= NACE_TOP_K:
+                    if len(seen) >= top_k:
                         return list(seen)
-    if len(seen) < NACE_TOP_K and secondary_nace:
+    if len(seen) < top_k and secondary_nace:
         sec_h = _resolve_nace_hierarchy(nace_codes_df, secondary_nace)
         for level in NACE_LEVELS:
             if level == "global":
@@ -190,7 +198,7 @@ def _hierarchical_lookup(
                 for item in rankings[key]:
                     if item and item not in seen:
                         seen.add(item)
-                        if len(seen) >= NACE_TOP_K:
+                        if len(seen) >= top_k:
                             return list(seen)
     return list(seen)
 
@@ -234,6 +242,20 @@ def main() -> None:
         choices=(1, 2),
         default=1,
         help="1 = cluster is eclass only; 2 = cluster is eclass|manufacturer. Default: 1.",
+    )
+    parser.add_argument(
+        "--cold-start-top-k",
+        type=int,
+        default=10,
+        dest="cold_start_top_k",
+        help="Max number of eclasses/clusters to recommend per cold-start buyer (default: 10).",
+    )
+    parser.add_argument(
+        "--min-buyers-in-nace",
+        type=int,
+        default=2,
+        dest="min_buyers_in_nace",
+        help="Min distinct buyers in NACE group for an eclass to be ranked (default: 2).",
     )
     parser.add_argument("--output", required=True, help="Path to submission CSV.")
     args = parser.parse_args()
@@ -328,7 +350,12 @@ def main() -> None:
         plis_cold = pd.read_csv(plis_path, sep="\t", usecols=plis_cols, low_memory=False)
         plis_cold["legal_entity_id"] = plis_cold["legal_entity_id"].astype(str)
         rankings_eclass, rankings_cluster = _build_cold_start_rankings(
-            plis_cold, nace_codes_df, level, warm_ids
+            plis_cold,
+            nace_codes_df,
+            level,
+            warm_ids,
+            cold_start_top_k=args.cold_start_top_k,
+            min_buyers_in_nace=args.min_buyers_in_nace,
         )
         if ("global", "") in rankings_eclass and rankings_eclass[("global", "")]:
             default_eclass = rankings_eclass[("global", "")][0]
@@ -353,7 +380,7 @@ def main() -> None:
             plis["cluster"] = plis["eclass"]
         default_eclass = plis["eclass"].mode().iloc[0] if len(plis) else ""
         if level == 2 and "cluster" in plis.columns and plis["cluster"].str.contains(r"\S+\|\S+", regex=True).any():
-            default_clusters = plis["cluster"].value_counts().head(NACE_TOP_K).index.tolist()
+            default_clusters = plis["cluster"].value_counts().head(args.cold_start_top_k).index.tolist()
         else:
             default_clusters = [default_eclass] if default_eclass else []
 
@@ -370,7 +397,7 @@ def main() -> None:
                     .sort_values(["nace_2", "size"], ascending=[True, False])
                 )
                 for n2, grp in freq.groupby("nace_2"):
-                    top = grp.head(NACE_TOP_K)["eclass"].tolist()
+                    top = grp.head(args.cold_start_top_k)["eclass"].tolist()
                     if top:
                         nace_to_eclasses[n2] = top
             else:
@@ -380,7 +407,7 @@ def main() -> None:
                     .sort_values(["nace_2", "size"], ascending=[True, False])
                 )
                 for n2, grp in freq.groupby("nace_2"):
-                    top = grp.head(NACE_TOP_K)["cluster"].tolist()
+                    top = grp.head(args.cold_start_top_k)["cluster"].tolist()
                     if top:
                         nace_to_clusters[n2] = top
 
@@ -389,7 +416,9 @@ def main() -> None:
         secondary_nace: Optional[str] = None,
     ) -> list[str]:
         if use_nace_hierarchy and len(nace_codes_df) > 0:
-            out = _hierarchical_lookup(nace_code, secondary_nace, nace_codes_df, rankings_eclass)
+            out = _hierarchical_lookup(
+                nace_code, secondary_nace, nace_codes_df, rankings_eclass, args.cold_start_top_k
+            )
             return out if out else ([default_eclass] if default_eclass else [])
         if not nace_code or pd.isna(nace_code):
             return [default_eclass] if default_eclass else []
@@ -403,7 +432,9 @@ def main() -> None:
         secondary_nace: Optional[str] = None,
     ) -> list[str]:
         if use_nace_hierarchy and len(nace_codes_df) > 0:
-            out = _hierarchical_lookup(nace_code, secondary_nace, nace_codes_df, rankings_cluster)
+            out = _hierarchical_lookup(
+                nace_code, secondary_nace, nace_codes_df, rankings_cluster, args.cold_start_top_k
+            )
             return out if out else default_clusters
         if not nace_code or pd.isna(nace_code):
             return default_clusters

@@ -1,4 +1,5 @@
 data_dir: "data"
+dag_svg: "data/00_dag/dag.svg"
 inputs:
   customer_test: "data/01_raw/customer_test.csv"
   les_cs: "data/01_raw/les_cs.csv"

@@ -10,6 +10,7 @@ configfile: "config.yaml"
 
 # Centralized path configuration (single source of truth)
 DATA_DIR = config["data_dir"]
+DAG_SVG = config["dag_svg"]
 INPUTS = config["inputs"]
 PLIS_TRAINING_CSV = config["plis_training_csv"]
 CUSTOMER_META_CSV = config["customer_meta_csv"]
@@ -45,12 +46,18 @@ SUBMISSION_OFFLINE_CSV = MODELLING["submission_offline_csv"]
 
 rule all:
     input:
+        DAG_SVG,
         SUBMISSION_CSV,
         CUSTOMER_META_CSV,
         PLOT_OUTPUTS,
         SCORE_SUMMARY,
         SCORE_DETAILS,
-#TODO as first snake make rule: create snakemake DAG graph
+rule generate_dag_graph:
+    """Write workflow DAG as SVG (no input dependencies; run first)."""
+    output:
+        dag = DAG_SVG,
+    shell:
+        "mkdir -p $(dirname {output.dag}) && snakemake --dag | dot -Tsvg -o {output.dag}"
 
 rule build_customer_meta:
     """Build customer metadata from plis_training (all unique customers, task from customer_test or none)."""

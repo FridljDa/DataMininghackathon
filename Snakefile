@@ -138,7 +138,7 @@ rule split_plis_training_validation:
         "--train {output.train} --test {output.test} --cutoff-date {params.cutoff}"
 
 rule generate_candidates:
-    """Candidate generation for Level 1 (warm buyers, E-Class): lookback window, n_orders(b,e,L) >= eta."""
+    """Candidate generation for Level 1 (warm buyers, E-Class): lookback window, n_orders(b,e,L) >= eta, s_lookback >= tau."""
     input:
         plis = PLIS_TRAINING_SPLIT,
         customer = CUSTOMER_META_CSV,
@@ -148,10 +148,12 @@ rule generate_candidates:
         train_end = MODELLING["train_end"],
         lookback_months = MODELLING["lookback_months"],
         min_order_frequency = MODELLING["min_order_frequency"],
+        min_lookback_spend = MODELLING["min_lookback_spend"],
     shell:
         "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
         "--output {output.candidates_raw} --train-end {params.train_end} "
-        "--lookback-months {params.lookback_months} --min-order-frequency {params.min_order_frequency}"
+        "--lookback-months {params.lookback_months} --min-order-frequency {params.min_order_frequency} "
+        "--min-lookback-spend {params.min_lookback_spend}"
 
 rule engineer_features:
     """Feature engineering from raw candidates: all modelling features."""
@@ -343,7 +345,7 @@ rule submit_to_portal:
 
 # --- Offline scoring: predict for testing buyers only, score with Level-1 (eclass) matching ---
 rule generate_candidates_offline:
-    """Candidate generation for offline pipeline (task=testing buyers included)."""
+    """Candidate generation for offline pipeline: n_orders(b,e,L) >= eta, s_lookback >= tau (task=testing buyers included)."""
     input:
         plis = PLIS_TRAINING_SPLIT,
         customer = SPLIT_CUSTOMER_CSV,
@@ -353,10 +355,12 @@ rule generate_candidates_offline:
         train_end = MODELLING["train_end"],
         lookback_months = MODELLING["lookback_months"],
         min_order_frequency = MODELLING["min_order_frequency"],
+        min_lookback_spend = MODELLING["min_lookback_spend"],
     shell:
         "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
         "--output {output.candidates_raw} --train-end {params.train_end} "
-        "--lookback-months {params.lookback_months} --min-order-frequency {params.min_order_frequency}"
+        "--lookback-months {params.lookback_months} --min-order-frequency {params.min_order_frequency} "
+        "--min-lookback-spend {params.min_lookback_spend}"
 
 rule engineer_features_offline:
     """Feature engineering for offline pipeline."""

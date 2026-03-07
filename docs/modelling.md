@@ -115,16 +115,18 @@ For each warm buyer, restrict the candidate set to reduce fee leakage.
 We construct $ \mathcal{C}_b $ as:
 
 $$
-\mathcal{C}_b = \{ e \in \text{history}(b) \mid n_{\text{orders}}(b,e, L) \ge \eta \}
+\mathcal{C}_b = \{ e \in \text{history}(b) \mid n_{\text{orders}}(b,e, L) \ge \eta \;\land\; s_{\text{lookback}}(b,e,L) \ge \tau \}
 $$
 
 Interpretation:
 - $ \text{history}(b) \subseteq \mathcal{E} $ is the set of eclasses buyer $ b $ has ever purchased
 - $ n_{\text{orders}}(b,e, L) $ is the number of orders of eclass $ e $ by buyer $ b $ within the lookback window $ L $
+- $ s_{\text{lookback}}(b,e,L) = \sum_{\text{rows in } L} \text{quantityvalue} \times \text{vk\_per\_item} $: total spend on eclass $ e $ by buyer $ b $ in the lookback window (EUR)
 - $ T $ is the training cutoff timestamp
 - $ L $ is the lookback window (default: 18 months)
 - $ \eta $ is the minimum order frequency threshold (default: 1)
-- So $ \mathcal{C}_b $ keeps only eclasses from $ b $'s history that were bought at least $ \eta $ times recently
+- $ \tau $ is the minimum lookback spend threshold in EUR (default: 100)
+- So $ \mathcal{C}_b $ keeps only eclasses from $ b $'s history that were bought at least $ \eta $ times and with at least $ \tau $ EUR spend in the lookback window
 - Therefore, by construction, $ \mathcal{C}_b \subseteq \text{history}(b) \subseteq \mathcal{E} $
 
 ---

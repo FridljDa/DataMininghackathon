@@ -3,8 +3,9 @@ Candidate generation for Level 1 (E-Class) core demand.
 
 Reads split plis_training and customer metadata; restricts to warm buyers
 (task == predict future or testing). Builds candidate set per docs/modelling.md:
-C_b = { e in history(b) | n_orders(b,e,L) >= eta }, i.e. eclasses from buyer
-history with at least eta orders in the lookback window L.
+C_b = { e in history(b) | n_orders(b,e,L) >= eta and s_lookback(b,e,L) >= tau },
+i.e. eclasses from buyer history with at least eta orders and at least tau EUR
+spend in the lookback window L.
 Output: one row per (legal_entity_id, eclass) with base columns for feature
 engineering. Orderdates stored as list of "YYYY-MM" strings.
 """
@@ -64,6 +65,13 @@ def main() -> None:
         dest="min_order_frequency",
         help="Minimum orders of eclass by buyer in lookback window (eta; default: 1).",
     )
+    parser.add_argument(
+        "--min-lookback-spend",
+        type=float,
+        default=100.0,
+        dest="min_lookback_spend",
+        help="Minimum total spend (EUR) on eclass by buyer in lookback window (tau; default: 100.0).",
+    )
     args = parser.parse_args()
 
     plis_path = Path(args.plis)
@@ -72,6 +80,7 @@ def main() -> None:
     train_end = pd.Timestamp(args.train_end)
     lookback_months = args.lookback_months
     eta = args.min_order_frequency
+    tau = args.min_lookback_spend
 
     plis = _read_plis(plis_path)
     plis["orderdate"] = pd.to_datetime(plis["orderdate"], format="%Y-%m-%d")
@@ -99,15 +108,18 @@ def main() -> None:
     t_min = train_end - pd.DateOffset(months=lookback_months)
     plis_lookback = plis_train[plis_train["orderdate"] >= t_min].copy()
 
-    # n_orders(b,e,L) = count of orders in lookback window; keep (b,e) with count >= eta
-    n_orders_in_L = (
+    # n_orders(b,e,L) and s_lookback(b,e,L); keep (b,e) with count >= eta and spend >= tau
+    lookback_agg = (
         plis_lookback.groupby(["legal_entity_id", "eclass"])
-        .size()
-        .reset_index(name="n_orders_in_L")
+        .agg(
+            n_orders_in_L=("_spend", "count"),
+            s_lookback=("_spend", "sum"),
+        )
+        .reset_index()
     )
-    eligible = n_orders_in_L[n_orders_in_L["n_orders_in_L"] >= eta][
-        ["legal_entity_id", "eclass"]
-    ].drop_duplicates()
+    eligible = lookback_agg[
+        (lookback_agg["n_orders_in_L"] >= eta) & (lookback_agg["s_lookback"] >= tau)
+    ][["legal_entity_id", "eclass"]].drop_duplicates()
 
     # Full train-period aggregates for feature engineering
     agg = (

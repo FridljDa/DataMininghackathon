@@ -179,7 +179,7 @@ def main() -> None:
     details_list = []
     for _, row in sub.iterrows():
         key = (row["legal_entity_id"], row["_cluster_norm"])
-        hit = key[1] and key in pair_spend
+        hit = bool(key[1] and key in pair_spend)
         matched_spend = pair_spend.get(key, 0.0)
         details_list.append(
             {

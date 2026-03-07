@@ -47,6 +47,41 @@ def _assert_summary_metrics(summary_csv: Path) -> None:
     )
 
 
+# Expected portal metrics for tests/integration/resources/phase3_repro_level1_submission.csv (level 1).
+PHASE3_FIXTURE_LEVEL1_EXPECTED = {
+    "total_score": 816651.86,
+    "total_savings": 982081.86,
+    "total_fees": 165430.00,
+    "num_hits": 11896,
+    "spend_capture_rate": 0.3919,  # 39.19%
+}
+
+
+def _assert_phase3_level1_fixture_metrics(summary_csv: Path) -> None:
+    """Assert exact portal metrics for the phase3_repro level-1 submission fixture."""
+    assert summary_csv.exists(), f"Live summary CSV not written: {summary_csv}"
+    row = _read_single_summary_row(summary_csv)
+
+    assert float(row["total_score"]) == pytest.approx(PHASE3_FIXTURE_LEVEL1_EXPECTED["total_score"]), (
+        f"total_score: got {row['total_score']}, expected {PHASE3_FIXTURE_LEVEL1_EXPECTED['total_score']}"
+    )
+    assert float(row["total_savings"]) == pytest.approx(PHASE3_FIXTURE_LEVEL1_EXPECTED["total_savings"]), (
+        f"total_savings: got {row['total_savings']}, expected {PHASE3_FIXTURE_LEVEL1_EXPECTED['total_savings']}"
+    )
+    assert float(row["total_fees"]) == pytest.approx(PHASE3_FIXTURE_LEVEL1_EXPECTED["total_fees"]), (
+        f"total_fees: got {row['total_fees']}, expected {PHASE3_FIXTURE_LEVEL1_EXPECTED['total_fees']}"
+    )
+    assert int(row["num_hits"]) == PHASE3_FIXTURE_LEVEL1_EXPECTED["num_hits"], (
+        f"num_hits: got {row['num_hits']}, expected {PHASE3_FIXTURE_LEVEL1_EXPECTED['num_hits']}"
+    )
+    assert float(row["spend_capture_rate"]) == pytest.approx(PHASE3_FIXTURE_LEVEL1_EXPECTED["spend_capture_rate"]), (
+        f"spend_capture_rate: got {row['spend_capture_rate']}, expected {PHASE3_FIXTURE_LEVEL1_EXPECTED['spend_capture_rate']}"
+    )
+    assert float(row["total_score"]) == pytest.approx(
+        float(row["total_savings"]) - float(row["total_fees"])
+    ), f"total_score should equal total_savings - total_fees. Row: {row}"
+
+
 # Expected portal metrics for tests/integration/resources/lgbm_two_stage_submission.csv (level 2).
 LGBM_FIXTURE_LEVEL2_EXPECTED = {
     "total_score": -41760.00,
@@ -160,6 +195,25 @@ def test_submit_challenge_2_live(tmp_path: Path) -> None:
             f"Got:\n{result.stdout}"
         )
         _assert_summary_metrics(summary_csv)
+
+    # Real submission fixture: phase3_repro at level 1; assert exact portal metrics.
+    phase3_level1_csv = project_root / "tests" / "integration" / "resources" / "phase3_repro_level1_submission.csv"
+    assert phase3_level1_csv.exists(), f"Fixture not found: {phase3_level1_csv}"
+    summary_phase3_l1 = tmp_path / "score_summary_live_phase3_fixture_level1.csv"
+    result_phase3_l1 = _run_live_submit(
+        project_root=project_root,
+        submission_csv=phase3_level1_csv,
+        level=1,
+        summary_csv=summary_phase3_l1,
+    )
+    assert result_phase3_l1.returncode == 0, (
+        f"submit (phase3 fixture, level 1) exited with code {result_phase3_l1.returncode}\n"
+        f"stdout:\n{result_phase3_l1.stdout}\nstderr:\n{result_phase3_l1.stderr}"
+    )
+    assert "Submission accepted" in result_phase3_l1.stdout or "✓ Submission accepted" in result_phase3_l1.stdout, (
+        f"Expected submission acceptance for phase3 level-1 fixture. Got:\n{result_phase3_l1.stdout}"
+    )
+    _assert_phase3_level1_fixture_metrics(summary_phase3_l1)
 
     # Real submission fixture: lgbm_two_stage at level 2; assert exact portal metrics.
     fixture_csv = project_root / "tests" / "integration" / "resources" / "lgbm_two_stage_submission.csv"

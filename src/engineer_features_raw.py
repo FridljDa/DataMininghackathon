@@ -1,8 +1,10 @@
 """
-Raw feature pass-through: output non-derived columns from candidates plus top-K SKU attributes.
+Raw feature assembly: keys from candidates + aggregates from PLIs + customer context + top-K SKU attributes.
 
-Reads raw candidates parquet, PLIs, and features_per_sku.csv. Writes key + historical
-columns and top-K attribute columns to data/08_features_raw/{mode}/level{level}/features_raw.parquet.
+Reads key-only candidates parquet, PLIs (for aggregates), customer metadata, and features_per_sku.
+Computes pair-level aggregates (n_orders, historical_purchase_value_total, orderdate_min/max, orderdates_str)
+from PLIs, merges customer context (estimated_number_employees, nace_code, secondary_nace_code), and
+top-K SKU attribute columns. Writes to data/08_features_raw/{mode}/level{level}/features_raw.parquet.
 Level 2 includes manufacturer in key columns. Downstream engineer_features_derived adds computed features.
 """
 
@@ -14,19 +16,12 @@ from pathlib import Path
 
 import pandas as pd
 
-RAW_COLUMNS_L1 = [
-    "legal_entity_id",
-    "eclass",
-    "n_orders",
-    "historical_purchase_value_total",
-    "orderdate_min",
-    "orderdate_max",
-    "orderdates_str",
-]
-RAW_COLUMNS_L2 = [
-    "legal_entity_id",
-    "eclass",
-    "manufacturer",
+# Candidates are key-only per level
+KEY_COLUMNS_L1 = ["legal_entity_id", "eclass"]
+KEY_COLUMNS_L2 = ["legal_entity_id", "eclass", "manufacturer"]
+
+# Aggregate columns we compute from PLIs (same for both levels)
+AGGREGATE_COLUMNS = [
     "n_orders",
     "historical_purchase_value_total",
     "orderdate_min",
@@ -35,7 +30,8 @@ RAW_COLUMNS_L2 = [
 ]
 
 FEATURES_PER_SKU_COLS = ("sku", "key", "fvalue", "fvalue_set")
-PLIS_REQUIRED = ("legal_entity_id", "orderdate", "eclass", "sku")
+PLIS_REQUIRED = ("legal_entity_id", "orderdate", "eclass", "sku", "quantityvalue", "vk_per_item")
+CUSTOMER_CONTEXT_COLS = ("estimated_number_employees", "nace_code", "secondary_nace_code")
 
 
 def _sanitize(name: str) -> str:
@@ -59,6 +55,18 @@ def _read_plis(path: Path, train_end: pd.Timestamp, require_manufacturer: bool) 
     if require_manufacturer:
         df["manufacturer"] = df["manufacturer"].astype(str).str.strip().replace("nan", "")
         df = df[df["manufacturer"] != ""]
+    q = pd.to_numeric(df["quantityvalue"], errors="coerce").fillna(0)
+    v = pd.to_numeric(df["vk_per_item"], errors="coerce").fillna(0)
+    df["_spend"] = q * v
+    return df
+
+
+def _read_customer(path: Path) -> pd.DataFrame:
+    df = pd.read_csv(path, sep="\t", low_memory=False)
+    for col in ["legal_entity_id"] + list(CUSTOMER_CONTEXT_COLS):
+        if col not in df.columns:
+            raise ValueError(f"customer must contain '{col}'. Got: {list(df.columns)}")
+    df["legal_entity_id"] = df["legal_entity_id"].astype(str)
     return df
 
 
@@ -86,10 +94,11 @@ def _read_features_per_sku_chunked(
             chunk = chunk[["sku", "key", "fvalue_set"]].copy()
             chunk["key"] = chunk["key"].astype(str).str.strip()
             chunk["value"] = chunk["fvalue_set"].astype(str).str.strip().replace("nan", "")
+            chunk = chunk[chunk["key"].astype(bool) & chunk["value"].astype(bool)]
             chunk = chunk.drop(columns=["fvalue_set"])
             chunks.append(chunk)
             for _, row in chunk.iterrows():
-                k, v = row["key"], row["value"]
+                k, v = str(row["key"]).strip(), str(row["value"]).strip()
                 if k and v:
                     key_counts[k] = key_counts.get(k, 0) + 1
                     key_value_counts[(k, v)] = key_value_counts.get((k, v), 0) + 1
@@ -116,7 +125,7 @@ def _read_features_per_sku_chunked(
 
     sku_attrs["_pair"] = list(zip(sku_attrs["key"], sku_attrs["value"]))
     sku_attrs = sku_attrs[sku_attrs["_pair"].isin(allowed_pairs)].drop(columns=["_pair"])
-    column_names = ["sku_attr_" + _sanitize(k) + "_" + _sanitize(v) for (k, v) in sorted(allowed_pairs)]
+    column_names = ["sku_attr_" + _sanitize(k) + "_" + _sanitize(v) for (k, v) in sorted(allowed_pairs, key=lambda p: (str(p[0]), str(p[1])))]
     return sku_attrs, column_names
 
 
@@ -124,6 +133,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidates-raw", required=True, dest="candidates_raw", help="Path to raw candidates parquet.")
     parser.add_argument("--plis", required=True, help="Path to plis_training (split) TSV.")
+    parser.add_argument("--customer", required=True, help="Path to customer metadata TSV (legal_entity_id + context columns).")
     parser.add_argument("--features-per-sku", required=True, dest="features_per_sku", help="Path to features_per_sku.csv.")
     parser.add_argument("--output", required=True, help="Path to output features_raw parquet.")
     parser.add_argument("--train-end", required=True, dest="train_end", help="Last date of train period (YYYY-MM-DD).")
@@ -140,22 +150,56 @@ def main() -> None:
 
     raw_path = Path(args.candidates_raw)
     plis_path = Path(args.plis)
+    customer_path = Path(args.customer)
     features_per_sku_path = Path(args.features_per_sku)
     out_path = Path(args.output)
     train_end = pd.Timestamp(args.train_end)
     level = int(args.level)
-    group_cols = ["legal_entity_id", "eclass", "manufacturer"] if level == 2 else ["legal_entity_id", "eclass"]
-    raw_columns = RAW_COLUMNS_L2 if level == 2 else RAW_COLUMNS_L1
+    group_cols = KEY_COLUMNS_L2 if level == 2 else KEY_COLUMNS_L1
+    key_columns = KEY_COLUMNS_L2 if level == 2 else KEY_COLUMNS_L1
 
     candidates = pd.read_parquet(raw_path)
-    for col in raw_columns:
+    for col in key_columns:
         if col not in candidates.columns:
             raise ValueError(f"candidates_raw must contain '{col}'. Got: {list(candidates.columns)}")
+    candidates = candidates[group_cols].drop_duplicates().reset_index(drop=True)
 
     plis = _read_plis(plis_path, train_end, require_manufacturer=(level == 2))
-    candidate_keys = candidates[group_cols].drop_duplicates()
-    plis_candidate = plis.merge(candidate_keys, on=group_cols, how="inner")
+    plis_candidate = plis.merge(candidates, on=group_cols, how="inner")
     relevant_skus = set(plis_candidate["sku"].unique())
+
+    # Aggregates from PLIs (pair-level)
+    agg = (
+        plis_candidate.groupby(group_cols)
+        .agg(
+            n_orders=("_spend", "count"),
+            historical_purchase_value_total=("_spend", "sum"),
+            orderdate_min=("orderdate", "min"),
+            orderdate_max=("orderdate", "max"),
+            orderdates=("orderdate", lambda x: x.dt.to_period("M").unique().tolist()),
+        )
+        .reset_index()
+    )
+    agg["orderdates_str"] = agg["orderdates"].apply(
+        lambda periods: [f"{p.year:04d}-{p.month:02d}" for p in periods]
+    )
+    agg = agg.drop(columns=["orderdates"], errors="ignore")
+
+    out = candidates.merge(agg, on=group_cols, how="left")
+    out["n_orders"] = out["n_orders"].fillna(0).astype(int)
+    out["historical_purchase_value_total"] = out["historical_purchase_value_total"].fillna(0.0)
+    out["orderdate_min"] = out["orderdate_min"].fillna(pd.NaT)
+    out["orderdate_max"] = out["orderdate_max"].fillna(pd.NaT)
+    out["orderdates_str"] = out["orderdates_str"].apply(
+        lambda x: x if isinstance(x, list) else []
+    )
+
+    # Customer context (one row per legal_entity_id)
+    customer = _read_customer(customer_path)
+    cust_sub = customer[["legal_entity_id"] + list(CUSTOMER_CONTEXT_COLS)].drop_duplicates(
+        subset="legal_entity_id", keep="first"
+    )
+    out = out.merge(cust_sub, on="legal_entity_id", how="left")
 
     sku_attrs, attr_column_names = _read_features_per_sku_chunked(
         features_per_sku_path,
@@ -164,8 +208,6 @@ def main() -> None:
         top_k_values_per_key=args.top_k_values_per_key,
         chunksize=args.chunksize,
     )
-
-    out = candidates[[c for c in raw_columns if c in candidates.columns]].copy()
 
     if not attr_column_names or sku_attrs.empty:
         for col in attr_column_names:
@@ -181,7 +223,6 @@ def main() -> None:
         .drop_duplicates()
         .reset_index(drop=True)
     )
-    # (entity_key, key, value) -> count
     merged = entity_skus.merge(sku_attrs, on="sku", how="inner")
     counts = merged.groupby(group_cols + ["key", "value"]).size().reset_index(name="count")
     pivot = counts.pivot_table(

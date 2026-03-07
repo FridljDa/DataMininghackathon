@@ -5,9 +5,9 @@ Level 1: key = (legal_entity_id, eclass). Seen = hot x history; trending = hot x
 Level 2: key = (legal_entity_id, eclass, manufacturer). Seen only from plis (manufacturer required).
 
 Reads split plis_training and customer metadata; restricts to hot buyers
-(task == predict future or testing). Enriches with train-period aggregates.
-Output: one row per key with base columns for feature engineering.
-Orderdates stored as list of "YYYY-MM" strings.
+(task == predict future or testing).
+Output: one row per key with key columns only (no aggregates). Aggregates are
+computed in engineer_features_raw from PLIs.
 """
 
 from __future__ import annotations
@@ -92,10 +92,6 @@ def main() -> None:
         plis["manufacturer"] = plis["manufacturer"].astype(str).str.strip().replace("nan", "")
         plis = plis[plis["manufacturer"] != ""]
 
-    q = pd.to_numeric(plis["quantityvalue"], errors="coerce").fillna(0)
-    v = pd.to_numeric(plis["vk_per_item"], errors="coerce").fillna(0)
-    plis["_spend"] = q * v
-
     customer = _read_customer(customer_path)
     customer["legal_entity_id"] = customer["legal_entity_id"].astype(str)
     task_norm = customer["task"].str.strip().str.lower()
@@ -139,44 +135,10 @@ def main() -> None:
         n_trending_cross = 0
         group_cols = ["legal_entity_id", "eclass", "manufacturer"]
 
-    # Full train-period aggregates for feature engineering
-    agg = (
-        plis_train.groupby(group_cols)
-        .agg(
-            n_orders=("_spend", "count"),
-            historical_purchase_value_total=("_spend", "sum"),
-            orderdate_min=("orderdate", "min"),
-            orderdate_max=("orderdate", "max"),
-            orderdates=("orderdate", lambda x: x.dt.to_period("M").unique().tolist()),
-        )
-        .reset_index()
-    )
-    agg["orderdates_str"] = agg["orderdates"].apply(
-        lambda periods: [f"{p.year:04d}-{p.month:02d}" for p in periods]
-    )
-    agg = agg.drop(columns=["orderdates"], errors="ignore")
-
-    candidates = union_keys.merge(agg, on=group_cols, how="left")
-    candidates["n_orders"] = candidates["n_orders"].fillna(0).astype(int)
-    candidates["historical_purchase_value_total"] = candidates["historical_purchase_value_total"].fillna(0.0)
-    candidates["orderdate_min"] = candidates["orderdate_min"].fillna(pd.NaT)
-    candidates["orderdate_max"] = candidates["orderdate_max"].fillna(pd.NaT)
-    candidates["orderdates_str"] = candidates["orderdates_str"].apply(
-        lambda x: x if isinstance(x, list) else []
-    )
-
-    out_cols = [
-        "legal_entity_id",
-        "eclass",
-        "n_orders",
-        "historical_purchase_value_total",
-        "orderdate_min",
-        "orderdate_max",
-        "orderdates_str",
-    ]
+    out_cols = ["legal_entity_id", "eclass"]
     if level == 2:
-        out_cols.insert(2, "manufacturer")
-    candidates = candidates[[c for c in out_cols if c in candidates.columns]]
+        out_cols.append("manufacturer")
+    candidates = union_keys[[c for c in out_cols if c in union_keys.columns]].copy()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     candidates.to_parquet(out_path, index=False)
 

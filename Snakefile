@@ -45,6 +45,11 @@ PLOT_FILES = [
 ]
 PLOT_OUTPUTS = expand(f"{PLOTS_DIR}/{{f}}", f=PLOT_FILES)
 
+# VK price stability check (script writes to 06_plots)
+VK_STABILITY_PLOT_LOOKUP = f"{PLOTS_DIR}/vk_lookup_like_share_by_key.png"
+VK_STABILITY_PLOT_DRIFT = f"{PLOTS_DIR}/vk_material_drift_by_key.png"
+VK_STABILITY_SUMMARY_CSV = f"{PLOTS_DIR}/vk_price_stability_summary.csv"
+
 # Modelling (params only from config; paths are patterns below)
 MODELLING = config["modelling"]
 WIN = MODELLING["windows"]
@@ -106,6 +111,9 @@ rule all:
         PLIS_TRAINING_CSV,
         CUSTOMER_META_CSV,
         PLOT_OUTPUTS,
+        VK_STABILITY_PLOT_LOOKUP,
+        VK_STABILITY_PLOT_DRIFT,
+        VK_STABILITY_SUMMARY_CSV,
         expand(FEATURE_ANALYSIS_SUMMARY_PATTERN, mode=MODES, level=ENABLED_LEVELS),
         expand(FEATURE_ANALYSIS_PLOTS_PATTERN, mode=MODES, level=ENABLED_LEVELS),
         expand(FEATURE_ANALYSIS_SUGGESTIONS_PATTERN, mode=MODES, level=ENABLED_LEVELS),
@@ -161,6 +169,19 @@ rule generate_exploration_plots:
         "uv run src/generate_exploration_plots.py --plis {input.plis} "
         "--customer-test {input.customer_test} --les-cs {input.les_cs} "
         "--customer-meta {input.customer_meta} --output-dir {params.out_dir}"
+
+rule check_vk_price_stability:
+    """Sanity-check vk_per_item lookup-like behaviour and time drift; writes summary CSV and two plots to data/06_plots."""
+    input:
+        plis = PLIS_TRAINING_CSV,
+    output:
+        plot_lookup = VK_STABILITY_PLOT_LOOKUP,
+        plot_drift = VK_STABILITY_PLOT_DRIFT,
+        summary_csv = VK_STABILITY_SUMMARY_CSV,
+    params:
+        out_dir = PLOTS_DIR,
+    shell:
+        "uv run src/check_vk_price_stability.py --plis {input.plis} --output-dir {params.out_dir}"
 
 rule prepare_split_customer_meta:
     """Relabel task=none customers to task=testing so their purchase-value distribution matches warm (warm-matched selection)."""
@@ -220,10 +241,11 @@ rule generate_candidates:
         "--trending-classes {input.trending_classes} --output {output.candidates_raw} --train-end {params.train_end} --level {wildcards.level}"
 
 rule engineer_features_raw:
-    """Pass-through raw feature columns from candidates plus top-K SKU attributes from features_per_sku; level2 includes manufacturer."""
+    """Assembly: keys from candidates + aggregates from PLIs + customer context + top-K SKU attributes; level2 includes manufacturer."""
     input:
         candidates_raw = CANDIDATES_RAW_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
+        customer = lambda w: MODE_CFG[w.mode]["customer_csv"],
         features_per_sku = INPUTS["features_per_sku"],
     output:
         features_raw = FEATURES_RAW_PATTERN,
@@ -237,7 +259,7 @@ rule engineer_features_raw:
         level = LEVEL_RE,
     shell:
         "uv run src/engineer_features_raw.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
-        "--features-per-sku {input.features_per_sku} --output {output.features_raw} --level {wildcards.level} "
+        "--customer {input.customer} --features-per-sku {input.features_per_sku} --output {output.features_raw} --level {wildcards.level} "
         "--train-end {params.train_end} --top-k-keys {params.top_k_keys} --top-k-values-per-key {params.top_k_values_per_key} --chunksize {params.chunksize}"
 
 rule sanitize_features_raw:

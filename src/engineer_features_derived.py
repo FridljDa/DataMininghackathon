@@ -101,6 +101,7 @@ def main() -> None:
     df["_span_months"] = (
         (df["orderdate_max"] - df["orderdate_min"]).dt.days / 30.44
     ).clip(lower=1)
+    df["_span_months"] = df["_span_months"].fillna(1.0)
     df["m_observed"] = df["_span_months"].round().astype(int).clip(lower=1)
     df["rho_freq"] = df["m_active"] / df["m_observed"]
 
@@ -108,7 +109,7 @@ def main() -> None:
     df["t_last"] = df["orderdate_max"]
     df["delta_recency"] = (
         (train_end - df["t_last"]).dt.days / 30.44
-    ).round().astype(int).clip(lower=0)
+    ).fillna(0.0).round().astype(int).clip(lower=0)
 
     # Inter-purchase gaps
     def _gaps(periods: list) -> tuple[float, float]:
@@ -390,7 +391,7 @@ def main() -> None:
     )
     df["active_year_span"] = np.where(
         df["first_order_year"].notna() & df["last_order_year"].notna(),
-        (df["last_order_year"] - df["first_order_year"]).astype(int) + 1,
+        (df["last_order_year"] - df["first_order_year"]).fillna(0).astype(int) + 1,
         np.nan,
     )
 
@@ -453,14 +454,16 @@ def main() -> None:
             "nace_3digits": "nace_3"
         })
 
-    context_cols = ["legal_entity_id", "estimated_number_employees", "nace_code", "secondary_nace_code"]
+    # Customer context: merge only columns not already in df (features_raw may already have them)
+    context_cols = ["estimated_number_employees", "nace_code", "secondary_nace_code"]
     if "nace_section" in customer.columns:
         context_cols += ["nace_section", "nace_3"]
-
-    cust_sub = customer[[c for c in context_cols if c in customer.columns]].drop_duplicates(
-        subset="legal_entity_id"
-    )
-    df = df.merge(cust_sub, on="legal_entity_id", how="left")
+    cols_to_merge = [c for c in context_cols if c in customer.columns and c not in df.columns]
+    if cols_to_merge:
+        cust_sub = customer[["legal_entity_id"] + cols_to_merge].drop_duplicates(
+            subset="legal_entity_id", keep="first"
+        )
+        df = df.merge(cust_sub, on="legal_entity_id", how="left")
 
     emp = pd.to_numeric(df["estimated_number_employees"], errors="coerce").fillna(0)
     df["log_employees"] = np.log1p(emp)

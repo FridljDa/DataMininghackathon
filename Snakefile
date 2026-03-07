@@ -84,7 +84,9 @@ MODE_CFG = {
     },
 }
 # Path patterns for mode-wildcarded rules
-CANDIDATES_RAW_PATTERN = f"{DATA_DIR}/07_candidates/{{mode}}/candidates_raw.parquet"
+CANDIDATES_DIR = f"{DATA_DIR}/07_candidates"
+TRENDING_CLASSES_CSV = f"{CANDIDATES_DIR}/trending_classes.csv"
+CANDIDATES_RAW_PATTERN = f"{CANDIDATES_DIR}/{{mode}}/candidates_raw.parquet"
 FEATURES_RAW_PATTERN = f"{DATA_DIR}/08_features_raw/{{mode}}/features_raw.parquet"
 FEATURES_SANITIZED_PATTERN = f"{DATA_DIR}/08_features_sanitized/{{mode}}/features_sanitized.parquet"
 FEATURES_ALL_PATTERN = f"{DATA_DIR}/09_features_derived/{{mode}}/features_all.parquet"
@@ -197,24 +199,20 @@ rule split_plis_training_validation:
         "--train {output.train} --test {output.test} --cutoff-date {params.cutoff}"
 
 rule generate_candidates:
-    """Candidate generation for Level 1 (warm buyers, E-Class): lookback window, n_orders(b,e,L) >= eta, s_lookback >= tau."""
+    """Candidate generation for Level 1: hot entities x (seen eclasses + trending eclasses)."""
     input:
         plis = PLIS_TRAINING_SPLIT,
         customer = lambda w: MODE_CFG[w.mode]["customer_csv"],
+        trending_classes = TRENDING_CLASSES_CSV,
     output:
         candidates_raw = CANDIDATES_RAW_PATTERN,
     params:
         train_end = WIN["train_end"],
-        lookback_months = CAND["lookback_months"],
-        min_order_frequency = CAND["min_order_frequency"],
-        min_lookback_spend = CAND["min_lookback_spend"],
     wildcard_constraints:
         mode = MODE_RE,
     shell:
         "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
-        "--output {output.candidates_raw} --train-end {params.train_end} "
-        "--lookback-months {params.lookback_months} --min-order-frequency {params.min_order_frequency} "
-        "--min-lookback-spend {params.min_lookback_spend}"
+        "--trending-classes {input.trending_classes} --output {output.candidates_raw} --train-end {params.train_end}"
 
 rule engineer_features_raw:
     """Pass-through raw feature columns from candidates (no derivation)."""

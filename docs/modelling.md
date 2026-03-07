@@ -41,14 +41,29 @@ Selection is precision-first: every element that is not a true recurring need pa
 
 ## 2. Data & Split
 
-| Entity type | Training data | Evaluation data |
-|---|---|---|
-| Warm (`cs = 1`) | `plis_training.csv` rows up to `2025-06-30` | PLIs after `2025-07-01` (hidden) |
-| Cold (`cs = 0`) | No PLIs available | All PLIs (hidden) |
+Raw inputs:
+- `data/02_raw/plis_training.csv` (all historical PLIs)
+- `data/02_raw/customer_test.csv` (buyers to predict for online submission)
 
-Focus here: **warm buyers only** ($ b \in \mathcal{B}_{\text{warm}} $).
+Pipeline split used by modelling/scoring:
 
-Available columns used from `plis_training.csv`:
+1. Build base customer metadata at `data/03_meta/customer.csv`.
+2. Create split metadata at `data/04_customer/customer.csv`:
+   - relabel `test_customers_count = 50` buyers from `task=none` to `task=testing`
+   - selection is stratified to match the warm-buyer purchase-value distribution
+   - matching uses pre-cutoff spend only (`orderdate < 2025-07-01`) to avoid leakage
+3. Split PLIs using `cutoff_date = 2025-07-01` into:
+   - `data/05_training_validation/plis_training.csv`
+   - `data/05_training_validation/plis_testing.csv`
+   - rule: rows for `task=testing` buyers with `orderdate >= cutoff_date` go to `plis_testing`; all other rows stay in `plis_training`
+
+How these split files are used:
+- **Online pipeline:** train on split `plis_training`, predict for `customer_test`, score externally on hidden data.
+- **Offline pipeline:** train on split `plis_training`, predict only split `task=testing` buyers, score against split `plis_testing`.
+
+Focus for this modelling document: warm-buying recurrence logic for Level 1 (`cluster = eclass`), primarily evaluated through the offline split.
+
+Available columns used from `plis_training`:
 
 - `orderdate`, `legal_entity_id`, `eclass`, `manufacturer`
 - `quantityvalue`, `vk_per_item` (spend proxy: $ s = \text{quantityvalue} \times \text{vk\_per\_item} $)
@@ -58,18 +73,28 @@ Available columns used from `plis_training.csv`:
 
 ## 3. Offline Validation Setup
 
-To simulate the hidden evaluation, create an internal temporal split within the training window:
+Within `data/05_training_validation/plis_training.csv`, use a fixed temporal train/validation window from config:
 
 - **Train period:** `2023-01-01` — `2024-12-31`
 - **Validation period:** `2025-01-01` — `2025-06-30`
 
-Label a buyer-eclass pair $ (b, e) $ as **positive** in validation if it is bought again at least once:
+For each candidate pair $ (b, e) $, validation targets are computed from PLIs in the validation window.
+
+Label a pair $ (b, e) $ as **positive** if validation orders meet:
 
 $$
-\text{label}(b, e) = \mathbf{1}\left[\text{orders in val}(b, e) \geq 1\right], \quad b \in \mathcal{B}_{\text{warm}},\ e \in \mathcal{E}
+\text{label}(b, e) = \mathbf{1}\left[\text{orders in val}(b, e) \geq n_{\min}\right]
 $$
 
-Use binary recurrence target by default: bought again vs not bought again.
+with current default $ n_{\min} = 1 $ (`n_min_label`).
+
+Validation spend is aggregated as:
+
+$$
+s_{\text{val}}(b,e) = \sum_{\text{val rows}} \text{quantityvalue} \times \text{vk\_per\_item}
+$$
+
+Default target remains binary recurrence: bought again vs not bought again.
 
 > **Evaluator behavior note:** Predictions are set-based per buyer and cluster. Duplicate rows for the same $ (b, e) $ are sanitized and counted once by the organizer scorer.
 

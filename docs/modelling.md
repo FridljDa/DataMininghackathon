@@ -334,6 +334,8 @@ Important caveats:
 - $ \bar{v}_{b,e} $ will be inaccurate for the small share of pairs with material price drift (~1–3% of spend); we accept this as a known limitation.
 - Because the evaluator is fee-sensitive and set-based, the final decision rule should still be thresholded and top-$ K $ capped as in Section 7.
 
+**Missing values (v2 and v3):** Numeric features are passed to LightGBM with NaNs preserved so the learner can use native missing-value splits. Categorical features have missing values mapped to the empty string and cast to category. In v3, Stage B uses `avg_price_per_unit` with missing filled to 0 for the deterministic value proxy.
+
 ### Pass-through (candidate-only)
 
 The **pass_through** approach is an explicit “model” that performs no scoring: every candidate is assigned a constant positive score so that, when the selection policy is configured for pass-through (see below), no further filtering is applied. Use it to submit exactly the candidate set $ \mathcal{C}_b $ for each scored buyer — e.g. for diagnostics or as an upper-bound on recall.

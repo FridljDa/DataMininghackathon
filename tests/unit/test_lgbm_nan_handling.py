@@ -44,12 +44,27 @@ def test_lgbm_two_stage_preserves_numeric_nan_and_categorical_empty_string() -> 
     from modelling.approaches.lgbm_two_stage import run as run_two_stage
 
     fit_calls: list[tuple] = []
+    real_clf_fit = None
+    real_reg_fit = None
 
-    def capture_fit(self, X, y, **kwargs):
+    def capture_clf_fit(self, X, y, **kwargs):
         fit_calls.append((X.copy(), y))
+        if real_clf_fit is None:
+            raise RuntimeError("real_clf_fit not set")
+        return real_clf_fit(self, X, y, **kwargs)
 
-    with patch("modelling.approaches.lgbm_two_stage.lgb.LGBMClassifier.fit", capture_fit), patch(
-        "modelling.approaches.lgbm_two_stage.lgb.LGBMRegressor.fit", capture_fit
+    def capture_reg_fit(self, X, y, **kwargs):
+        fit_calls.append((X.copy(), y))
+        if real_reg_fit is None:
+            raise RuntimeError("real_reg_fit not set")
+        return real_reg_fit(self, X, y, **kwargs)
+
+    import lightgbm as lgb
+    real_clf_fit = lgb.LGBMClassifier.fit
+    real_reg_fit = lgb.LGBMRegressor.fit
+
+    with patch("modelling.approaches.lgbm_two_stage.lgb.LGBMClassifier.fit", capture_clf_fit), patch(
+        "modelling.approaches.lgbm_two_stage.lgb.LGBMRegressor.fit", capture_reg_fit
     ):
         df = _minimal_df_two_stage()
         run_two_stage(df)
@@ -75,12 +90,16 @@ def test_lgbm_v3_factorized_preserves_numeric_nan_and_categorical_empty_string()
     """Numeric feature columns passed to Stage A fit keep NaN; categorical use empty string for missing."""
     from unittest.mock import patch
 
+    import lightgbm as lgb
+
     from modelling.approaches.lgbm_v3_factorized import run as run_v3
 
     fit_calls: list[tuple] = []
+    real_fit = lgb.LGBMRegressor.fit
 
     def capture_fit(self, X, y, **kwargs):
         fit_calls.append((X.copy(), y))
+        return real_fit(self, X, y, **kwargs)
 
     with patch("modelling.approaches.lgbm_v3_factorized.lgb.LGBMRegressor.fit", capture_fit):
         df = _minimal_df_v3()

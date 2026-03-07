@@ -18,6 +18,17 @@ KEY_COLUMNS_L1 = ("legal_entity_id", "eclass")
 KEY_COLUMNS_L2 = ("legal_entity_id", "eclass", "manufacturer")
 
 
+def _dedupe_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--features", required=True, help="Path to features_all parquet.")
@@ -39,7 +50,8 @@ def main() -> None:
     key_columns = KEY_COLUMNS_L2 if args.level == "2" else KEY_COLUMNS_L1
 
     df = pd.read_parquet(args.features)
-    selected = [s.strip() for s in args.selected_features.split(",") if s.strip()]
+    selected_raw = [s.strip() for s in args.selected_features.split(",") if s.strip()]
+    selected = _dedupe_preserve_order(selected_raw)
 
     missing = [f for f in selected if f not in df.columns]
     if missing:
@@ -52,7 +64,9 @@ def main() -> None:
         if key not in df.columns:
             raise ValueError(f"Features parquet must contain key column '{key}'. Got: {list(df.columns)}")
 
-    out_cols = [c for c in key_columns if c in df.columns] + [f for f in selected if f in df.columns]
+    out_cols = _dedupe_preserve_order(
+        [c for c in key_columns if c in df.columns] + [f for f in selected if f in df.columns]
+    )
     out = df[out_cols].copy()
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)

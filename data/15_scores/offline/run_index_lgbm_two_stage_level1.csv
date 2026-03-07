@@ -1,0 +1,2 @@
+run_id,commit_sha,branch,dirty,created_at,run_dir
+20260307_173141_4813635_dirty,481363593e19427cf23bd6e96693bda5049aaa43,main,true,2026-03-07T17:31:42Z,data/15_scores/offline/runs/lgbm_two_stage/level1/20260307_173141_4813635_dirty

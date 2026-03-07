@@ -20,8 +20,6 @@
 !/data/13_portfolio/**
 !/data/14_submission/
 !/data/14_submission/**
-!/data/15_scores/
-!/data/15_scores/**
 !/data/16_scores_best/
 !/data/16_scores_best/**
 .idea

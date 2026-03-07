@@ -90,26 +90,17 @@ For each warm buyer, restrict the candidate set to reduce fee leakage.
 We construct $ \mathcal{C}_b $ as:
 
 $$
-\mathcal{C}_b = \left\{ e \;\middle|\; e \in \text{history}(b),\ t_{\text{last}}(b,e) \geq T - L \right\}
+\mathcal{C}_b = \{ e \in \text{history}(b) \mid n_{\text{orders}}(b,e, L) \ge \eta \}
 $$
 
 Interpretation:
 - $ \text{history}(b) \subseteq \mathcal{E} $ is the set of eclasses buyer $ b $ has ever purchased
-- $ t_{\text{last}}(b,e) $ is the last purchase time of eclass $ e $ by buyer $ b $
+- $ n_{\text{orders}}(b,e, L) $ is the number of orders of eclass $ e $ by buyer $ b $ within the lookback window $ L $
 - $ T $ is the training cutoff timestamp
 - $ L $ is the lookback window (default: 18 months)
-- So $ \mathcal{C}_b $ keeps only "recently purchased" eclasses from $ b $'s own history
+- $ \eta $ is the minimum order frequency threshold (default: 1)
+- So $ \mathcal{C}_b $ keeps only eclasses from $ b $'s history that were bought at least $ \eta $ times recently
 - Therefore, by construction, $ \mathcal{C}_b \subseteq \text{history}(b) \subseteq \mathcal{E} $
-
-Optionally drop singleton eclasses with low spend:
-
-$$
-e \notin \mathcal{C}_b \quad \text{if} \quad n_{\text{orders}}(b,e) = 1 \;\land\; s_{\text{total}}(b,e) < \tau_s
-$$
-
-Interpretation of the filter:
-- If a buyer-eclass pair appeared only once and total spend is below threshold $ \tau_s $, remove it from $ \mathcal{C}_b $
-- This is a pruning step on top of the recency rule above (it only removes elements; it does not add new ones)
 
 ---
 

@@ -72,10 +72,12 @@ modelling:
       - active_month_share_12m
       - active_year_span
       - avg_spend_per_order
+      - days_since_last
       - delta_recency
       - delta_vs_expected_gap
       - has_gap_history
       - has_multi_year_history
+      - history_cohort
       - historical_purchase_value_total
       - is_overdue
       - last_order_month_cos
@@ -86,6 +88,7 @@ modelling:
       - log_employees
       - m_observed
       - n_orders_in_lookback
+      - lookback_spend
       - nace_2
       - nace_code
       - nace_mismatch

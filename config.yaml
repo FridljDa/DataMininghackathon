@@ -65,52 +65,34 @@ modelling:
   portfolio_offline_parquet: "data/12_portfolio/offline/portfolio.parquet"
   submission_offline_csv: "data/13_submission/offline/submission.csv"
   selected_features:
-    - n_orders
-    - m_active
-    - m_observed
-    - rho_freq
-    - delta_recency
-    - sigma_gap
-    - mu_gap
     - CV_gap
-    - historical_purchase_value_total
-    - historical_purchase_value_sqrt
-    - s_median_line
-    - w_e_b
+    - active_month_share_12m
     - delta_trend
+    - first_order_year
+    - has_gap_history
+    - has_recent_spend_6m
+    - historical_purchase_value_sqrt
     - last_order_month_cos
     - last_order_month_sin
     - last_order_quarter_cos
     - last_order_quarter_sin
-    - q4_share
-    - recent_3m_count
-    - recent_6m_count
-    - recent_3_over_6
-    - active_month_share_12m
-    - first_order_year
     - last_order_year
-    - years_since_last_order
-    - active_year_span
-    - recency_to_gap_ratio
-    - delta_vs_expected_gap
-    - is_overdue
-    - spend_recent_3m
-    - spend_recent_6m
-    - spend_recent_ratio
-    - order_value_cv
     - log_employees
-    - nace_section
-    - nace_3
+    - m_active
+    - mu_gap
     - nace_2
     - nace_code
+    - nace_mismatch
+    - order_value_cv
+    - q4_share
+    - recency_to_gap_ratio
+    - recent_3m_count
+    - recent_6m_count
+    - s_median_line
     - secondary_nace_2
     - secondary_nace_code
-    - nace_mismatch
-    - has_gap_history
-    - has_recent_6m_activity
-    - has_recent_spend_6m
-    - has_secondary_nace
-    - has_multi_year_history
+    - spend_recent_3m
+    - spend_recent_ratio
 
 feature_analysis:
   dir: "data/09_feature_analysis"

@@ -165,13 +165,37 @@ The exact active columns for any run are controlled by pipeline configuration an
 
 ### Baseline (v1)
 
+This baseline is a hand-crafted heuristic (not a learned model).  
+It gives each buyer-eclass pair a score using three intuitive signals:
+
 Score each $ (b, e) $ by:
 
 $$
 \text{score}_{\text{base}}(b, e) = \alpha \cdot m_{\text{active}} + \beta \cdot \sqrt{s_{\text{total}}} - \gamma \cdot \delta_{\text{recency}}
 $$
 
-where $ s_{\text{total}} $ is train-period purchase value (pipeline column: `historical_purchase_value_total`; square-root transform: `historical_purchase_value_sqrt`). Tune $ \alpha, \beta, \gamma $ on the validation euro score. Select pairs where $ \text{score}_{\text{base}} > \theta $ and cap at top $ K $ per buyer.
+Comments on each term:
+
+- $ m_{\text{active}} $: number of active months in the train window (a frequency/regularity signal).  
+  Higher means the buyer repeatedly buys this eclass, so we increase score.
+- $ s_{\text{total}} $: total train-period spend for this pair (pipeline: `historical_purchase_value_total`).  
+  We use $ \sqrt{s_{\text{total}}} $ (pipeline: `historical_purchase_value_sqrt`) so very large spend does not dominate linearly.
+- $ \delta_{\text{recency}} $: time since the last purchase (a staleness signal).  
+  Larger means "last purchase was long ago", so we subtract it.
+
+How to read the weights:
+
+- $ \alpha $ controls how much recurring purchase activity matters.
+- $ \beta $ controls how much monetary value matters.
+- $ \gamma $ controls how strongly we penalize old/stale pairs.
+
+Decision rule:
+
+1. Tune $ \alpha, \beta, \gamma $ on the validation euro score.
+2. Predict pair $ (b,e) $ if $ \text{score}_{\text{base}}(b,e) > \theta $.
+3. Apply per-buyer cap: keep only top $ K $ pairs by score.
+
+So baseline v1 is: **frequency + value - staleness**, then threshold + top-$K$.
 
 ### Two-stage model (v2)
 

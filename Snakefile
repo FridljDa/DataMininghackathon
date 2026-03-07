@@ -74,7 +74,6 @@ MODE_CFG = {
         "customer_csv": CUSTOMER_META_CSV,
         "buyer_source": "customer-test",
         "customer_input": INPUTS["customer_test"],
-        "score_level": "",
         "runs_dir": SCORE_RUN_ARCHIVE["online_runs_dir"],
         "run_index_csv": SCORE_RUN_ARCHIVE["run_index_online"],
     },
@@ -82,7 +81,6 @@ MODE_CFG = {
         "customer_csv": SPLIT_CUSTOMER_CSV,
         "buyer_source": "customer-split",
         "customer_input": SPLIT_CUSTOMER_CSV,
-        "score_level": "1",
         "runs_dir": SCORE_RUN_ARCHIVE["offline_runs_dir"],
         "run_index_csv": SCORE_RUN_ARCHIVE["run_index_offline"],
     },
@@ -93,17 +91,19 @@ FEATURES_RAW_PATTERN = f"{DATA_DIR}/08_features_raw/{{mode}}/features_raw.parque
 FEATURES_SANITIZED_PATTERN = f"{DATA_DIR}/08_features_sanitized/{{mode}}/features_sanitized.parquet"
 FEATURES_ALL_PATTERN = f"{DATA_DIR}/09_features_derived/{{mode}}/features_all.parquet"
 FEATURES_SELECTED_PATTERN = f"{DATA_DIR}/11_features_selected/{{mode}}/features_selected.parquet"
-# Per-approach: scores, portfolio, submission, and scores (data/12–15 by {mode}/{approach}/)
+# Per-approach: scores, portfolio (no level); submission and scores per level (data/12–15 by {mode}/{approach}/level{level}/)
 ENABLED_APPROACHES = MODELLING["enabled_approaches"]
+ENABLED_LEVELS = MODELLING["enabled_levels"]
 APPROACH_RE = "|".join(ENABLED_APPROACHES)
+LEVEL_RE = "|".join(str(l) for l in ENABLED_LEVELS)
 SCORES_APPROACH_PATTERN = f"{DATA_DIR}/12_predictions/{{mode}}/{{approach}}/scores.parquet"
 PORTFOLIO_PATTERN = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/portfolio.parquet"
-SUBMISSION_PATTERN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/submission.csv"
-SCORE_SUMMARY_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/score_summary.csv"
-SCORE_DETAILS_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/score_details.parquet"
-ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/{{mode}}/runs/{{approach}}/.last_archived"
-SUBMITTED_SENTINEL_PATTERN = f"{DATA_DIR}/14_submission/.submitted_challenge2_{{approach}}"
-SCORE_SUMMARY_LIVE_PATTERN = f"{SCORES_DIR}/online/{{approach}}/score_summary_live.csv"
+SUBMISSION_PATTERN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/submission.csv"
+SCORE_SUMMARY_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/level{{level}}/score_summary.csv"
+SCORE_DETAILS_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/level{{level}}/score_details.parquet"
+ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/{{mode}}/runs/{{approach}}/level{{level}}/.last_archived"
+SUBMITTED_SENTINEL_PATTERN = f"{DATA_DIR}/14_submission/.submitted_challenge2_{{approach}}_level{{level}}"
+SCORE_SUMMARY_LIVE_PATTERN = f"{SCORES_DIR}/online/{{approach}}/level{{level}}/score_summary_live.csv"
 FEATURE_ANALYSIS_SUMMARY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_summary.csv"
 
 rule all:
@@ -119,12 +119,12 @@ rule all:
         FEATURE_ANALYSIS_SUGGESTION_OFFLINE,
         expand(SCORES_APPROACH_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
         expand(PORTFOLIO_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
-        expand(SUBMISSION_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
-        expand(SCORE_SUMMARY_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
-        expand(SCORE_DETAILS_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
-        expand(ARCHIVE_SENTINEL_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
-        expand(SCORE_SUMMARY_LIVE_PATTERN, approach=ENABLED_APPROACHES),
-        expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES),
+        expand(SUBMISSION_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
+        expand(SCORE_SUMMARY_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
+        expand(SCORE_DETAILS_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
+        expand(ARCHIVE_SENTINEL_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
+        expand(SCORE_SUMMARY_LIVE_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
+        expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
 
 rule generate_dag_graph:
     """Write workflow DAG as SVG (no input dependencies; run first)."""
@@ -361,7 +361,7 @@ rule select_portfolio:
         "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer}"
 
 rule write_submission_warm:
-    """Format portfolio into submission CSV (Level 1: cluster=eclass); cold-start fallback to global default."""
+    """Format portfolio into submission CSV (Level 1: cluster=eclass; Level 2: cluster=eclass|manufacturer); cold-start fallback."""
     input:
         portfolio = PORTFOLIO_PATTERN,
         customer = lambda w: MODE_CFG[w.mode]["customer_input"],
@@ -373,11 +373,13 @@ rule write_submission_warm:
     wildcard_constraints:
         mode = MODE_RE,
         approach = APPROACH_RE,
+        level = LEVEL_RE,
     run:
         arg = "--customer-test" if wildcards.mode == "online" else "--customer-split"
         shell(
             "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
-            "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} --output {output.submission}"
+            "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} "
+            "--level {wildcards.level} --output {output.submission}"
         )
 
 
@@ -393,7 +395,7 @@ rule write_submission:
         "--customer-test {input.customer_test} --plis-training {input.plis}"
 
 rule score_submission:
-    """Score submission against plis_testing holdout; write summary and details per approach to data/15_scores/{mode}/{approach}/."""
+    """Score submission against plis_testing holdout; write summary and details per approach/level to data/15_scores/{mode}/{approach}/level{level}/."""
     input:
         submission = SUBMISSION_PATTERN,
         plis_testing = PLIS_TESTING_SPLIT,
@@ -404,42 +406,44 @@ rule score_submission:
         savings_rate = SCORING_PARAMS["savings_rate"],
         fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
         scoring_months = SCORING_PARAMS["scoring_months"],
-        level_opt = lambda w: (" --level " + MODE_CFG[w.mode]["score_level"]) if MODE_CFG[w.mode]["score_level"] else "",
     wildcard_constraints:
         mode = MODE_RE,
         approach = APPROACH_RE,
+        level = LEVEL_RE,
     shell:
         "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
         "--summary {output.summary} --details {output.details} "
-        "{params.level_opt} --savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
+        "--level {wildcards.level} --savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
         "--scoring-months {params.scoring_months}"
 
 rule archive_score_run:
-    """Copy current score outputs into a timestamp+commit run folder and write metadata + run index (per mode and approach)."""
+    """Copy current score outputs into a timestamp+commit run folder and write metadata + run index (per mode, approach, level)."""
     input:
         summary = SCORE_SUMMARY_PATTERN,
         details = SCORE_DETAILS_PATTERN,
     output:
         sentinel = ARCHIVE_SENTINEL_PATTERN,
     params:
-        runs_dir = lambda w: f"{SCORES_DIR}/{w.mode}/runs/{w.approach}",
-        index_csv = lambda w: f"{SCORES_DIR}/{w.mode}/run_index_{w.approach}.csv",
+        runs_dir = lambda w: f"{SCORES_DIR}/{w.mode}/runs/{w.approach}/level{w.level}",
+        index_csv = lambda w: f"{SCORES_DIR}/{w.mode}/run_index_{w.approach}_level{w.level}.csv",
     wildcard_constraints:
         mode = MODE_RE,
         approach = APPROACH_RE,
+        level = LEVEL_RE,
     shell:
         "uv run src/archive_score_run.py --summary {input.summary} --details {input.details} "
         "--runs-dir {params.runs_dir} --index-csv {params.index_csv} && touch {output.sentinel}"
 
 rule submit_to_portal:
-    """Upload online submission to Unite evaluator (challenge 2) per approach. Requires portal_credentials in config.yaml."""
+    """Upload online submission to Unite evaluator (challenge 2) per approach and level. Requires portal_credentials in config.yaml."""
     input:
-        submission = f"{DATA_DIR}/14_submission/online/{{approach}}/submission.csv",
+        submission = f"{DATA_DIR}/14_submission/online/{{approach}}/level{{level}}/submission.csv",
     output:
         summary = SCORE_SUMMARY_LIVE_PATTERN,
         sentinel = SUBMITTED_SENTINEL_PATTERN,
     wildcard_constraints:
         approach = APPROACH_RE,
+        level = LEVEL_RE,
     shell:
-        "uv run src/submit.py --challenge 2 --file {input.submission} --summary-csv {output.summary} && touch {output.sentinel}"
+        "uv run src/submit.py --challenge 2 --file {input.submission} --level {wildcards.level} --summary-csv {output.summary} && touch {output.sentinel}"
 

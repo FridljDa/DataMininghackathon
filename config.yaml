@@ -67,6 +67,7 @@ modelling:
 
   features:
     selected:
+      - n_orders
       - CV_gap
       - active_month_share_12m
       - active_year_span

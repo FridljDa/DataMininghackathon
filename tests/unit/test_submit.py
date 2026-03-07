@@ -285,6 +285,41 @@ class TestSubmit:
         out = capsys.readouterr().out
         assert "did not confirm success" in out
 
+    def test_busy_api_error_retries_then_succeeds(self, tmp_path, capsys) -> None:
+        csv = tmp_path / "s.csv"
+        csv.write_text("legal_entity_id,cluster\n")
+        l2 = _make_button("Level 2 — E-Class + Manufacturer")
+        page = self._page_with_buttons([l2])
+
+        response_bodies = [
+            {"error": "Hold your horses! Your previous submission is still being evaluated."},
+            {"success": True, "submission": {"id": "sub-ok"}},
+        ]
+
+        def _expect_response(*_args, **_kwargs):
+            body = response_bodies.pop(0)
+            response = MagicMock()
+            response.json.return_value = body
+            info = MagicMock()
+            info.value = response
+
+            @contextmanager
+            def _ctx():
+                yield info
+
+            return _ctx()
+
+        page.expect_response = MagicMock(side_effect=_expect_response)
+
+        with patch("src.submit.time.sleep") as sleep_mock:
+            _, submission_id = submit(page, challenge_id=2, file_path=csv, level=2)
+
+        assert submission_id == "sub-ok"
+        assert page.expect_response.call_count == 2
+        sleep_mock.assert_called_once()
+        out = capsys.readouterr().out
+        assert "still evaluating" in out
+
     def test_scoring_timeout_warns_without_raising(self, tmp_path, capsys) -> None:
         from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
@@ -292,8 +327,9 @@ class TestSubmit:
         csv.write_text("legal_entity_id,cluster\n")
         l2 = _make_button("Level 2 — E-Class + Manufacturer")
         page = self._page_with_buttons([l2])
-        # Make wait_for_function raise a timeout
-        page.wait_for_function.side_effect = PlaywrightTimeout("timeout")
+        # First wait_for_function call is submit-button readiness (must pass),
+        # second call is scoring wait (times out but should not raise).
+        page.wait_for_function.side_effect = [None, PlaywrightTimeout("timeout")]
 
         submit(page, challenge_id=2, file_path=csv, level=2)  # must not raise
 

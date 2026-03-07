@@ -64,7 +64,7 @@ def test_submit_challenge_2_live(tmp_path: Path) -> None:
         env=env,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=360,
         check=False,
     )
 

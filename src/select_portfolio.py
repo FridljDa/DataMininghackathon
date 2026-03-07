@@ -2,7 +2,8 @@
 Selection policy: threshold, evidence guardrails, per-buyer cap K.
 
 Reads scores.parquet; keeps pairs with score_base > threshold that pass at least
-one guardrail (n_orders >= X or m_active >= Y or historical_purchase_value_total >= tau_high); caps at
+one guardrail (n_orders >= X or m_active >= Y or historical_purchase_value_total >= tau_high,
+or optionally avg_monthly_spend_buyer_tenure >= min_avg_monthly_spend for late joiners); caps at
 top K per buyer by score_base. Outputs portfolio.parquet (legal_entity_id, eclass).
 """
 
@@ -47,6 +48,13 @@ def main() -> None:
         help="Pass guardrail if historical_purchase_value_total >= this (default: 500).",
     )
     parser.add_argument(
+        "--min-avg-monthly-spend",
+        type=float,
+        default=0.0,
+        dest="min_avg_monthly_spend",
+        help="Pass guardrail if avg_monthly_spend_buyer_tenure >= this when column present (0 = disabled; default: 0).",
+    )
+    parser.add_argument(
         "--top-k-per-buyer",
         type=int,
         default=15,
@@ -66,12 +74,15 @@ def main() -> None:
     # Threshold
     df = df[df["score_base"] > args.score_threshold].copy()
 
-    # Guardrail: at least one of n_orders >= X, m_active >= Y, historical_purchase_value_total >= tau_high
+    # Guardrail: at least one of n_orders >= X, m_active >= Y, historical_purchase_value_total >= tau_high,
+    # or (when present) avg_monthly_spend_buyer_tenure >= min_avg_monthly_spend for late joiners
     guard = (
         (df["n_orders"] >= args.min_orders_guardrail)
         | (df["m_active"] >= args.min_months_guardrail)
         | (df["historical_purchase_value_total"] >= args.high_spend_guardrail)
     )
+    if args.min_avg_monthly_spend > 0 and "avg_monthly_spend_buyer_tenure" in df.columns:
+        guard = guard | (df["avg_monthly_spend_buyer_tenure"].fillna(0) >= args.min_avg_monthly_spend)
     df = df[guard].copy()
 
     # Top K per buyer by score_base

@@ -40,13 +40,15 @@ To simulate the hidden evaluation, create an internal temporal split within the 
 - **Train period:** `2023-01-01` — `2024-12-31`
 - **Validation period:** `2025-01-01` — `2025-06-30`
 
-Label a buyer–eclass pair $ (b, e) $ as **positive** in validation if:
+Label a buyer–eclass pair $ (b, e) $ as **positive** in validation if it is bought again at least once:
 
 $$
-\text{label}(b, e) = \mathbf{1}\left[\text{orders in val}(b, e) \geq N_{\min}\right]
+\text{label}(b, e) = \mathbf{1}\left[\text{orders in val}(b, e) \geq 1\right]
 $$
 
-Recommended: $ N_{\min} = 2 $ (at least 2 distinct orders in future window). This selects for recurrence, not one-off events.
+Use binary recurrence target by default: bought again vs not bought again.
+
+> **Evaluator behavior note:** Predictions are set-based per buyer and cluster. Duplicate rows for the same $ (b, e) $ are sanitized and counted once by the organizer scorer.
 
 Evaluate using an approximation of the euro score on validation:
 
@@ -171,11 +173,11 @@ In order of expected impact on validation euro score:
 
 | Priority | Parameter | Notes |
 |---|---|---|
-| 1 | Label definition $ N_{\min} $ | Determines what "recurring" means |
-| 2 | EU threshold (or $ \theta $ for baseline) | Core precision-recall tradeoff |
-| 3 | Per-buyer cap $ K $ | Hard ceiling on fee exposure |
-| 4 | Lookback window $ L $ | Candidate set size |
-| 5 | Guardrail thresholds $ X, Y, \tau_s $ | Edge case pruning |
+| 1 | EU threshold (or $ \theta $ for baseline) | Core precision-recall tradeoff |
+| 2 | Per-buyer cap $ K $ | Hard ceiling on fee exposure |
+| 3 | Lookback window $ L $ | Candidate set size |
+| 4 | Guardrail thresholds $ X, Y, \tau_s $ | Edge case pruning |
+| 5 | Value model calibration | Affects ranking among positive recurrence candidates |
 
 ---
 

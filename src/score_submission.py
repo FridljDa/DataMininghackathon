@@ -140,6 +140,8 @@ def main() -> None:
     sub["legal_entity_id"] = sub["legal_entity_id"].astype(str)
     sub["cluster"] = sub["cluster"].astype(str).str.strip()
     sub["_cluster_norm"] = sub["cluster"].map(normalize_cluster_str)
+    # Organizer scorer sanitizes duplicate (buyer, cluster) rows to one; match that behavior.
+    sub = sub.drop_duplicates(subset=["legal_entity_id", "_cluster_norm"]).copy()
 
     plis = _read_plis(plis_path)
     pair_spend, total_ground_spend = build_truth(plis)

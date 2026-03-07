@@ -177,9 +177,9 @@ modelling:
       legal_entity_id: { action: drop_row }
       eclass: { action: drop_row }
       manufacturer: { action: drop_row }
-      orderdate_min: { action: drop_row }
-      orderdate_max: { action: drop_row }
-      orderdates_str: { action: drop_row }
+      #orderdate_min: { action: drop_row }
+      #orderdate_max: { action: drop_row }
+      #orderdates_str: { action: drop_row }
       n_orders: { action: fill, strategy: constant, value: 0 }
       historical_purchase_value_total: { action: fill, strategy: constant, value: 0.0 }
 

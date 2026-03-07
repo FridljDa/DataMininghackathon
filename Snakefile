@@ -90,6 +90,7 @@ MODE_CFG = {
 # Path patterns for mode-wildcarded rules
 CANDIDATES_RAW_PATTERN = f"{DATA_DIR}/07_candidates/{{mode}}/candidates_raw.parquet"
 FEATURES_RAW_PATTERN = f"{DATA_DIR}/08_features_raw/{{mode}}/features_raw.parquet"
+FEATURES_SANITIZED_PATTERN = f"{DATA_DIR}/08_features_sanitized/{{mode}}/features_sanitized.parquet"
 FEATURES_ALL_PATTERN = f"{DATA_DIR}/09_features_derived/{{mode}}/features_all.parquet"
 FEATURES_SELECTED_PATTERN = f"{DATA_DIR}/11_features_selected/{{mode}}/features_selected.parquet"
 # Per-approach: scores, portfolio, submission, and scores (data/12–15 by {mode}/{approach}/)
@@ -218,10 +219,25 @@ rule engineer_features_raw:
     shell:
         "uv run src/engineer_features_raw.py --candidates-raw {input.candidates_raw} --output {output.features_raw}"
 
+rule sanitize_features_raw:
+    """Apply per-feature missing-value policies (drop_row, ignore, fill) from config to features_raw."""
+    input:
+        features_raw = FEATURES_RAW_PATTERN,
+    output:
+        features_sanitized = FEATURES_SANITIZED_PATTERN,
+    params:
+        config_file = "config.yaml",
+        config_key = "modelling.missing_value_sanitation",
+    wildcard_constraints:
+        mode = MODE_RE,
+    shell:
+        "uv run src/sanitize_features_raw.py --features-raw {input.features_raw} --output {output.features_sanitized} "
+        "--config {params.config_file} --config-key {params.config_key}"
+
 rule engineer_features_derived:
     """Derived feature engineering: raw features + plis/customer/nace -> full feature matrix."""
     input:
-        features_raw = FEATURES_RAW_PATTERN,
+        features_sanitized = FEATURES_SANITIZED_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
         customer = lambda w: MODE_CFG[w.mode]["customer_csv"],
         nace_codes = INPUTS["nace_codes"],
@@ -233,7 +249,7 @@ rule engineer_features_derived:
     wildcard_constraints:
         mode = MODE_RE,
     shell:
-        "uv run src/engineer_features_derived.py --features-raw {input.features_raw} --plis {input.plis} "
+        "uv run src/engineer_features_derived.py --features-raw {input.features_sanitized} --plis {input.plis} "
         "--customer {input.customer} --nace-codes {input.nace_codes} --output {output.features_all} --train-end {params.train_end} --lookback-months {params.lookback_months}"
 
 FEATURE_ANALYSIS_REDUNDANCY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_redundancy.csv"

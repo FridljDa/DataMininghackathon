@@ -151,7 +151,13 @@ For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{warm}} $ and 
 
 The exact active columns for any run are controlled by pipeline configuration and may change over time.
 
-**Refreshing the feature list:** After running feature analysis, the workflow writes machine-readable suggestions to `data/09_feature_analysis/{online|offline}/feature_suggestions.yaml`. You can copy the `suggested_features` list from that file into `config.yaml` under `modelling.selected_features` to align the pipeline with heuristic recommendations (null rate, variance, and cardinality filters). The suggestion file is advisory only; the pipeline does not modify config automatically.
+**Feature analysis artifacts:** The pipeline produces:
+
+- `feature_summary.csv` — Per-feature descriptive stats (null/zero rate, quantiles, cardinality) and target-aware stats (univariate signal vs validation recurrence label and vs positive-case spend). Primary inspection artifact for deciding which features to keep.
+- `feature_redundancy.csv` — Pairs of numeric features with high Spearman correlation (e.g. |ρ| ≥ 0.85) for redundancy pruning.
+- `feature_suggestions.yaml` — Advisory list of suggested features: hard filters (null rate, variance, cardinality) are applied, then one representative per correlated group is kept (ranked by target signal). For manual copy into `config.yaml` under `modelling.selected_features`.
+
+**Refreshing the feature list:** `feature_suggestions.yaml` answers “which features look best for modelling?”; `modelling.selected_features` and the resulting `data/10_features_selected` output are the explicit contract used by training and scoring. Copy from the suggestion file into config when you want to align the pipeline with the heuristic; the pipeline does not modify config automatically.
 
 ---
 

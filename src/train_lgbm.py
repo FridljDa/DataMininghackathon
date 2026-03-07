@@ -103,14 +103,14 @@ def main() -> None:
     df["s_val"] = df["s_val"].fillna(0)
     df["label"] = (df["n_orders_val"] >= args.n_min_label).astype(int)
 
-    # Dynamically identify feature columns and their types
+    # Dynamically identify feature columns and their types (include pandas StringDtype as categorical)
     X_cols = [c for c in df.columns if c not in EXCLUDE_COLS]
-    use_cat = [c for c in X_cols if df[c].dtype == "object" or df[c].dtype.name == "category"]
+    use_cat = [c for c in X_cols if not pd.api.types.is_numeric_dtype(df[c])]
 
     X = df[X_cols].copy()
     for c in X_cols:
         if c in use_cat:
-            X[c] = X[c].fillna("").astype("category")
+            X[c] = X[c].fillna("").astype(str).astype("category")
         else:
             X[c] = pd.to_numeric(X[c], errors="coerce").fillna(0)
 

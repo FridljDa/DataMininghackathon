@@ -522,6 +522,7 @@ rule analyze_submission_tuning:
             approach=ENABLED_APPROACHES,
             level="{level}",
         ),
+        customer_test = INPUTS["customer_test"],
     output:
         run_metrics = f"{SUBMISSION_TUNING_DIR}/run_metrics_level{{level}}.csv",
         param_effects = f"{SUBMISSION_TUNING_DIR}/param_effects_level{{level}}.csv",
@@ -538,7 +539,8 @@ rule analyze_submission_tuning:
         level = LEVEL_RE,
     shell:
         "uv run src/analyze_submission_tuning.py --level {wildcards.level} --output-dir {params.out_dir} "
-        "--runs-dir {params.runs_dir} --best-run-dir {params.best_run_dir} --submissions {input.submissions}"
+        "--runs-dir {params.runs_dir} --best-run-dir {params.best_run_dir} "
+        "--customer-test {input.customer_test} --submissions {input.submissions}"
 
 rule submit_to_portal:
     """Upload online submission to Unite evaluator (challenge 2) per approach and level. Writes live score to temp file for archive_score_run. Requires portal_credentials in config.yaml."""

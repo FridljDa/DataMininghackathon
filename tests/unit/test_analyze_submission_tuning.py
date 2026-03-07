@@ -12,6 +12,7 @@ import pytest
 from src.analyze_submission_tuning import (
     _best_run_identifiers,
     _gather_runs,
+    _load_customer_task_map,
     _load_run,
     _param_effects_df,
     _run_metrics_rows,
@@ -184,6 +185,11 @@ def test_submission_shape_minimal_csv(tmp_path: Path) -> None:
     assert shape["duplicate_rate"] == 0.0
     # one cluster e1 has 2 predictions, e2 has 1 -> top cluster share 2/3
     assert shape["top_cluster_share"] == pytest.approx(2 / 3)
+    # without task_map, warm/cold are None
+    assert shape["n_warm_buyers_submitted"] is None
+    assert shape["n_cold_buyers_submitted"] is None
+    assert shape["warm_buyer_share"] is None
+    assert shape["cold_buyer_share"] is None
 
 
 def test_submission_shape_duplicate_rate(tmp_path: Path) -> None:
@@ -215,6 +221,61 @@ def test_submission_shape_missing_columns(tmp_path: Path) -> None:
     shape = _submission_shape(csv_path, "x")
     assert shape["n_predictions"] == 1
     assert shape["n_buyers"] is None
+
+
+def test_submission_shape_warm_cold_counts(tmp_path: Path) -> None:
+    """With task_map, shape reports n_warm_buyers_submitted, n_cold_buyers_submitted, shares."""
+    csv_path = tmp_path / "submission.csv"
+    csv_path.write_text(
+        "legal_entity_id,cluster\n"
+        "w1,e1\n"
+        "w1,e2\n"
+        "c1,e1\n",
+        encoding="utf-8",
+    )
+    task_map = {"w1": "warm", "c1": "cold"}
+    shape = _submission_shape(csv_path, "test_approach", task_map=task_map)
+    assert shape["n_buyers"] == 2
+    assert shape["n_warm_buyers_submitted"] == 1
+    assert shape["n_cold_buyers_submitted"] == 1
+    assert shape["n_unknown_task_buyers_submitted"] == 0
+    assert shape["warm_buyer_share"] == pytest.approx(0.5)
+    assert shape["cold_buyer_share"] == pytest.approx(0.5)
+
+
+def test_submission_shape_unknown_task_buyers(tmp_path: Path) -> None:
+    """Buyers not in task_map or with other task are counted as unknown."""
+    csv_path = tmp_path / "submission.csv"
+    csv_path.write_text(
+        "legal_entity_id,cluster\n"
+        "w1,e1\n"
+        "unknown_buyer,e1\n",
+        encoding="utf-8",
+    )
+    task_map = {"w1": "warm"}
+    shape = _submission_shape(csv_path, "x", task_map=task_map)
+    assert shape["n_buyers"] == 2
+    assert shape["n_warm_buyers_submitted"] == 1
+    assert shape["n_cold_buyers_submitted"] == 0
+    assert shape["n_unknown_task_buyers_submitted"] == 1
+    assert shape["warm_buyer_share"] == pytest.approx(0.5)
+    assert shape["cold_buyer_share"] == pytest.approx(0.0)
+
+
+def test_load_customer_task_map(tmp_path: Path) -> None:
+    """_load_customer_task_map returns warm/cold/unknown from customer_test TSV."""
+    customer_tsv = tmp_path / "customer_test.csv"
+    customer_tsv.write_text(
+        "legal_entity_id\testimated_number_employees\tnace_code\ttask\n"
+        "1\t100\t861\tcold start\n"
+        "2\t200\t3511\tpredict future\n"
+        "3\t300\t1089\tother\n",
+        encoding="utf-8",
+    )
+    task_map = _load_customer_task_map(customer_tsv)
+    assert task_map["1"] == "cold"
+    assert task_map["2"] == "warm"
+    assert task_map["3"] == "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +317,8 @@ def test_main_writes_placeholder_when_no_runs(tmp_path: Path, project_root: Path
     runs_dir.mkdir(parents=True)
     best_run_dir = tmp_path / "best_run"
     best_run_dir.mkdir(parents=True)
+    customer_test = tmp_path / "customer_test.csv"
+    customer_test.write_text("legal_entity_id\ttask\n1\tcold start\n", encoding="utf-8")
     result = _run(
         [
             "uv", "run", "src/analyze_submission_tuning.py",
@@ -263,6 +326,7 @@ def test_main_writes_placeholder_when_no_runs(tmp_path: Path, project_root: Path
             "--output-dir", str(out_dir),
             "--runs-dir", str(runs_dir),
             "--best-run-dir", str(best_run_dir),
+            "--customer-test", str(customer_test),
             "--submissions",
         ],
         cwd=project_root,

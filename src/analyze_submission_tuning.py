@@ -35,6 +35,34 @@ CONFIG_KEYS = [
 ]
 GUARDRAIL_KEYS = ["min_orders", "min_months", "high_spend", "min_avg_monthly_spend"]
 
+# Task labels in customer_test: normalized to warm / cold / unknown
+WARM_TASKS = {"predict future", "testing"}
+COLD_TASKS = {"cold start"}
+
+
+def _load_customer_task_map(customer_test_path: Path) -> dict[str, str]:
+    """
+    Load customer_test TSV and return legal_entity_id -> "warm" | "cold" | "unknown".
+    Warm: task in ("predict future", "testing"); cold: "cold start"; else "unknown".
+    """
+    out: dict[str, str] = {}
+    if not customer_test_path.is_file():
+        return out
+    try:
+        df = pd.read_csv(customer_test_path, sep="\t", dtype=str, usecols=["legal_entity_id", "task"])
+    except Exception:
+        return out
+    for _, row in df.iterrows():
+        lid = str(row["legal_entity_id"])
+        t = (row["task"] or "").strip().lower() if pd.notna(row["task"]) else ""
+        if t in WARM_TASKS:
+            out[lid] = "warm"
+        elif t in COLD_TASKS:
+            out[lid] = "cold"
+        else:
+            out[lid] = "unknown"
+    return out
+
 
 def _load_run(run_dir: Path) -> dict | None:
     """Load one run directory: score row + metadata. Return None if invalid."""
@@ -122,8 +150,19 @@ def _param_effects_df(run_metrics_df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _submission_shape(submission_path: Path, approach: str) -> dict:
-    """Compute shape metrics for one submission CSV."""
+def _submission_shape(
+    submission_path: Path,
+    approach: str,
+    task_map: dict[str, str] | None = None,
+) -> dict:
+    """Compute shape metrics for one submission CSV. Optionally add warm/cold buyer counts from task_map."""
+    _warm_cold_none = {
+        "n_warm_buyers_submitted": None,
+        "n_cold_buyers_submitted": None,
+        "n_unknown_task_buyers_submitted": None,
+        "warm_buyer_share": None,
+        "cold_buyer_share": None,
+    }
     out = {"approach": approach, "submission_path": str(submission_path)}
     if not submission_path.is_file():
         out["n_predictions"] = None
@@ -132,6 +171,7 @@ def _submission_shape(submission_path: Path, approach: str) -> dict:
         out["median_predictions_per_buyer"] = None
         out["duplicate_rate"] = None
         out["top_cluster_share"] = None
+        out.update(_warm_cold_none)
         return out
     try:
         df = pd.read_csv(submission_path)
@@ -142,6 +182,7 @@ def _submission_shape(submission_path: Path, approach: str) -> dict:
         out["median_predictions_per_buyer"] = None
         out["duplicate_rate"] = None
         out["top_cluster_share"] = None
+        out.update(_warm_cold_none)
         return out
     if "legal_entity_id" not in df.columns or "cluster" not in df.columns:
         out["n_predictions"] = len(df)
@@ -150,6 +191,7 @@ def _submission_shape(submission_path: Path, approach: str) -> dict:
         out["median_predictions_per_buyer"] = None
         out["duplicate_rate"] = None
         out["top_cluster_share"] = None
+        out.update(_warm_cold_none)
         return out
     df["legal_entity_id"] = df["legal_entity_id"].astype(str)
     n_raw = len(df)
@@ -166,6 +208,19 @@ def _submission_shape(submission_path: Path, approach: str) -> dict:
     cluster_counts = dedup["cluster"].value_counts()
     top_share = cluster_counts.iloc[0] / n_predictions if n_predictions and len(cluster_counts) else None
     out["top_cluster_share"] = float(top_share) if top_share is not None else None
+
+    if task_map is not None and n_buyers:
+        unique_buyers = dedup["legal_entity_id"].unique()
+        n_warm = sum(1 for lid in unique_buyers if task_map.get(lid) == "warm")
+        n_cold = sum(1 for lid in unique_buyers if task_map.get(lid) == "cold")
+        n_unknown = n_buyers - n_warm - n_cold
+        out["n_warm_buyers_submitted"] = int(n_warm)
+        out["n_cold_buyers_submitted"] = int(n_cold)
+        out["n_unknown_task_buyers_submitted"] = int(n_unknown)
+        out["warm_buyer_share"] = n_warm / n_buyers
+        out["cold_buyer_share"] = n_cold / n_buyers
+    else:
+        out.update(_warm_cold_none)
     return out
 
 
@@ -236,6 +291,7 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, dest="output_dir", help="Output directory (e.g. data/17_submission_tuning)")
     parser.add_argument("--runs-dir", required=True, dest="runs_dir", help="Archived runs dir (e.g. data/15_scores/online/runs/level1)")
     parser.add_argument("--best-run-dir", required=True, dest="best_run_dir", help="Best run copy dir (e.g. data/16_scores_best/online/level1/best_run)")
+    parser.add_argument("--customer-test", required=True, dest="customer_test", help="Path to customer_test.csv (for warm/cold buyer counts)")
     parser.add_argument("--submissions", nargs="*", default=[], help="Paths to submission CSVs (online, this level)")
     args = parser.parse_args()
 
@@ -243,7 +299,9 @@ def main() -> None:
     out_dir = Path(args.output_dir)
     runs_dir = Path(args.runs_dir)
     best_run_dir = Path(args.best_run_dir)
+    customer_test_path = Path(args.customer_test)
     submission_paths = [Path(p) for p in args.submissions]
+    task_map = _load_customer_task_map(customer_test_path)
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -280,7 +338,7 @@ def main() -> None:
     shape_rows = []
     for p in submission_paths:
         approach = _infer_approach_from_path(p)
-        shape_rows.append(_submission_shape(p, approach))
+        shape_rows.append(_submission_shape(p, approach, task_map=task_map))
     shape_path = out_dir / f"current_submission_shape_level{level}.csv"
     pd.DataFrame(shape_rows).to_csv(shape_path, index=False)
     print(f"Wrote {shape_path} ({len(shape_rows)} submissions)")

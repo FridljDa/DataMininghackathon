@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+MAX_BYTES=$((2 * 1024 * 1024))
+MAX_LABEL="2MB"
+
+# Check staged files only.
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -z "$staged_files" ] && exit 0
+
+violations=()
+
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+
+  # Skip deleted/nonexistent paths.
+  if [ ! -f "$file" ]; then
+    continue
+  fi
+
+  size_bytes="$(wc -c < "$file" | tr -d ' ')"
+  if [ "$size_bytes" -gt "$MAX_BYTES" ]; then
+    violations+=("$file ($size_bytes bytes)")
+  fi
+done <<< "$staged_files"
+
+if [ "${#violations[@]}" -gt 0 ]; then
+  echo "Error: commit blocked. The following staged files exceed ${MAX_LABEL}:"
+  for item in "${violations[@]}"; do
+    echo "  - $item"
+  done
+  echo
+  echo "Reduce file size or unstage those files before committing."
+  exit 1
+fi

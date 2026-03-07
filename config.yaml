@@ -99,7 +99,7 @@ training_validation_split:
   # PLIs on or after this date for test buyers go to plis_testing
   cutoff_date: "2025-07-01"
   # Number of "none-task" buyers relabeled to testing for offline validation
-  test_customers_count: 50
+  test_customers_count: 1
   random_seed: 42
 
 # Used in EU score and offline/local scoring

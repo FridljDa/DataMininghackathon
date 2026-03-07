@@ -333,6 +333,8 @@ rule train_approach:
         sparse_eta_multiplier = APP["phase3_repro"]["sparse_eta_multiplier"],
         sparse_tau_multiplier = APP["phase3_repro"]["sparse_tau_multiplier"],
         use_monthly_lookback_rates = 1 if APP.get("phase3_repro", {}).get("use_monthly_lookback_rates", False) else 0,
+        lgb_params_classifier = APP.get("lgbm_two_stage", {}).get("lgb_params_classifier", ""),
+        lgb_params_regressor = APP.get("lgbm_two_stage", {}).get("lgb_params_regressor", ""),
     wildcard_constraints:
         mode = MODE_RE,
         approach = "|".join(ENABLED_APPROACHES),
@@ -344,7 +346,8 @@ rule train_approach:
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months} "
         "--eta {params.eta} --tau {params.tau} "
         "--sparse-eta-multiplier {params.sparse_eta_multiplier} --sparse-tau-multiplier {params.sparse_tau_multiplier} "
-        "--use-monthly-lookback-rates {params.use_monthly_lookback_rates}"
+        "--use-monthly-lookback-rates {params.use_monthly_lookback_rates} "
+        "--lgb-params-classifier '{params.lgb_params_classifier}' --lgb-params-regressor '{params.lgb_params_regressor}'"
 
 rule select_portfolio:
     """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach."""

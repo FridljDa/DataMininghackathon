@@ -48,6 +48,7 @@ CANDIDATES_RAW_OFFLINE_PARQUET = MODELLING["candidates_raw_offline_parquet"]
 FEATURES_ALL_OFFLINE_PARQUET = MODELLING["features_all_offline_parquet"]
 FEATURES_SELECTED_OFFLINE_PARQUET = MODELLING["features_selected_offline_parquet"]
 SCORES_OFFLINE_PARQUET = MODELLING["scores_offline_parquet"]
+SCORES_LGBM_OFFLINE_PARQUET = MODELLING["scores_lgbm_offline_parquet"]
 PORTFOLIO_OFFLINE_PARQUET = MODELLING["portfolio_offline_parquet"]
 SUBMISSION_OFFLINE_CSV = MODELLING["submission_offline_csv"]
 
@@ -137,7 +138,7 @@ rule split_plis_training_validation:
         "--train {output.train} --test {output.test} --cutoff-date {params.cutoff}"
 
 rule generate_candidates:
-    """Candidate generation for Level 1 (warm buyers, E-Class): lookback + singleton filter."""
+    """Candidate generation for Level 1 (warm buyers, E-Class): lookback window, n_orders(b,e,L) >= eta."""
     input:
         plis = PLIS_TRAINING_SPLIT,
         customer = CUSTOMER_META_CSV,
@@ -146,11 +147,11 @@ rule generate_candidates:
     params:
         train_end = MODELLING["train_end"],
         lookback_months = MODELLING["lookback_months"],
-        min_spend_singleton = MODELLING["min_spend_singleton"],
+        min_order_frequency = MODELLING["min_order_frequency"],
     shell:
         "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
         "--output {output.candidates_raw} --train-end {params.train_end} "
-        "--lookback-months {params.lookback_months} --min-spend-singleton {params.min_spend_singleton}"
+        "--lookback-months {params.lookback_months} --min-order-frequency {params.min_order_frequency}"
 
 rule engineer_features:
     """Feature engineering from raw candidates: all modelling features."""
@@ -239,9 +240,9 @@ rule train_lgbm:
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
 
 rule select_portfolio:
-    """Apply threshold, guardrails and per-buyer cap K to produce portfolio.parquet."""
+    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet (default: two-stage LGBM scores)."""
     input:
-        scores = SCORES_PARQUET,
+        scores = SCORES_LGBM_PARQUET,
     output:
         portfolio = PORTFOLIO_PARQUET,
     params:
@@ -268,6 +269,24 @@ rule write_submission_warm:
         "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
         "--buyer-source customer-test --customer-test {input.customer_test} --plis-training {input.plis} --output {output.submission}"
 
+
+rule select_portfolio_baseline:
+    """Optional: apply threshold/guardrails to baseline scores. Use for diagnostic comparison."""
+    input:
+        scores = SCORES_PARQUET,
+    output:
+        portfolio = "data/10_portfolio/online/portfolio_baseline.parquet",
+    params:
+        score_threshold = MODELLING["score_threshold"],
+        min_orders_guardrail = MODELLING["min_orders_guardrail"],
+        min_months_guardrail = MODELLING["min_months_guardrail"],
+        high_spend_guardrail = MODELLING["high_spend_guardrail"],
+        top_k_per_buyer = MODELLING["top_k_per_buyer"],
+    shell:
+        "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
+        "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
+        "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
+        "--top-k-per-buyer {params.top_k_per_buyer}"
 
 rule write_submission:
     """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/11_submission/submission_baseline.csv' to run."""
@@ -333,11 +352,11 @@ rule generate_candidates_offline:
     params:
         train_end = MODELLING["train_end"],
         lookback_months = MODELLING["lookback_months"],
-        min_spend_singleton = MODELLING["min_spend_singleton"],
+        min_order_frequency = MODELLING["min_order_frequency"],
     shell:
         "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
         "--output {output.candidates_raw} --train-end {params.train_end} "
-        "--lookback-months {params.lookback_months} --min-spend-singleton {params.min_spend_singleton}"
+        "--lookback-months {params.lookback_months} --min-order-frequency {params.min_order_frequency}"
 
 rule engineer_features_offline:
     """Feature engineering for offline pipeline."""
@@ -383,7 +402,7 @@ rule feature_selection_offline:
         "--output {output.features_selected}"
 
 rule train_baseline_offline:
-    """Baseline scorer for offline pipeline (same as train_baseline, different input/output)."""
+    """Baseline scorer for offline pipeline (optional/diagnostic)."""
     input:
         candidates = FEATURES_SELECTED_OFFLINE_PARQUET,
         plis = PLIS_TRAINING_SPLIT,
@@ -405,10 +424,30 @@ rule train_baseline_offline:
         "--n-min-label {params.n_min_label} --alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
 
-rule select_portfolio_offline:
-    """Select portfolio for offline pipeline."""
+rule train_lgbm_offline:
+    """Two-stage LightGBM for offline pipeline; outputs scores_lgbm.parquet."""
     input:
-        scores = SCORES_OFFLINE_PARQUET,
+        candidates = FEATURES_SELECTED_OFFLINE_PARQUET,
+        plis = PLIS_TRAINING_SPLIT,
+    output:
+        scores = SCORES_LGBM_OFFLINE_PARQUET,
+    params:
+        val_start = MODELLING["val_start"],
+        val_end = MODELLING["val_end"],
+        n_min_label = MODELLING["n_min_label"],
+        savings_rate = SCORING_PARAMS["savings_rate"],
+        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
+        val_months = MODELLING["val_months"],
+    shell:
+        "uv run src/train_lgbm.py --candidates {input.candidates} --plis {input.plis} "
+        "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
+        "--n-min-label {params.n_min_label} "
+        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
+
+rule select_portfolio_offline:
+    """Select portfolio for offline pipeline (default: two-stage LGBM EU scores)."""
+    input:
+        scores = SCORES_LGBM_OFFLINE_PARQUET,
     output:
         portfolio = PORTFOLIO_OFFLINE_PARQUET,
     params:

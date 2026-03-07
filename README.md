@@ -11,7 +11,7 @@ uv sync
 uv run snakemake --cores 1
 ```
 
-That command runs the default `all` target in `Snakefile`.
+That command runs the default `all` target in `Snakefile`. The default modelling path uses the two-stage EU model (recurrence classifier + value regressor) and candidate set/selection policy described in `docs/modelling.md`.
 
 To force generate everything, run 
 ```bash
@@ -63,3 +63,7 @@ uv run src/submit.py --challenge 2 --file data/11_submission/online/submission.c
 ```
 
 Set `portal_credentials.team` and `portal_credentials.password` in `config.yaml`; the script logs in to the evaluator portal, uploads the file, and waits for the scoring result.
+
+## Troubleshooting
+
+- **LightGBM / libomp on macOS:** If `train_lgbm` fails with `Library not loaded: @rpath/libomp.dylib`, install OpenMP: `brew install libomp`.

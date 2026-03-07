@@ -2,9 +2,11 @@
 Candidate generation for Level 1 (E-Class) core demand.
 
 Reads split plis_training and customer metadata; restricts to warm buyers
-(task == predict future or testing). Applies lookback window and singleton filter.
-Output: one row per (legal_entity_id, eclass) with base columns needed for
-feature engineering (no derived features). Orderdates stored as list of "YYYY-MM" strings.
+(task == predict future or testing). Builds candidate set per docs/modelling.md:
+C_b = { e in history(b) | n_orders(b,e,L) >= eta }, i.e. eclasses from buyer
+history with at least eta orders in the lookback window L.
+Output: one row per (legal_entity_id, eclass) with base columns for feature
+engineering. Orderdates stored as list of "YYYY-MM" strings.
 """
 
 from __future__ import annotations
@@ -53,14 +55,14 @@ def main() -> None:
         type=int,
         default=18,
         dest="lookback_months",
-        help="Months of lookback for candidate recency (default: 18).",
+        help="Lookback window L in months (default: 18).",
     )
     parser.add_argument(
-        "--min-spend-singleton",
-        type=float,
-        default=50.0,
-        dest="min_spend_singleton",
-        help="Drop singleton eclass with total spend below this (default: 50).",
+        "--min-order-frequency",
+        type=int,
+        default=1,
+        dest="min_order_frequency",
+        help="Minimum orders of eclass by buyer in lookback window (eta; default: 1).",
     )
     args = parser.parse_args()
 
@@ -69,7 +71,7 @@ def main() -> None:
     out_path = Path(args.output)
     train_end = pd.Timestamp(args.train_end)
     lookback_months = args.lookback_months
-    min_spend_singleton = args.min_spend_singleton
+    eta = args.min_order_frequency
 
     plis = _read_plis(plis_path)
     plis["orderdate"] = pd.to_datetime(plis["orderdate"], format="%Y-%m-%d")
@@ -95,7 +97,19 @@ def main() -> None:
     plis_train = plis_train[plis_train["legal_entity_id"].isin(warm_ids)]
 
     t_min = train_end - pd.DateOffset(months=lookback_months)
+    plis_lookback = plis_train[plis_train["orderdate"] >= t_min].copy()
 
+    # n_orders(b,e,L) = count of orders in lookback window; keep (b,e) with count >= eta
+    n_orders_in_L = (
+        plis_lookback.groupby(["legal_entity_id", "eclass"])
+        .size()
+        .reset_index(name="n_orders_in_L")
+    )
+    eligible = n_orders_in_L[n_orders_in_L["n_orders_in_L"] >= eta][
+        ["legal_entity_id", "eclass"]
+    ].drop_duplicates()
+
+    # Full train-period aggregates for feature engineering
     agg = (
         plis_train.groupby(["legal_entity_id", "eclass"])
         .agg(
@@ -107,14 +121,8 @@ def main() -> None:
         )
         .reset_index()
     )
-
     agg["t_last"] = agg["orderdate_max"]
-    candidates = agg[agg["t_last"] >= t_min].copy()
-
-    drop_singleton = (candidates["n_orders"] == 1) & (
-        candidates["s_total"] < min_spend_singleton
-    )
-    candidates = candidates[~drop_singleton].copy()
+    candidates = agg.merge(eligible, on=["legal_entity_id", "eclass"], how="inner")
 
     # Store orderdates as list of "YYYY-MM" for parquet-safe serialization
     candidates["orderdates_str"] = candidates["orderdates"].apply(

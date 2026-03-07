@@ -40,7 +40,7 @@ modelling:
   val_end: "2025-06-30"
   n_min_label: 1
   lookback_months: 18
-  min_spend_singleton: 50.0
+  min_order_frequency: 1
   alpha: 1.0
   beta: 1.0
   gamma: 0.5
@@ -60,6 +60,7 @@ modelling:
   features_all_offline_parquet: "data/07_features/offline/features_all.parquet"
   features_selected_offline_parquet: "data/07_features/offline/features_selected.parquet"
   scores_offline_parquet: "data/09_predictions/offline/scores.parquet"
+  scores_lgbm_offline_parquet: "data/09_predictions/offline/scores_lgbm.parquet"
   portfolio_offline_parquet: "data/10_portfolio/offline/portfolio.parquet"
   submission_offline_csv: "data/11_submission/offline/submission.csv"
   selected_features:

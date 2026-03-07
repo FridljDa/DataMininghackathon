@@ -170,13 +170,18 @@ rule feature_analysis:
     """Summary statistics and informativeness plots for all engineered features."""
     input:
         features_all = FEATURES_ALL_PARQUET,
+        plis = PLIS_TRAINING_SPLIT,
     output:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_CSV,
         distributions_plot = f"{FEATURE_ANALYSIS_DIR}/online/feature_distributions.png",
         correlations_plot = f"{FEATURE_ANALYSIS_DIR}/online/feature_correlations.png",
+        value_by_period_plot = f"{FEATURE_ANALYSIS_DIR}/online/purchase_value_by_period.png",
+        quantity_by_period_plot = f"{FEATURE_ANALYSIS_DIR}/online/purchase_quantity_by_period.png",
     shell:
         "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
-        "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot}"
+        "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot} "
+        "--plis {input.plis} --value-by-period-plot {output.value_by_period_plot} "
+        "--quantity-by-period-plot {output.quantity_by_period_plot}"
 
 rule feature_selection:
     """Keep keys + config-driven selected features for downstream modelling."""
@@ -352,13 +357,18 @@ rule feature_analysis_offline:
     """Feature analysis for offline feature set."""
     input:
         features_all = FEATURES_ALL_OFFLINE_PARQUET,
+        plis = PLIS_TRAINING_SPLIT,
     output:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV,
         distributions_plot = f"{FEATURE_ANALYSIS_DIR}/offline/feature_distributions.png",
         correlations_plot = f"{FEATURE_ANALYSIS_DIR}/offline/feature_correlations.png",
+        value_by_period_plot = f"{FEATURE_ANALYSIS_DIR}/offline/purchase_value_by_period.png",
+        quantity_by_period_plot = f"{FEATURE_ANALYSIS_DIR}/offline/purchase_quantity_by_period.png",
     shell:
         "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
-        "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot}"
+        "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot} "
+        "--plis {input.plis} --value-by-period-plot {output.value_by_period_plot} "
+        "--quantity-by-period-plot {output.quantity_by_period_plot}"
 
 rule feature_selection_offline:
     """Config-driven feature selection for offline pipeline."""

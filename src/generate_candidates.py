@@ -126,7 +126,7 @@ def main() -> None:
         plis_train.groupby(["legal_entity_id", "eclass"])
         .agg(
             n_orders=("_spend", "count"),
-            s_total=("_spend", "sum"),
+            historical_purchase_value_total=("_spend", "sum"),
             orderdate_min=("orderdate", "min"),
             orderdate_max=("orderdate", "max"),
             orderdates=("orderdate", lambda x: x.dt.to_period("M").unique().tolist()),
@@ -146,7 +146,7 @@ def main() -> None:
         "legal_entity_id",
         "eclass",
         "n_orders",
-        "s_total",
+        "historical_purchase_value_total",
         "orderdate_min",
         "orderdate_max",
         "t_last",

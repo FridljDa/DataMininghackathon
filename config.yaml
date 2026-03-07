@@ -73,8 +73,8 @@ modelling:
     - sigma_gap
     - mu_gap
     - CV_gap
-    - s_total
-    - s_total_sqrt
+    - historical_purchase_value_total
+    - historical_purchase_value_sqrt
     - s_median_line
     - w_e_b
     - delta_trend
@@ -109,13 +109,9 @@ feature_analysis:
   plot_files:
     - online/feature_distributions.png
     - online/feature_correlations.png
-    - online/purchase_value_by_period.png
-    - online/purchase_quantity_by_period.png
   plot_files_offline:
     - offline/feature_distributions.png
     - offline/feature_correlations.png
-    - offline/purchase_value_by_period.png
-    - offline/purchase_quantity_by_period.png
 
 plots:
   dir: "data/06_plots"

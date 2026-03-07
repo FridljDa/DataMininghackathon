@@ -195,20 +195,15 @@ rule feature_analysis:
     """Summary statistics and informativeness plots for all engineered features."""
     input:
         features_all = FEATURES_ALL_PATTERN,
-        plis = PLIS_TRAINING_SPLIT,
     output:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_PATTERN,
         distributions_plot = "data/09_feature_analysis/{mode}/feature_distributions.png",
         correlations_plot = "data/09_feature_analysis/{mode}/feature_correlations.png",
-        value_by_period_plot = "data/09_feature_analysis/{mode}/purchase_value_by_period.png",
-        quantity_by_period_plot = "data/09_feature_analysis/{mode}/purchase_quantity_by_period.png",
     wildcard_constraints:
         mode = MODE_RE,
     shell:
         "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
-        "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot} "
-        "--plis {input.plis} --value-by-period-plot {output.value_by_period_plot} "
-        "--quantity-by-period-plot {output.quantity_by_period_plot}"
+        "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot}"
 
 rule feature_selection:
     """Keep keys + config-driven selected features for downstream modelling (post feature_analysis)."""

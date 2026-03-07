@@ -2,7 +2,7 @@
 Selection policy: threshold, evidence guardrails, per-buyer cap K.
 
 Reads scores.parquet; keeps pairs with score_base > threshold that pass at least
-one guardrail (n_orders >= X or m_active >= Y or s_total >= tau_high); caps at
+one guardrail (n_orders >= X or m_active >= Y or historical_purchase_value_total >= tau_high); caps at
 top K per buyer by score_base. Outputs portfolio.parquet (legal_entity_id, eclass).
 """
 
@@ -44,7 +44,7 @@ def main() -> None:
         type=float,
         default=500.0,
         dest="high_spend_guardrail",
-        help="Pass guardrail if s_total >= this (default: 500).",
+        help="Pass guardrail if historical_purchase_value_total >= this (default: 500).",
     )
     parser.add_argument(
         "--top-k-per-buyer",
@@ -59,18 +59,18 @@ def main() -> None:
     out_path = Path(args.output)
 
     df = pd.read_parquet(scores_path)
-    for col in ("legal_entity_id", "eclass", "score_base", "n_orders", "m_active", "s_total"):
+    for col in ("legal_entity_id", "eclass", "score_base", "n_orders", "m_active", "historical_purchase_value_total"):
         if col not in df.columns:
             raise ValueError(f"scores must contain '{col}'. Got: {list(df.columns)}")
 
     # Threshold
     df = df[df["score_base"] > args.score_threshold].copy()
 
-    # Guardrail: at least one of n_orders >= X, m_active >= Y, s_total >= tau_high
+    # Guardrail: at least one of n_orders >= X, m_active >= Y, historical_purchase_value_total >= tau_high
     guard = (
         (df["n_orders"] >= args.min_orders_guardrail)
         | (df["m_active"] >= args.min_months_guardrail)
-        | (df["s_total"] >= args.high_spend_guardrail)
+        | (df["historical_purchase_value_total"] >= args.high_spend_guardrail)
     )
     df = df[guard].copy()
 

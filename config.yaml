@@ -76,9 +76,9 @@ modelling:
     - nace_code
 
 feature_analysis:
-  dir: "data/06_plots/features"
-  summary_csv: "data/06_plots/features/feature_summary.csv"
-  summary_offline_csv: "data/06_plots/features/feature_summary_offline.csv"
+  dir: "data/07_feature_analysis"
+  summary_csv: "data/07_feature_analysis/feature_summary.csv"
+  summary_offline_csv: "data/07_feature_analysis/feature_summary_offline.csv"
   plot_files:
     - feature_distributions.png
     - feature_correlations.png

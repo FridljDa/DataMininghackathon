@@ -15,6 +15,7 @@ That command runs the default `all` target in `Snakefile` and produces:
 
 - `data/03_meta/customer.csv`
 - `data/06_plots/` (EDA: seasonal volume, violin by task, task distribution, cs/task heatmap, NACE by task)
+- `data/07_feature_analysis/` (feature summary CSVs and distribution/correlation plots)
 - `data/10_submission/submission.csv`
 
 ## Notes

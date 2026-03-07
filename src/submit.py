@@ -153,6 +153,9 @@ def _write_summary_csv(path: Path, row: dict[str, float | int | None], submissio
 
 LOGIN_MAX_ATTEMPTS = 3
 LOGIN_BACKOFF_SEC = 2
+SUBMIT_MAX_ATTEMPTS = 8
+SUBMIT_RETRY_WAIT_SEC = 10
+SUBMIT_BUTTON_ENABLE_TIMEOUT_MS = 90_000
 
 
 def _login_attempt(page, team: str, password: str) -> bool:
@@ -258,31 +261,85 @@ def submit(
 
     # Submit and wait for the API response using expect_response.
     print("⏳ Submitting…")
-    with page.expect_response(
-        lambda r: r.url.endswith("/api/submit") and r.request.method == "POST",
-        timeout=30_000,
-    ) as response_info:
-        page.locator("button[type=submit]").click()
-
-    response = response_info.value
-    try:
-        submission_result = response.json()
-    except (ValueError, TypeError, AttributeError) as exc:
-        print("✗ Failed to parse submission API response as JSON:", exc)
+    for attempt in range(1, SUBMIT_MAX_ATTEMPTS + 1):
         try:
-            status = getattr(response, "status", None)
-            if status is not None:
-                print("  HTTP status:", status)
-            body_preview = response.text()
-            if len(body_preview) > 300:
-                body_preview = body_preview[:300] + "…"
-            print("  Response text (truncated):", body_preview)
-        except Exception as inner_exc:
-            print("  Additionally failed to read raw response text:", inner_exc)
-        return None, None
+            page.wait_for_function(
+                """() => {
+                    const btn = document.querySelector("button[type='submit']");
+                    return !!btn && !btn.disabled;
+                }""",
+                timeout=SUBMIT_BUTTON_ENABLE_TIMEOUT_MS,
+            )
+        except PlaywrightTimeout:
+            if attempt >= SUBMIT_MAX_ATTEMPTS:
+                print(
+                    "✗ Submit button stayed disabled too long "
+                    f"(tried {SUBMIT_MAX_ATTEMPTS} times)."
+                )
+                return None, None
+            print(
+                "⚠ Submit button still disabled; waiting "
+                f"{SUBMIT_RETRY_WAIT_SEC}s before retry {attempt + 1}/{SUBMIT_MAX_ATTEMPTS}…"
+            )
+            time.sleep(SUBMIT_RETRY_WAIT_SEC)
+            continue
 
-    if not submission_result.get("success"):
+        response = None
+        try:
+            with page.expect_response(
+                lambda r: r.url.endswith("/api/submit") and r.request.method == "POST",
+                timeout=30_000,
+            ) as response_info:
+                page.locator("button[type=submit]").click()
+            response = response_info.value
+        except PlaywrightTimeout:
+            if attempt >= SUBMIT_MAX_ATTEMPTS:
+                print("✗ Timed out while trying to submit after retries.")
+                return None, None
+            print(
+                "⚠ Timed out waiting for submit response; "
+                f"retrying in {SUBMIT_RETRY_WAIT_SEC}s ({attempt + 1}/{SUBMIT_MAX_ATTEMPTS})…"
+            )
+            time.sleep(SUBMIT_RETRY_WAIT_SEC)
+            continue
+
+        try:
+            submission_result = response.json()
+        except (ValueError, TypeError, AttributeError) as exc:
+            print("✗ Failed to parse submission API response as JSON:", exc)
+            try:
+                status = getattr(response, "status", None)
+                if status is not None:
+                    print("  HTTP status:", status)
+                body_preview = response.text()
+                if len(body_preview) > 300:
+                    body_preview = body_preview[:300] + "…"
+                print("  Response text (truncated):", body_preview)
+            except Exception as inner_exc:
+                print("  Additionally failed to read raw response text:", inner_exc)
+            return None, None
+
+        if submission_result.get("success"):
+            break
+
+        err_msg = str(submission_result.get("error") or "").lower()
+        portal_busy = (
+            "hold your horses" in err_msg
+            or "still being evaluated" in err_msg
+            or "check back in a bit" in err_msg
+        )
+        if portal_busy and attempt < SUBMIT_MAX_ATTEMPTS:
+            print(
+                "⚠ Portal reports previous submission is still evaluating; "
+                f"retrying in {SUBMIT_RETRY_WAIT_SEC}s ({attempt + 1}/{SUBMIT_MAX_ATTEMPTS})…"
+            )
+            time.sleep(SUBMIT_RETRY_WAIT_SEC)
+            continue
+
         print("✗ Submission API did not confirm success:", submission_result)
+        return None, None
+    else:
+        print("✗ Submission did not succeed after retries.")
         return None, None
 
     submission = submission_result.get("submission")

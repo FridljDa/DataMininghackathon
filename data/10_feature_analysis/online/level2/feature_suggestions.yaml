@@ -71,9 +71,9 @@ meta:
     reason: redundant with active_year_span
   - feature: m_active
     reason: redundant with active_year_span
-  - feature: n_orders_in_lookback
-    reason: redundant with active_year_span
   - feature: n_orders
+    reason: redundant with active_year_span
+  - feature: n_orders_in_lookback
     reason: redundant with active_year_span
   - feature: rho_freq
     reason: redundant with active_year_span
@@ -87,17 +87,15 @@ meta:
     reason: redundant with years_since_last_order
   - feature: days_since_last
     reason: redundant with years_since_last_order
-  - feature: n_distinct_manufacturers
-    reason: redundant with top_manufacturer_share
   - feature: w_e_b
     reason: redundant with avg_monthly_spend_pair_tenure
   - feature: avg_monthly_spend_buyer_tenure
     reason: redundant with avg_monthly_spend_pair_tenure
   - feature: avg_monthly_spend_in_lookback
     reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: historical_purchase_value_total
-    reason: redundant with avg_monthly_spend_pair_tenure
   - feature: lookback_spend
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: historical_purchase_value_total
     reason: redundant with avg_monthly_spend_pair_tenure
   - feature: historical_purchase_value_sqrt
     reason: redundant with avg_monthly_spend_pair_tenure
@@ -105,6 +103,8 @@ meta:
     reason: redundant with avg_monthly_spend_pair_tenure
   - feature: s_median_line
     reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: n_distinct_manufacturers
+    reason: redundant with top_manufacturer_share
   - feature: pair_tenure_months
     reason: redundant with first_order_year
   - feature: effective_lookback_months

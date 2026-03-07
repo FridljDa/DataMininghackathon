@@ -64,9 +64,9 @@ meta:
     reason: redundant with active_year_span
   - feature: m_observed
     reason: redundant with active_year_span
-  - feature: avg_monthly_orders_in_lookback
-    reason: redundant with active_year_span
   - feature: avg_monthly_orders_buyer_tenure
+    reason: redundant with active_year_span
+  - feature: avg_monthly_orders_in_lookback
     reason: redundant with active_year_span
   - feature: m_active
     reason: redundant with active_year_span
@@ -102,9 +102,9 @@ meta:
     reason: redundant with last_order_year
   - feature: days_since_last
     reason: redundant with last_order_year
+  - feature: pair_tenure_months
+    reason: redundant with first_order_year
   - feature: n_distinct_manufacturers
     reason: redundant with top_manufacturer_share
   - feature: buyer_tenure_months
     reason: redundant with effective_lookback_months
-  - feature: pair_tenure_months
-    reason: redundant with first_order_year

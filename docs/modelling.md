@@ -156,6 +156,14 @@ For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{warm}} $ and 
 ### Trend features
 - $ \Delta_{\text{trend}} = m_{\text{active, last 3mo}} - m_{\text{active, prior 6mo}}/2 $: recent activity change
 
+### Explicit year features
+- `first_order_year`: calendar year of earliest observed order month for $ (b, e) $
+- `last_order_year`: calendar year of latest observed order month
+- `years_since_last_order`: train-end year minus `last_order_year`
+- `active_year_span`: inclusive number of calendar years between first and last order (last_order_year − first_order_year + 1)
+
+All year deltas and spans are computed from train-period history only (no future leakage).
+
 ### Buyer context (static)
 - $ \log(\text{employees} + 1) $
 - NACE 2-digit code (categorical)

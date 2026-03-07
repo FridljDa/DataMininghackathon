@@ -216,6 +216,29 @@ def main() -> None:
         lambda x: _active_month_share_12m(x, end_period)
     )
 
+    # Explicit year features (relative to train_end)
+    def _first_last_year(periods: list) -> tuple[float, float]:
+        if not periods:
+            return np.nan, np.nan
+        first = min(periods).year
+        last = max(periods).year
+        return float(first), float(last)
+
+    year_results = list(zip(*candidates["orderdates"].map(_first_last_year)))
+    candidates["first_order_year"] = year_results[0]
+    candidates["last_order_year"] = year_results[1]
+    train_year = end_period.year
+    candidates["years_since_last_order"] = np.where(
+        candidates["last_order_year"].notna(),
+        train_year - candidates["last_order_year"],
+        np.nan,
+    )
+    candidates["active_year_span"] = np.where(
+        candidates["first_order_year"].notna() & candidates["last_order_year"].notna(),
+        (candidates["last_order_year"] - candidates["first_order_year"]).astype(int) + 1,
+        np.nan,
+    )
+
     candidates["recency_to_gap_ratio"] = np.where(
         (candidates["mu_gap"] > 0) & candidates["mu_gap"].notna(),
         candidates["delta_recency"] / candidates["mu_gap"],
@@ -303,6 +326,10 @@ def main() -> None:
         "recent_6m_count",
         "recent_3_over_6",
         "active_month_share_12m",
+        "first_order_year",
+        "last_order_year",
+        "years_since_last_order",
+        "active_year_span",
         "recency_to_gap_ratio",
         "delta_vs_expected_gap",
         "is_overdue",

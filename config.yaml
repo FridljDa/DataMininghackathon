@@ -87,6 +87,10 @@ modelling:
     - recent_6m_count
     - recent_3_over_6
     - active_month_share_12m
+    - first_order_year
+    - last_order_year
+    - years_since_last_order
+    - active_year_span
     - recency_to_gap_ratio
     - delta_vs_expected_gap
     - is_overdue

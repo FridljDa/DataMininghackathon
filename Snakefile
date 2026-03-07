@@ -35,14 +35,25 @@ PLOT_FILES = PLOTS["files"]
 PLOT_OUTPUTS = expand(f"{PLOTS_DIR}/{{f}}", f=PLOT_FILES)
 
 MODELLING = config["modelling"]
-CANDIDATES_PARQUET = MODELLING["candidates_parquet"]
+CANDIDATES_RAW_PARQUET = MODELLING["candidates_raw_parquet"]
+FEATURES_ALL_PARQUET = MODELLING["features_all_parquet"]
+FEATURES_SELECTED_PARQUET = MODELLING["features_selected_parquet"]
 SCORES_PARQUET = MODELLING["scores_parquet"]
 SCORES_LGBM_PARQUET = MODELLING["scores_lgbm_parquet"]
 PORTFOLIO_PARQUET = MODELLING["portfolio_parquet"]
-CANDIDATES_OFFLINE_PARQUET = MODELLING["candidates_offline_parquet"]
+CANDIDATES_RAW_OFFLINE_PARQUET = MODELLING["candidates_raw_offline_parquet"]
+FEATURES_ALL_OFFLINE_PARQUET = MODELLING["features_all_offline_parquet"]
+FEATURES_SELECTED_OFFLINE_PARQUET = MODELLING["features_selected_offline_parquet"]
 SCORES_OFFLINE_PARQUET = MODELLING["scores_offline_parquet"]
 PORTFOLIO_OFFLINE_PARQUET = MODELLING["portfolio_offline_parquet"]
 SUBMISSION_OFFLINE_CSV = MODELLING["submission_offline_csv"]
+
+FEATURE_ANALYSIS = config["feature_analysis"]
+FEATURE_ANALYSIS_DIR = FEATURE_ANALYSIS["dir"]
+FEATURE_ANALYSIS_SUMMARY_CSV = FEATURE_ANALYSIS["summary_csv"]
+FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV = FEATURE_ANALYSIS["summary_offline_csv"]
+FEATURE_ANALYSIS_PLOTS = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS["plot_files"])
+FEATURE_ANALYSIS_PLOTS_OFFLINE = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS["plot_files_offline"])
 
 rule all:
     input:
@@ -50,8 +61,13 @@ rule all:
         SUBMISSION_CSV,
         CUSTOMER_META_CSV,
         PLOT_OUTPUTS,
+        FEATURE_ANALYSIS_SUMMARY_CSV,
+        FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV,
+        FEATURE_ANALYSIS_PLOTS,
+        FEATURE_ANALYSIS_PLOTS_OFFLINE,
         SCORE_SUMMARY,
         SCORE_DETAILS,
+
 rule generate_dag_graph:
     """Write workflow DAG as SVG (no input dependencies; run first)."""
     output:
@@ -114,27 +130,64 @@ rule split_plis_training_validation:
         "uv run src/split_plis_training_validation.py --input {input.plis} --customer-meta {input.customer} "
         "--train {output.train} --test {output.test} --cutoff-date {params.cutoff}"
 
-#TODO split up in 2 rules (Candidate generation and feature engineering)
-rule build_features:
-    """Candidate generation and feature engineering for Level 1 (warm buyers, E-Class)."""
+rule generate_candidates:
+    """Candidate generation for Level 1 (warm buyers, E-Class): lookback + singleton filter."""
     input:
         plis = PLIS_TRAINING_SPLIT,
         customer = CUSTOMER_META_CSV,
     output:
-        candidates = CANDIDATES_PARQUET,
+        candidates_raw = CANDIDATES_RAW_PARQUET,
     params:
         train_end = MODELLING["train_end"],
         lookback_months = MODELLING["lookback_months"],
         min_spend_singleton = MODELLING["min_spend_singleton"],
     shell:
-        "uv run src/build_features.py --plis {input.plis} --customer {input.customer} "
-        "--output {output.candidates} --train-end {params.train_end} "
+        "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
+        "--output {output.candidates_raw} --train-end {params.train_end} "
         "--lookback-months {params.lookback_months} --min-spend-singleton {params.min_spend_singleton}"
+
+rule engineer_features:
+    """Feature engineering from raw candidates: all modelling features."""
+    input:
+        candidates_raw = CANDIDATES_RAW_PARQUET,
+        plis = PLIS_TRAINING_SPLIT,
+        customer = CUSTOMER_META_CSV,
+    output:
+        features_all = FEATURES_ALL_PARQUET,
+    params:
+        train_end = MODELLING["train_end"],
+    shell:
+        "uv run src/engineer_features.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
+        "--customer {input.customer} --output {output.features_all} --train-end {params.train_end}"
+
+rule feature_analysis:
+    """Summary statistics and informativeness plots for all engineered features."""
+    input:
+        features_all = FEATURES_ALL_PARQUET,
+    output:
+        summary_csv = FEATURE_ANALYSIS_SUMMARY_CSV,
+        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/feature_distributions.png",
+        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/feature_correlations.png",
+    shell:
+        "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
+        "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot}"
+
+rule feature_selection:
+    """Keep keys + config-driven selected features for downstream modelling."""
+    input:
+        features_all = FEATURES_ALL_PARQUET,
+    output:
+        features_selected = FEATURES_SELECTED_PARQUET,
+    params:
+        selected_features = ",".join(MODELLING["selected_features"]),
+    shell:
+        "uv run src/feature_selection.py --features {input.features_all} --selected-features '{params.selected_features}' "
+        "--output {output.features_selected}"
 
 rule train_baseline:
     """Baseline scorer and validation labels; outputs scores.parquet."""
     input:
-        candidates = CANDIDATES_PARQUET,
+        candidates = FEATURES_SELECTED_PARQUET,
         plis = PLIS_TRAINING_SPLIT,
     output:
         scores = SCORES_PARQUET,
@@ -157,7 +210,7 @@ rule train_baseline:
 rule train_lgbm:
     """Two-stage LightGBM (recurrence classifier + value regressor); outputs scores_lgbm.parquet."""
     input:
-        candidates = CANDIDATES_PARQUET,
+        candidates = FEATURES_SELECTED_PARQUET,
         plis = PLIS_TRAINING_SPLIT,
     output:
         scores = SCORES_LGBM_PARQUET,
@@ -234,28 +287,65 @@ rule score_submission:
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
         "--scoring-months {params.scoring_months}"
 
-#TODO understand difference between offline and not offline. maybe move to dedicated directories?
 # --- Offline scoring: predict for testing buyers only, score with Level-1 (eclass) matching ---
-rule build_features_offline:
-    """Build candidates including task=testing buyers (for offline holdout evaluation)."""
+rule generate_candidates_offline:
+    """Candidate generation for offline pipeline (task=testing buyers included)."""
     input:
         plis = PLIS_TRAINING_SPLIT,
         customer = SPLIT_CUSTOMER_CSV,
     output:
-        candidates = CANDIDATES_OFFLINE_PARQUET,
+        candidates_raw = CANDIDATES_RAW_OFFLINE_PARQUET,
     params:
         train_end = MODELLING["train_end"],
         lookback_months = MODELLING["lookback_months"],
         min_spend_singleton = MODELLING["min_spend_singleton"],
     shell:
-        "uv run src/build_features.py --plis {input.plis} --customer {input.customer} "
-        "--output {output.candidates} --train-end {params.train_end} "
+        "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
+        "--output {output.candidates_raw} --train-end {params.train_end} "
         "--lookback-months {params.lookback_months} --min-spend-singleton {params.min_spend_singleton}"
+
+rule engineer_features_offline:
+    """Feature engineering for offline pipeline."""
+    input:
+        candidates_raw = CANDIDATES_RAW_OFFLINE_PARQUET,
+        plis = PLIS_TRAINING_SPLIT,
+        customer = SPLIT_CUSTOMER_CSV,
+    output:
+        features_all = FEATURES_ALL_OFFLINE_PARQUET,
+    params:
+        train_end = MODELLING["train_end"],
+    shell:
+        "uv run src/engineer_features.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
+        "--customer {input.customer} --output {output.features_all} --train-end {params.train_end}"
+
+rule feature_analysis_offline:
+    """Feature analysis for offline feature set."""
+    input:
+        features_all = FEATURES_ALL_OFFLINE_PARQUET,
+    output:
+        summary_csv = FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV,
+        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/feature_distributions_offline.png",
+        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/feature_correlations_offline.png",
+    shell:
+        "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
+        "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot}"
+
+rule feature_selection_offline:
+    """Config-driven feature selection for offline pipeline."""
+    input:
+        features_all = FEATURES_ALL_OFFLINE_PARQUET,
+    output:
+        features_selected = FEATURES_SELECTED_OFFLINE_PARQUET,
+    params:
+        selected_features = ",".join(MODELLING["selected_features"]),
+    shell:
+        "uv run src/feature_selection.py --features {input.features_all} --selected-features '{params.selected_features}' "
+        "--output {output.features_selected}"
 
 rule train_baseline_offline:
     """Baseline scorer for offline pipeline (same as train_baseline, different input/output)."""
     input:
-        candidates = CANDIDATES_OFFLINE_PARQUET,
+        candidates = FEATURES_SELECTED_OFFLINE_PARQUET,
         plis = PLIS_TRAINING_SPLIT,
     output:
         scores = SCORES_OFFLINE_PARQUET,

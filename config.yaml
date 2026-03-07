@@ -44,14 +44,46 @@ modelling:
   high_spend_guardrail: 500.0
   top_k_per_buyer: 15
   val_months: 6.0
-  candidates_parquet: "data/05_features/candidates.parquet"
+  candidates_raw_parquet: "data/05_features/candidates_raw.parquet"
+  features_all_parquet: "data/05_features/features_all.parquet"
+  features_selected_parquet: "data/05_features/features_selected.parquet"
   scores_parquet: "data/06_predictions/scores.parquet"
   scores_lgbm_parquet: "data/06_predictions/scores_lgbm.parquet"
   portfolio_parquet: "data/07_portfolio/portfolio.parquet"
-  candidates_offline_parquet: "data/05_features/candidates_offline.parquet"
+  candidates_raw_offline_parquet: "data/05_features/candidates_raw_offline.parquet"
+  features_all_offline_parquet: "data/05_features/features_all_offline.parquet"
+  features_selected_offline_parquet: "data/05_features/features_selected_offline.parquet"
   scores_offline_parquet: "data/06_predictions/scores_offline.parquet"
   portfolio_offline_parquet: "data/07_portfolio/portfolio_offline.parquet"
   submission_offline_csv: "data/10_submission/submission_offline.csv"
+  selected_features:
+    - n_orders
+    - m_active
+    - m_observed
+    - rho_freq
+    - delta_recency
+    - sigma_gap
+    - mu_gap
+    - CV_gap
+    - s_total
+    - s_total_sqrt
+    - s_median_line
+    - w_e_b
+    - delta_trend
+    - log_employees
+    - nace_2
+    - nace_code
+
+feature_analysis:
+  dir: "data/04_plots/features"
+  summary_csv: "data/04_plots/features/feature_summary.csv"
+  summary_offline_csv: "data/04_plots/features/feature_summary_offline.csv"
+  plot_files:
+    - feature_distributions.png
+    - feature_correlations.png
+  plot_files_offline:
+    - feature_distributions_offline.png
+    - feature_correlations_offline.png
 
 plots:
   dir: "data/04_plots"

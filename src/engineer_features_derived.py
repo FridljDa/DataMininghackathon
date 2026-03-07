@@ -172,6 +172,15 @@ def main() -> None:
         else ("cold_start" if m == 0 else "rich_history")
     )
 
+    # Global eclass popularity (n distinct buyers in training data)
+    eclass_pop = (
+        plis_train.groupby("eclass")["legal_entity_id"]
+        .nunique()
+        .reset_index(name="eclass_n_buyers_global")
+    )
+    df = df.merge(eclass_pop, on="eclass", how="left")
+    df["eclass_n_buyers_global"] = df["eclass_n_buyers_global"].fillna(0)
+
     df["buyer_tenure_months"] = (
         (train_end - df["buyer_first_seen"]).dt.days / 30.44
     ).clip(lower=1)
@@ -212,6 +221,37 @@ def main() -> None:
         .rename(columns={"_spend": "s_median_line"})
     )
     df = df.merge(line_median, on=["legal_entity_id", "eclass"], how="left")
+
+    # Manufacturer concentration per (buyer, eclass)
+    if "manufacturer" in plis.columns:
+        manu = plis.copy()
+        manu["manufacturer"] = manu["manufacturer"].astype(str).str.strip().replace("nan", "")
+        manu = manu[manu["manufacturer"] != ""]
+        if len(manu) > 0:
+            manu_agg = (
+                manu.groupby(["legal_entity_id", "eclass", "manufacturer"], as_index=False)
+                .agg(manu_count=("_spend", "count"))
+            )
+            pair_total = manu_agg.groupby(["legal_entity_id", "eclass"])["manu_count"].transform("sum")
+            manu_agg["manu_share"] = manu_agg["manu_count"] / pair_total
+            top_manu = (
+                manu_agg.sort_values("manu_share", ascending=False)
+                .drop_duplicates(subset=["legal_entity_id", "eclass"], keep="first")
+                [["legal_entity_id", "eclass", "manu_share"]]
+                .rename(columns={"manu_share": "top_manufacturer_share"})
+            )
+            n_manu = (
+                manu_agg.groupby(["legal_entity_id", "eclass"])["manufacturer"]
+                .nunique()
+                .reset_index(name="n_distinct_manufacturers")
+            )
+            df = df.merge(top_manu, on=["legal_entity_id", "eclass"], how="left")
+            df = df.merge(n_manu, on=["legal_entity_id", "eclass"], how="left")
+        df["n_distinct_manufacturers"] = df["n_distinct_manufacturers"].fillna(1) if "n_distinct_manufacturers" in df.columns else 1
+        df["top_manufacturer_share"] = df["top_manufacturer_share"].fillna(1.0) if "top_manufacturer_share" in df.columns else 1.0
+    else:
+        df["n_distinct_manufacturers"] = 1
+        df["top_manufacturer_share"] = 1.0
 
     buyer_total = (
         plis.groupby("legal_entity_id")["_spend"]
@@ -479,6 +519,9 @@ def main() -> None:
         "avg_monthly_spend_pair_tenure",
         "avg_monthly_orders_in_lookback",
         "avg_monthly_spend_in_lookback",
+        "top_manufacturer_share",
+        "n_distinct_manufacturers",
+        "eclass_n_buyers_global",
     ]
 
     df = df[[c for c in out_cols if c in df.columns]]

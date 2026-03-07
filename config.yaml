@@ -150,7 +150,7 @@ modelling:
     # Keep only pairs with EU score above this
     score_threshold: 0.0
     # Max predictions per buyer (hard cap)
-    top_k_per_buyer: 25
+    top_k_per_buyer: 60
     # At least one guardrail must pass for a pair to be included
     guardrails:
       # Pass if n_orders >= this
@@ -183,14 +183,12 @@ modelling:
       - avg_spend_per_order
       - buyer_tenure_months
       - delta_vs_expected_gap
-      - effective_lookback_months
       - first_order_year
       - is_overdue
       - last_order_month_cos
       - last_order_month_sin
       - last_order_quarter_cos
       - last_order_quarter_sin
-      - last_order_year
       - log_employees
       - n_orders
       - historical_purchase_value_total
@@ -203,6 +201,10 @@ modelling:
       - rho_freq
       - secondary_nace_2
       - secondary_nace_code
+      - years_since_last_order
+      - top_manufacturer_share
+      - n_distinct_manufacturers
+      - eclass_n_buyers_global
 
   # Per-approach hyperparameters (output paths: data/11_predictions/{mode}/{approach}/scores.parquet)
   approaches:

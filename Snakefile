@@ -25,6 +25,9 @@ PLIS_TESTING_SPLIT = f"{DATA_DIR}/05_training_validation/plis_testing.csv"
 
 # Score outputs and archive (per mode and approach)
 SCORES_DIR = f"{DATA_DIR}/15_scores"
+SCORES_BEST_DIR = f"{DATA_DIR}/16_scores_best"
+SCORES_BEST_SUMMARY_PATTERN = f"{SCORES_BEST_DIR}/online/level{{level}}/best_run_summary.csv"
+SCORES_BEST_METADATA_PATTERN = f"{SCORES_BEST_DIR}/online/level{{level}}/best_run_metadata.json"
 SCORE_RUN_ARCHIVE = {
     "online_runs_dir": f"{SCORES_DIR}/online/runs",
     "offline_runs_dir": f"{SCORES_DIR}/offline/runs",
@@ -125,13 +128,15 @@ rule all:
         expand(ARCHIVE_SENTINEL_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(SCORE_SUMMARY_LIVE_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
+        expand(SCORES_BEST_SUMMARY_PATTERN, level=ENABLED_LEVELS),
+        expand(SCORES_BEST_METADATA_PATTERN, level=ENABLED_LEVELS),
 
 rule generate_dag_graph:
-    """Write workflow DAG as SVG (no input dependencies; run first)."""
+    """Write high-level workflow graph as SVG (rule-level, not job-level)."""
     output:
         dag = DAG_SVG,
     shell:
-        "mkdir -p $(dirname {output.dag}) && snakemake --dag | dot -Tsvg -o {output.dag}"
+        "mkdir -p $(dirname {output.dag}) && snakemake --rulegraph | dot -Tsvg -o {output.dag}"
 
 rule build_customer_meta:
     """Build customer metadata from plis_training (all unique customers, task from customer_test or none)."""
@@ -366,6 +371,7 @@ rule write_submission_warm:
         portfolio = PORTFOLIO_PATTERN,
         customer = lambda w: MODE_CFG[w.mode]["customer_input"],
         plis = PLIS_TRAINING_SPLIT,
+        nace_codes = INPUTS["nace_codes"],
     output:
         submission = SUBMISSION_PATTERN,
     params:
@@ -379,7 +385,7 @@ rule write_submission_warm:
         shell(
             "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
             "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} "
-            "--level {wildcards.level} --output {output.submission}"
+            "--nace-codes {input.nace_codes} --level {wildcards.level} --output {output.submission}"
         )
 
 
@@ -433,6 +439,26 @@ rule archive_score_run:
     shell:
         "uv run src/archive_score_run.py --summary {input.summary} --details {input.details} "
         "--runs-dir {params.runs_dir} --index-csv {params.index_csv} && touch {output.sentinel}"
+
+rule select_best_score_run:
+    """Pick best online archived run per level by total_score; write to data/16_scores_best/online/level{level}/."""
+    input:
+        lambda w: expand(
+            ARCHIVE_SENTINEL_PATTERN,
+            mode=["online"],
+            approach=ENABLED_APPROACHES,
+            level=[w.level],
+        ),
+    output:
+        summary = SCORES_BEST_SUMMARY_PATTERN,
+        metadata = SCORES_BEST_METADATA_PATTERN,
+    params:
+        scores_dir = f"{SCORES_DIR}/online",
+    wildcard_constraints:
+        level = LEVEL_RE,
+    shell:
+        "uv run src/select_best_score_run.py --scores-dir {params.scores_dir} --level {wildcards.level} "
+        "--summary-csv {output.summary} --metadata-json {output.metadata}"
 
 rule submit_to_portal:
     """Upload online submission to Unite evaluator (challenge 2) per approach and level. Requires portal_credentials in config.yaml."""

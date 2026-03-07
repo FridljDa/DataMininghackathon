@@ -7,7 +7,8 @@ Portfolio has (legal_entity_id, eclass) only; for Level 2, manufacturer is looke
 from plis_training (most frequent per (legal_entity_id, eclass)).
 Warm buyers get their selected items from portfolio; cold-start buyers get
 industry-informed defaults: top-K eclasses (Level 1) or eclass|manufacturer pairs (Level 2)
-per NACE-2 from plis_training, or global default if NACE is missing.
+via NACE hierarchical collaborative filtering (when --nace-codes is set) or simple
+NACE-2 frequency fallback otherwise.
 
 Use --buyer-source customer-test for real submission; use --buyer-source customer-split
 with --customer-split for offline scoring.
@@ -17,10 +18,14 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 
 NACE_TOP_K = 3
+
+# Hierarchy levels for cold-start lookup (most specific first)
+NACE_LEVELS = ("nace_4", "nace_3", "nace_2", "section", "global")
 
 
 def _plis_has_nace(plis_path: Path) -> bool:
@@ -31,6 +36,163 @@ def _plis_has_nace(plis_path: Path) -> bool:
 def _plis_has_manufacturer(plis_path: Path) -> bool:
     cols = pd.read_csv(plis_path, sep="\t", nrows=0).columns.tolist()
     return "manufacturer" in cols
+
+
+def _resolve_nace_hierarchy(nace_codes_df: pd.DataFrame, code: str) -> dict[str, str]:
+    """Return hierarchy keys for a NACE code: nace_4, nace_3, nace_2, section (and global is implicit)."""
+    code = str(code).strip() if code and not pd.isna(code) else ""
+    if not code:
+        return {level: "" for level in NACE_LEVELS}
+    row = nace_codes_df[nace_codes_df["nace_code"].astype(str).str.strip() == code]
+    if len(row) == 0:
+        return {
+            "nace_4": code if len(code) == 4 else "",
+            "nace_3": code[:3] if len(code) >= 3 else "",
+            "nace_2": code[:2] if len(code) >= 2 else "",
+            "section": "",
+            "global": "",
+        }
+    r = row.iloc[0]
+    n2 = str(r["nace_2digits"]).strip() if pd.notna(r["nace_2digits"]) else code[:2]
+    n3 = str(r["nace_3digits"]).strip() if pd.notna(r["nace_3digits"]) else (code[:3] if len(code) >= 3 else "")
+    sect = str(r["toplevel_section"]).strip() if pd.notna(r["toplevel_section"]) else ""
+    n4 = code if len(code) == 4 else ""
+    return {"nace_4": n4, "nace_3": n3, "nace_2": n2, "section": sect, "global": ""}
+
+
+def _build_cold_start_rankings(
+    plis: pd.DataFrame,
+    nace_codes_df: pd.DataFrame,
+    level: int,
+    warm_ids: set[str],
+) -> tuple[dict[tuple[str, str], list[str]], dict[tuple[str, str], list[str]]]:
+    """
+    Build per-NACE-level top-K eclass and cluster rankings from warm-buyer plis.
+    Keys are (level_name, level_value) e.g. ("nace_2", "86"). Score = total_spend * n_buyers.
+    Returns (rankings_eclass, rankings_cluster) for Level 1 and Level 2.
+    """
+    plis_warm = plis[plis["legal_entity_id"].astype(str).isin(warm_ids)].copy()
+    if len(plis_warm) == 0:
+        return {}, {}
+
+    plis_warm["_spend"] = (
+        pd.to_numeric(plis_warm["quantityvalue"], errors="coerce").fillna(0)
+        * pd.to_numeric(plis_warm["vk_per_item"], errors="coerce").fillna(0)
+    )
+    plis_warm = plis_warm[plis_warm["eclass"] != ""]
+    if level == 2 and "manufacturer" in plis_warm.columns:
+        plis_warm["manufacturer"] = plis_warm["manufacturer"].astype(str).str.strip().replace("nan", "")
+        plis_warm = plis_warm[plis_warm["manufacturer"] != ""]
+        plis_warm["cluster"] = plis_warm["eclass"] + "|" + plis_warm["manufacturer"]
+
+    has_nace = "nace_code" in plis_warm.columns
+    if has_nace:
+        plis_warm["nace_code"] = plis_warm["nace_code"].astype(str).str.strip().replace("nan", "")
+        nace_lookup = nace_codes_df[["nace_code", "nace_2digits", "nace_3digits", "toplevel_section"]].copy()
+        nace_lookup["nace_code"] = nace_lookup["nace_code"].astype(str).str.strip()
+        plis_warm = plis_warm.merge(nace_lookup, left_on="nace_code", right_on="nace_code", how="left")
+        plis_warm["nace_2"] = plis_warm["nace_2digits"].fillna(plis_warm["nace_code"].str[:2])
+        plis_warm["nace_3"] = plis_warm["nace_3digits"].fillna(plis_warm["nace_code"].str[:3])
+        plis_warm["nace_4"] = plis_warm["nace_code"].where(plis_warm["nace_code"].str.len() == 4, "")
+        plis_warm["section"] = plis_warm["toplevel_section"].fillna("")
+
+    def agg_and_rank(level_name: Optional[str], value_col: str) -> dict[tuple[str, str], list[str]]:
+        key_cols = [level_name] if level_name and level_name in plis_warm.columns else []
+        rankings: dict[tuple[str, str], list[str]] = {}
+        if not key_cols:
+            # Global ranking
+            agg = (
+                plis_warm.groupby(value_col, dropna=False)
+                .agg(
+                    total_spend=("_spend", "sum"),
+                    n_buyers=("legal_entity_id", "nunique"),
+                )
+                .reset_index()
+            )
+            agg["score"] = agg["total_spend"] * agg["n_buyers"]
+            global_top = agg.nlargest(NACE_TOP_K, "score")[value_col].tolist()
+            if global_top:
+                rankings[("global", "")] = global_top
+            return rankings
+        agg = (
+            plis_warm.groupby(key_cols + [value_col], dropna=False)
+            .agg(
+                total_spend=("_spend", "sum"),
+                n_buyers=("legal_entity_id", "nunique"),
+            )
+            .reset_index()
+        )
+        agg["score"] = agg["total_spend"] * agg["n_buyers"]
+        for grp_key, grp in agg.groupby(key_cols[0]):
+            if grp_key == "" or (isinstance(grp_key, float) and pd.isna(grp_key)):
+                continue
+            level_val = str(grp_key).strip()
+            top = grp.nlargest(NACE_TOP_K, "score")[value_col].tolist()
+            if top and level_name:
+                rankings[(level_name, level_val)] = top
+        return rankings
+
+    rankings_eclass = {}
+    rankings_cluster = {}
+    if has_nace:
+        for level_name in ("nace_4", "nace_3", "nace_2", "section"):
+            if level_name not in plis_warm.columns:
+                continue
+            r_e = agg_and_rank(level_name, "eclass")
+            rankings_eclass.update(r_e)
+            if level == 2 and "cluster" in plis_warm.columns:
+                r_c = agg_and_rank(level_name, "cluster")
+                rankings_cluster.update(r_c)
+    if ("global", "") not in rankings_eclass:
+        rankings_eclass.update(agg_and_rank(None, "eclass"))
+    if level == 2 and ("global", "") not in rankings_cluster and "cluster" in plis_warm.columns:
+        rankings_cluster.update(agg_and_rank(None, "cluster"))
+
+    return rankings_eclass, rankings_cluster
+
+
+def _hierarchical_lookup(
+    nace_code: str,
+    secondary_nace: Optional[str],
+    nace_codes_df: pd.DataFrame,
+    rankings: dict[tuple[str, str], list[str]],
+) -> list[str]:
+    """Return up to NACE_TOP_K unique items by looking up hierarchy (nace_4 -> nace_3 -> nace_2 -> section -> global), then secondary_nace if needed."""
+    if not rankings:
+        return []
+    hierarchy = _resolve_nace_hierarchy(nace_codes_df, nace_code)
+    seen: set[str] = set()
+    for level in NACE_LEVELS:
+        if level == "global":
+            key = ("global", "")
+        else:
+            val = hierarchy.get(level, "")
+            if not val:
+                continue
+            key = (level, val)
+        if key in rankings:
+            for item in rankings[key]:
+                if item and item not in seen:
+                    seen.add(item)
+                    if len(seen) >= NACE_TOP_K:
+                        return list(seen)
+    if len(seen) < NACE_TOP_K and secondary_nace:
+        sec_h = _resolve_nace_hierarchy(nace_codes_df, secondary_nace)
+        for level in NACE_LEVELS:
+            if level == "global":
+                key = ("global", "")
+            else:
+                val = sec_h.get(level, "")
+                if not val:
+                    continue
+                key = (level, val)
+            if key in rankings:
+                for item in rankings[key]:
+                    if item and item not in seen:
+                        seen.add(item)
+                        if len(seen) >= NACE_TOP_K:
+                            return list(seen)
+    return list(seen)
 
 
 def main() -> None:
@@ -59,6 +221,12 @@ def main() -> None:
         required=True,
         dest="plis_training",
         help="Path to plis_training (split) for defaults and Level 2 manufacturer lookup.",
+    )
+    parser.add_argument(
+        "--nace-codes",
+        dest="nace_codes",
+        default=None,
+        help="Path to nace_codes.csv (enables hierarchical NACE fallback for cold-start). If omitted, uses 2-digit NACE frequency fallback.",
     )
     parser.add_argument(
         "--level",
@@ -131,32 +299,67 @@ def main() -> None:
             customers.loc[task_norm == "testing", "legal_entity_id"].unique().tolist()
         )
 
-    # Defaults: global mode + per-NACE-2 top-K by purchase frequency
-    plis_cols = ["eclass"]
-    if _plis_has_nace(plis_path):
-        plis_cols.append("nace_code")
-    if level == 2 and _plis_has_manufacturer(plis_path):
-        plis_cols.append("manufacturer")
-    plis = pd.read_csv(plis_path, sep="\t", usecols=plis_cols, low_memory=False)
-    plis["eclass"] = plis["eclass"].astype(str).str.strip().replace("nan", "")
-    plis = plis[plis["eclass"] != ""]
-    if level == 2 and "manufacturer" in plis.columns:
-        plis["manufacturer"] = plis["manufacturer"].astype(str).str.strip().replace("nan", "")
-        plis = plis[plis["manufacturer"] != ""]
-        plis["cluster"] = plis["eclass"] + "|" + plis["manufacturer"]
-    else:
-        plis["cluster"] = plis["eclass"]
+    task_norm = customers["task"].str.strip().str.lower() if "task" in customers.columns else pd.Series(dtype=object)
+    warm_ids: set[str] = set()
+    if "task" in customers.columns:
+        warm_ids = set(
+            customers.loc[
+                task_norm.isin(["predict future", "testing"]),
+                "legal_entity_id",
+            ]
+            .astype(str)
+            .tolist()
+        )
 
-    default_eclass = plis["eclass"].mode().iloc[0] if len(plis) else ""
+    use_nace_hierarchy = bool(args.nace_codes and Path(args.nace_codes).exists())
+    nace_codes_df = pd.DataFrame()
+    rankings_eclass: dict[tuple[str, str], list[str]] = {}
+    rankings_cluster: dict[tuple[str, str], list[str]] = {}
+    default_eclass = ""
     default_clusters: list[str] = []
-    if level == 2 and "cluster" in plis.columns and plis["cluster"].str.contains(r"\S+\|\S+", regex=True).any():
-        default_clusters = plis["cluster"].value_counts().head(NACE_TOP_K).index.tolist()
+
+    if use_nace_hierarchy:
+        nace_codes_df = pd.read_csv(Path(args.nace_codes), sep="\t", dtype=str, low_memory=False)
+        plis_cols = ["legal_entity_id", "eclass", "quantityvalue", "vk_per_item"]
+        if _plis_has_nace(plis_path):
+            plis_cols.append("nace_code")
+        if level == 2 and _plis_has_manufacturer(plis_path):
+            plis_cols.append("manufacturer")
+        plis_cold = pd.read_csv(plis_path, sep="\t", usecols=plis_cols, low_memory=False)
+        plis_cold["legal_entity_id"] = plis_cold["legal_entity_id"].astype(str)
+        rankings_eclass, rankings_cluster = _build_cold_start_rankings(
+            plis_cold, nace_codes_df, level, warm_ids
+        )
+        if ("global", "") in rankings_eclass and rankings_eclass[("global", "")]:
+            default_eclass = rankings_eclass[("global", "")][0]
+        if level == 2 and ("global", "") in rankings_cluster and rankings_cluster[("global", "")]:
+            default_clusters = rankings_cluster[("global", "")]
+        else:
+            default_clusters = [default_eclass] if default_eclass else []
     else:
-        default_clusters = [default_eclass] if default_eclass else []
+        plis_cols = ["eclass"]
+        if _plis_has_nace(plis_path):
+            plis_cols.append("nace_code")
+        if level == 2 and _plis_has_manufacturer(plis_path):
+            plis_cols.append("manufacturer")
+        plis = pd.read_csv(plis_path, sep="\t", usecols=plis_cols, low_memory=False)
+        plis["eclass"] = plis["eclass"].astype(str).str.strip().replace("nan", "")
+        plis = plis[plis["eclass"] != ""]
+        if level == 2 and "manufacturer" in plis.columns:
+            plis["manufacturer"] = plis["manufacturer"].astype(str).str.strip().replace("nan", "")
+            plis = plis[plis["manufacturer"] != ""]
+            plis["cluster"] = plis["eclass"] + "|" + plis["manufacturer"]
+        else:
+            plis["cluster"] = plis["eclass"]
+        default_eclass = plis["eclass"].mode().iloc[0] if len(plis) else ""
+        if level == 2 and "cluster" in plis.columns and plis["cluster"].str.contains(r"\S+\|\S+", regex=True).any():
+            default_clusters = plis["cluster"].value_counts().head(NACE_TOP_K).index.tolist()
+        else:
+            default_clusters = [default_eclass] if default_eclass else []
 
     nace_to_eclasses: dict[str, list[str]] = {}
     nace_to_clusters: dict[str, list[str]] = {}
-    if "nace_code" in plis.columns:
+    if not use_nace_hierarchy and _plis_has_nace(plis_path):
         plis["nace_2"] = plis["nace_code"].astype(str).str.strip().str[:2].replace("nan", "")
         plis = plis[plis["nace_2"] != ""]
         if len(plis) > 0:
@@ -181,7 +384,13 @@ def main() -> None:
                     if top:
                         nace_to_clusters[n2] = top
 
-    def eclasses_for_cold_buyer(nace_code: str) -> list[str]:
+    def eclasses_for_cold_buyer(
+        nace_code: str,
+        secondary_nace: Optional[str] = None,
+    ) -> list[str]:
+        if use_nace_hierarchy and len(nace_codes_df) > 0:
+            out = _hierarchical_lookup(nace_code, secondary_nace, nace_codes_df, rankings_eclass)
+            return out if out else ([default_eclass] if default_eclass else [])
         if not nace_code or pd.isna(nace_code):
             return [default_eclass] if default_eclass else []
         n2 = str(nace_code).strip()[:2]
@@ -189,7 +398,13 @@ def main() -> None:
             return nace_to_eclasses[n2]
         return [default_eclass] if default_eclass else []
 
-    def clusters_for_cold_buyer(nace_code: str) -> list[str]:
+    def clusters_for_cold_buyer(
+        nace_code: str,
+        secondary_nace: Optional[str] = None,
+    ) -> list[str]:
+        if use_nace_hierarchy and len(nace_codes_df) > 0:
+            out = _hierarchical_lookup(nace_code, secondary_nace, nace_codes_df, rankings_cluster)
+            return out if out else default_clusters
         if not nace_code or pd.isna(nace_code):
             return default_clusters
         n2 = str(nace_code).strip()[:2]
@@ -200,24 +415,29 @@ def main() -> None:
     rows = []
     cold_buyers_need_nace = args.buyer_source == "customer-test"
     customer_nace = None
+    customer_secondary_nace = None
     if cold_buyers_need_nace and "nace_code" in customers.columns:
         customer_nace = customers.set_index("legal_entity_id")["nace_code"].astype(str)
+    if cold_buyers_need_nace and "secondary_nace_code" in customers.columns:
+        customer_secondary_nace = customers.set_index("legal_entity_id")["secondary_nace_code"]
 
     for lid in all_buyers:
         if lid in warm_in_portfolio:
             for _, row in portfolio[portfolio["legal_entity_id"] == lid].iterrows():
                 rows.append({"legal_entity_id": lid, "cluster": row["cluster"]})
         else:
+            nace_val = customer_nace.loc[lid] if customer_nace is not None and lid in customer_nace.index else ""
+            sec_nace = (
+                customer_secondary_nace.loc[lid]
+                if customer_secondary_nace is not None and lid in customer_secondary_nace.index
+                else None
+            )
+            if sec_nace is not None and (pd.isna(sec_nace) or str(sec_nace).strip() == ""):
+                sec_nace = None
             if level == 1:
-                if cold_buyers_need_nace and customer_nace is not None and lid in customer_nace.index:
-                    items = eclasses_for_cold_buyer(customer_nace.loc[lid])
-                else:
-                    items = [default_eclass] if default_eclass else []
+                items = eclasses_for_cold_buyer(nace_val, sec_nace)
             else:
-                if cold_buyers_need_nace and customer_nace is not None and lid in customer_nace.index:
-                    items = clusters_for_cold_buyer(customer_nace.loc[lid])
-                else:
-                    items = default_clusters
+                items = clusters_for_cold_buyer(nace_val, sec_nace)
             for c in items:
                 if c:
                     rows.append({"legal_entity_id": lid, "cluster": c})

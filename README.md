@@ -22,10 +22,19 @@ uv run snakemake --cores 1
 
 Each scoring run is archived per approach so you never lose prior results and can see which commit produced which score.
 
-- **Where:** Online runs under `data/15_scores/online/runs/<approach>/`, offline under `data/15_scores/offline/runs/<approach>/`.
-- **Run folder format:** `runs/<approach>/<run_id>/` with `run_id = <UTC timestamp>_<short git sha>` and an optional `_dirty` suffix when the working tree had uncommitted changes (e.g. `20250307_143022_abc1234_dirty`).
+- **Where:** Online runs under `data/15_scores/online/runs/<approach>/level<level>/`, offline under `data/15_scores/offline/runs/<approach>/level<level>/`.
+- **Run folder format:** `runs/<approach>/level<level>/<run_id>/` with `run_id = <UTC timestamp>_<short git sha>` and an optional `_dirty` suffix when the working tree had uncommitted changes (e.g. `20250307_143022_abc1234_dirty`).
 - **Contents:** Each run folder contains `score_summary.csv`, `score_details.parquet`, and `metadata.json` (commit, branch, dirty, created_at).
-- **Index:** `data/15_scores/online/run_index_<approach>.csv` and `data/15_scores/offline/run_index_<approach>.csv` list every run for that approach with columns `run_id`, `commit_sha`, `branch`, `dirty`, `created_at`, `run_dir` for quick commit→score lookup.
+- **Index:** `data/15_scores/online/run_index_<approach>_level<level>.csv` and `data/15_scores/offline/run_index_<approach>_level<level>.csv` list every run for that approach/level with columns `run_id`, `commit_sha`, `branch`, `dirty`, `created_at`, `run_dir` for quick commit→score lookup.
+
+## Best runs (16_scores_best)
+
+The pipeline selects the **best online run per level** (across all approaches) by highest `total_score` and writes curated outputs under `data/16_scores_best/online/level<level>/`:
+
+- **best_run_summary.csv** — Score metrics (`total_score`, `total_savings`, `total_fees`, `num_hits`, `num_predictions`, `spend_capture_rate`, `total_ground_spend`) plus run identity (`approach`, `run_id`, `run_dir`, `commit_sha`, `branch`, `dirty`, `created_at`).
+- **best_run_metadata.json** — Full metadata for reproducibility: `mode`, `level`, `approach`, `run_id`, `run_dir`, git fields, all score fields, `source_index_csv`, `selected_at_utc`, and the run’s original `metadata.json` as `run_metadata`.
+
+Tie-break order: latest `created_at`, then `approach`, then `run_id`. Build with e.g. `uv run snakemake data/16_scores_best/online/level1/best_run_summary.csv --cores 1`.
 
 The default pipeline builds and archives scores for all enabled approaches (online and offline). To request a single offline output for one approach:
 

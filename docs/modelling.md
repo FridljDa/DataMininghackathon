@@ -39,31 +39,15 @@ Selection is precision-first: every element that is not a true recurring need pa
 
 ---
 
-## 2. Data & Split
+## 2. Data
 
 Raw inputs:
 - `data/02_raw/plis_training.csv` (all historical PLIs)
 - `data/02_raw/customer_test.csv` (buyers to predict for online submission)
 
-Pipeline split used by modelling/scoring:
+Focus for this modelling document: warm-buyer recurrence logic for Level 1 (`cluster = eclass`) trained on observed history and used for online submission.
 
-1. Build base customer metadata at `data/03_meta/customer.csv`.
-2. Create split metadata at `data/04_customer/customer.csv`:
-   - relabel `test_customers_count = 50` buyers from `task=none` to `task=testing`
-   - selection is stratified to match the warm-buyer purchase-value distribution
-   - matching uses pre-cutoff spend only (`orderdate < 2025-07-01`) to avoid leakage
-3. Split PLIs using `cutoff_date = 2025-07-01` into:
-   - `data/05_training_validation/plis_training.csv`
-   - `data/05_training_validation/plis_testing.csv`
-   - rule: rows for `task=testing` buyers with `orderdate >= cutoff_date` go to `plis_testing`; all other rows stay in `plis_training`
-
-How these split files are used:
-- **Online pipeline:** train on split `plis_training`, predict for `customer_test`, score externally on hidden data.
-- **Offline pipeline:** train on split `plis_training`, predict only split `task=testing` buyers, score against split `plis_testing`.
-
-Focus for this modelling document: warm-buying recurrence logic for Level 1 (`cluster = eclass`), primarily evaluated through the offline split.
-
-Available columns used from `plis_training`:
+Available columns used from historical PLIs:
 
 - `orderdate`, `legal_entity_id`, `eclass`, `manufacturer`
 - `quantityvalue`, `vk_per_item` (spend proxy: $ s = \text{quantityvalue} \times \text{vk\_per\_item} $)
@@ -71,40 +55,30 @@ Available columns used from `plis_training`:
 
 ---
 
-## 3. Offline Validation Setup
+## 3. Target Definition
 
-Within `data/05_training_validation/plis_training.csv`, use a fixed temporal train/validation window from config:
+Modeling uses a temporal cutoff $ T $:
 
-- **Train period:** `2023-01-01` — `2024-12-31`
-- **Validation period:** `2025-01-01` — `2025-06-30`
+- history up to $ T $ is used for features
+- the period after $ T $ is the scoring horizon for target construction in training experiments
 
-For each candidate pair $ (b, e) $, validation targets are computed from PLIs in the validation window.
-
-Label a pair $ (b, e) $ as **positive** if validation orders meet:
+For each candidate pair $ (b,e) $, define:
 
 $$
-\text{label}(b, e) = \mathbf{1}\left[\text{orders in val}(b, e) \geq n_{\min}\right]
+\text{label}(b,e) = \mathbf{1}\!\left[\text{orders in horizon}(b,e) \ge n_{\min}\right]
 $$
 
-with current default $ n_{\min} = 1 $ (`modelling.windows.validation.n_min_label`).
+with default $ n_{\min}=1 $.
 
-Validation spend is aggregated as:
-
-$$
-s_{\text{val}}(b,e) = \sum_{\text{val rows}} \text{quantityvalue} \times \text{vk\_per\_item}
-$$
-
-Default target remains binary recurrence: bought again vs not bought again.
-
-> **Evaluator behavior note:** Predictions are set-based per buyer and cluster. Duplicate rows for the same $ (b, e) $ are sanitized and counted once by the organizer scorer.
-
-Evaluate using an approximation of the euro score on validation:
+Future spend target:
 
 $$
-\widehat{\text{Score}}_{\text{val}} = \sum_{b \in \mathcal{B}_{\text{warm}}} \left[ \sum_{e \in \hat{S}_b} r \cdot s_{\text{val}}(b,e) \cdot \mathbf{1}[\text{label}=1] - |\hat{S}_b| \cdot F \right]
+s_{\text{future}}(b,e)=\sum_{\text{rows in horizon}} \text{quantityvalue}\times \text{vk\_per\_item}
 $$
 
-> **Important:** The validation window is 6 months but the hidden evaluation covers approximately 1 month. When using $ \widehat{\text{Score}}_{\text{val}} $ to tune thresholds (EU threshold, $ K $, etc.), divide spend by 6 to obtain a per-month estimate. Without this normalisation the local score will be ~6× the real evaluation score, causing the EU threshold to be set too low (too many elements included).
+Default learning target is binary recurrence (`label`), with spend used for value-aware ranking.
+
+> **Evaluator behavior note:** Predictions are set-based per buyer and cluster. Duplicate rows for the same $ (b,e) $ are sanitized and counted once by the organizer scorer.
 
 ---
 
@@ -159,7 +133,7 @@ The exact active columns for any run are controlled by pipeline configuration an
 
 **Feature analysis artifacts:** The pipeline produces:
 
-- `feature_summary.csv` — Per-feature descriptive stats (null/zero rate, quantiles, cardinality) and target-aware stats (univariate signal vs validation recurrence label and vs positive-case spend). Primary inspection artifact for deciding which features to keep.
+- `feature_summary.csv` — Per-feature descriptive stats (null/zero rate, quantiles, cardinality) and target-aware stats (univariate signal vs recurrence label and vs positive-case spend). Primary inspection artifact for deciding which features to keep.
 - `feature_redundancy.csv` — Pairs of numeric features with high Spearman correlation (e.g. |ρ| ≥ 0.85) for redundancy pruning.
 - `feature_suggestions.yaml` — Advisory list of suggested features: hard filters (null rate, variance, cardinality) are applied, then one representative per correlated group is kept (ranked by target signal). For manual copy into `config.yaml` under `modelling.features.selected`.
 
@@ -197,7 +171,7 @@ How to read the weights (configured in `modelling.approaches.baseline`):
 
 Decision rule:
 
-1. Tune $ \alpha, \beta, \gamma $ on the validation euro score.
+1. Tune $ \alpha, \beta, \gamma $ on your chosen euro-score proxy.
 2. Predict pair $ (b,e) $ if $ \text{score}_{\text{base}}(b,e) > \theta $.
 3. Apply per-buyer cap: keep only top $ K $ pairs by score.
 
@@ -285,7 +259,7 @@ $$
    - $ m_{\text{active}} \geq Y $ (`modelling.selection.guardrails.min_months`, e.g. 2), or
    - `historical_purchase_value_total` $ \geq \tau_{\text{high}} $ (`modelling.selection.guardrails.high_spend`, high-value exception)
 
-4. Cap at top $ K $ by $ \widehat{EU} $ (`modelling.selection.top_k_per_buyer`; tune on validation; start $ K = 15 $).
+4. Cap at top $ K $ by $ \widehat{EU} $ (`modelling.selection.top_k_per_buyer`; tune with score sensitivity runs; start $ K = 15 $).
 
 **Pass-through configuration** (to force all candidates into submission, e.g. when using the *pass_through* approach or for recall upper-bound):
 - Set $ \tau_{EU} \leq 0 $ (e.g. `score_threshold: 0`; pass_through sets all scores $ > 0 $)
@@ -297,7 +271,7 @@ $$
 
 ## 8. Tuning Priority
 
-In order of expected impact on validation euro score:
+In order of expected impact on euro score:
 
 | Priority | Parameter | Notes |
 |---|---|---|
@@ -325,4 +299,4 @@ $$
 \hat{p}(b,e) \cdot E[s_{\text{future,monthly}}] \cdot r > F
 $$
 
-In practice, use the validation euro score (per-month normalised) as the optimisation target rather than a fixed analytical threshold.
+In practice, optimize against your chosen euro-score proxy and online results rather than a fixed analytical threshold.

@@ -15,7 +15,9 @@ DAG_SVG = f"{DATA_DIR}/01_dag/dag.svg"
 
 # Raw input paths (config may override for alternate locations)
 INPUTS = config["inputs"]
-PLIS_TRAINING_CSV = config["plis_training_csv"]
+CLEAN_DIR = f"{DATA_DIR}/02_clean"
+PLIS_TRAINING_RAW_CSV = config["plis_training_csv"]
+PLIS_TRAINING_CSV = f"{CLEAN_DIR}/plis_training.csv"
 CUSTOMER_META_CSV = config["customer_meta_csv"]
 # Training/validation split (params from config; paths derived here)
 SPLIT = config["training_validation_split"]
@@ -112,6 +114,7 @@ FEATURE_ANALYSIS_SUMMARY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_sum
 rule all:
     input:
         DAG_SVG,
+        PLIS_TRAINING_CSV,
         CUSTOMER_META_CSV,
         PLOT_OUTPUTS,
         FEATURE_ANALYSIS_SUMMARY_CSV,
@@ -136,7 +139,20 @@ rule generate_dag_graph:
     output:
         dag = DAG_SVG,
     shell:
-        "mkdir -p $(dirname {output.dag}) && snakemake --rulegraph | dot -Tsvg -o {output.dag}"
+        "mkdir -p $(dirname {output.dag}) && uv run snakemake --rulegraph | dot -Tsvg -o {output.dag}"
+
+rule clean_plis_training:
+    """Filter raw plis_training rows/columns from config and drop duplicate cleaned rows."""
+    input:
+        plis = PLIS_TRAINING_RAW_CSV,
+        config_file = "config.yaml",
+    output:
+        plis = PLIS_TRAINING_CSV,
+    params:
+        config_key = "cleaning.plis_training",
+    shell:
+        "uv run src/clean_plis.py --input {input.plis} --output {output.plis} "
+        "--config {input.config_file} --config-key {params.config_key}"
 
 rule build_customer_meta:
     """Build customer metadata from plis_training (all unique customers, task from customer_test or none)."""
@@ -472,4 +488,3 @@ rule submit_to_portal:
         level = LEVEL_RE,
     shell:
         "uv run src/submit.py --challenge 2 --file {input.submission} --level {wildcards.level} --summary-csv {output.summary} && touch {output.sentinel}"
-

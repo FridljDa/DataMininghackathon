@@ -2,8 +2,90 @@ inputs:
   customer_test: "data/02_raw/customer_test.csv"
   les_cs: "data/02_raw/les_cs.csv"
   nace_codes: "data/02_raw/nace_codes.csv"
-plis_training_csv: "data/02_raw/plis_training.csv"
+plis_training_csv: "data/02_raw/plis_training.csv"  # Raw source; Snakefile materializes the cleaned file.
 customer_meta_csv: "data/03_meta/customer.csv"
+
+cleaning:
+  plis_training:
+    keep_columns:
+      - orderdate
+      - legal_entity_id
+      - set_id
+      - sku
+      - eclass
+      - manufacturer
+      - quantityvalue
+      - vk_per_item
+      - estimated_number_employees
+      - nace_code
+      - secondary_nace_code
+
+    columns:
+      legal_entity_id:
+        type: string
+        strip: true
+        required: true
+
+      orderdate:
+        type: date
+        format: "%Y-%m-%d"
+        required: true
+
+      set_id:
+        type: string
+        strip: true
+        empty_as_null: true
+
+      sku:
+        type: string
+        strip: true
+        required: true
+
+      eclass:
+        type: string
+        strip: true
+        empty_as_null: true
+        required: true
+
+      manufacturer:
+        type: string
+        strip: true
+        empty_as_null: true
+
+      quantityvalue:
+        type: float
+        required: true
+        min_exclusive: 0
+
+      vk_per_item:
+        type: float
+        required: true
+        min_exclusive: 0
+
+      estimated_number_employees:
+        type: float
+        min_inclusive: 0
+
+      nace_code:
+        type: string
+        strip: true
+        empty_as_null: true
+
+      secondary_nace_code:
+        type: string
+        strip: true
+        empty_as_null: true
+
+    deduplicate:
+      subset:
+        - legal_entity_id
+        - orderdate
+        - set_id
+        - sku
+        - eclass
+        - manufacturer
+        - quantityvalue
+        - vk_per_item
 
 training_validation_split:
   cutoff_date: "2025-07-01"

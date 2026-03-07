@@ -70,11 +70,18 @@ def run_main() -> None:
     # LGBM
     parser.add_argument("--lgb-params-classifier", type=str, default="", dest="lgb_params_classifier")
     parser.add_argument("--lgb-params-regressor", type=str, default="", dest="lgb_params_regressor")
-    # Phase 3 repro (sparse-history gate)
+    # Phase 3 repro (sparse-history gate, optional monthlyized lookback)
     parser.add_argument("--eta", type=int, default=2, dest="eta")
     parser.add_argument("--tau", type=float, default=100.0, dest="tau")
     parser.add_argument("--sparse-eta-multiplier", type=int, default=3, dest="sparse_eta_multiplier")
     parser.add_argument("--sparse-tau-multiplier", type=float, default=2.0, dest="sparse_tau_multiplier")
+    parser.add_argument(
+        "--use-monthly-lookback-rates",
+        type=int,
+        default=0,
+        dest="use_monthly_lookback_rates",
+        help="If 1, phase3_repro uses avg_monthly_orders_in_lookback and avg_monthly_spend_in_lookback (default: 0).",
+    )
     args = parser.parse_args()
 
     candidates_path = Path(args.candidates)
@@ -102,6 +109,7 @@ def run_main() -> None:
         "tau": args.tau,
         "sparse_eta_multiplier": args.sparse_eta_multiplier,
         "sparse_tau_multiplier": args.sparse_tau_multiplier,
+        "use_monthly_lookback_rates": bool(args.use_monthly_lookback_rates),
     }
     df = approach.run(df, **params)
 

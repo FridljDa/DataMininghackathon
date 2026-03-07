@@ -157,19 +157,62 @@ def main() -> None:
         train_end - candidates["orderdate_max"]
     ).dt.days
 
+    plis_train = plis[plis["orderdate"] <= train_end]
     buyer_active_months = (
-        plis[plis["orderdate"] <= train_end]
-        .groupby("legal_entity_id")["orderdate"]
+        plis_train.groupby("legal_entity_id")["orderdate"]
         .apply(lambda x: x.dt.to_period("M").nunique())
         .reset_index(name="buyer_active_months_total")
     )
+    buyer_first_seen = (
+        plis_train.groupby("legal_entity_id")["orderdate"]
+        .min()
+        .reset_index(name="buyer_first_seen")
+    )
     candidates = candidates.merge(
         buyer_active_months, on="legal_entity_id", how="left"
+    )
+    candidates = candidates.merge(
+        buyer_first_seen, on="legal_entity_id", how="left"
     )
     candidates["history_cohort"] = candidates["buyer_active_months_total"].fillna(0).apply(
         lambda m: "sparse_history"
         if 0 < m <= 3
         else ("cold_start" if m == 0 else "rich_history")
+    )
+
+    # Tenure denominators (no leakage: only data <= train_end)
+    candidates["buyer_tenure_months"] = (
+        (train_end - candidates["buyer_first_seen"]).dt.days / 30.44
+    ).clip(lower=1)
+    candidates["pair_tenure_months"] = (
+        (train_end - candidates["orderdate_min"]).dt.days / 30.44
+    ).clip(lower=1)
+    effective_start = np.maximum(
+        lookback_start,
+        candidates["buyer_first_seen"].fillna(lookback_start),
+    )
+    candidates["effective_lookback_months"] = (
+        (train_end - effective_start).dt.days / 30.44
+    ).clip(lower=1)
+
+    # Average monthly normalizations (quotients by tenure so late joiners are comparable)
+    candidates["avg_monthly_orders_buyer_tenure"] = (
+        candidates["n_orders"] / candidates["buyer_tenure_months"]
+    )
+    candidates["avg_monthly_orders_pair_tenure"] = (
+        candidates["n_orders"] / candidates["pair_tenure_months"]
+    )
+    candidates["avg_monthly_spend_buyer_tenure"] = (
+        candidates["historical_purchase_value_total"] / candidates["buyer_tenure_months"]
+    )
+    candidates["avg_monthly_spend_pair_tenure"] = (
+        candidates["historical_purchase_value_total"] / candidates["pair_tenure_months"]
+    )
+    candidates["avg_monthly_orders_in_lookback"] = (
+        candidates["n_orders_in_lookback"].fillna(0) / candidates["effective_lookback_months"]
+    )
+    candidates["avg_monthly_spend_in_lookback"] = (
+        candidates["lookback_spend"].fillna(0) / candidates["effective_lookback_months"]
     )
 
     line_median = (
@@ -454,6 +497,15 @@ def main() -> None:
         "avg_spend_per_order",
         "days_since_last",
         "history_cohort",
+        "buyer_tenure_months",
+        "pair_tenure_months",
+        "effective_lookback_months",
+        "avg_monthly_orders_buyer_tenure",
+        "avg_monthly_orders_pair_tenure",
+        "avg_monthly_spend_buyer_tenure",
+        "avg_monthly_spend_pair_tenure",
+        "avg_monthly_orders_in_lookback",
+        "avg_monthly_spend_in_lookback",
     ]
 
     candidates = candidates[[c for c in out_cols if c in candidates.columns]]

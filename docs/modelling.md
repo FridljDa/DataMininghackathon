@@ -295,12 +295,12 @@ $$
 
 be the **historical quantity-weighted average price** for that pair computed entirely from lookback data. This is a well-defined, leakage-free quantity available at inference time. It equals `avg_spend_per_order / avg_order_quantity` and is closely related to the existing `avg_spend_per_order` feature already computed by the pipeline.
 
-**VK price stability context:** Analysis in `src/check_vk_price_stability.py` shows that `vk_per_item` is lookup-like (one dominant price ≥ 95% of spend) for ~30% of spend at the `(buyer, eclass, manufacturer)` key level and ~14% at `(buyer, eclass)`. Early-vs-late median drift ≥ 20% affects only ~1–3% of spend at the buyer-eclass level, confirming that $ \bar{v}_{b,e} $ is a reasonable forward proxy for most pairs. For the minority of pairs with material drift, the model can additionally condition on a **price stability flag**: $ \text{stable}_{b,e} := \mathbf{1}[\text{CoV}(\text{vk\_per\_item}) \leq \delta_v] $ where $ \delta_v $ is a configured threshold (e.g. 0.2).
+**VK price stability context:** Analysis in `src/check_vk_price_stability.py` shows that early-vs-late median drift ≥ 20% affects only ~1–3% of spend at the buyer-eclass level, confirming that $ \bar{v}_{b,e} $ is a reasonable forward proxy for the vast majority of pairs. We accept residual price drift as a known limitation of the factorization.
 
 Conceptually:
 
 1. **Stage A — demand frequency:** estimate $ \hat{n}_{b,e} $, the expected number of future orders. Training target: $ n_{\text{orders}}(b,e, I_{\text{future}}(T,H)) $ as a count regression (requires adding this to Section 3).
-2. **Stage B — unit value proxy:** use $ \bar{v}_{b,e} $ (historical quantity-weighted average price from lookback) directly, without fitting a separate model. Optionally weight by $ \text{stable}_{b,e} $ to down-weight pairs with high price volatility.
+2. **Stage B — unit value proxy:** use $ \bar{v}_{b,e} $ (historical quantity-weighted average price from lookback) directly, without fitting a separate model.
 3. **Stage C — score construction:** combine the two into a value proxy aligned with the evaluator, then subtract the fixed prediction fee.
 
 One simple proxy is:
@@ -331,7 +331,7 @@ Important caveats:
 
 - The factorization $ \hat{n}_{b,e} \cdot \bar{v}_{b,e} $ is an approximation to $ s_{\text{future}}(b,e) $ because it ignores correlation between order frequency and order size, and assumes quantity per order is constant.
 - Stage A requires a count regression target ($ n_{\text{orders}} $ in $ I_{\text{future}} $) which is not yet defined in Section 3 — add it there before implementing.
-- For pairs with high price volatility (flagged by $ \text{stable}_{b,e} = 0 $), consider falling back to v2's direct spend regression.
+- $ \bar{v}_{b,e} $ will be inaccurate for the small share of pairs with material price drift (~1–3% of spend); we accept this as a known limitation.
 - Because the evaluator is fee-sensitive and set-based, the final decision rule should still be thresholded and top-$ K $ capped as in Section 7.
 
 ### Pass-through (candidate-only)

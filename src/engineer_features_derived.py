@@ -543,6 +543,7 @@ def main() -> None:
         "n_orders_in_lookback",
         "lookback_spend",
         "avg_spend_per_order",
+        "avg_price_per_unit",
         "days_since_last",
         "history_cohort",
         "buyer_tenure_months",

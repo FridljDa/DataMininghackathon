@@ -373,8 +373,8 @@ rule train_approach:
         sparse_eta_multiplier = APP["phase3_repro"]["sparse_eta_multiplier"],
         sparse_tau_multiplier = APP["phase3_repro"]["sparse_tau_multiplier"],
         use_monthly_lookback_rates = 1 if APP.get("phase3_repro", {}).get("use_monthly_lookback_rates", False) else 0,
-        lgb_params_classifier = APP.get("lgbm_two_stage", {}).get("lgb_params_classifier", ""),
-        lgb_params_regressor = APP.get("lgbm_two_stage", {}).get("lgb_params_regressor", ""),
+        lgb_params_classifier = lambda w: APP.get(w.approach, {}).get("lgb_params_classifier", APP.get("lgbm_two_stage", {}).get("lgb_params_classifier", "")),
+        lgb_params_regressor = lambda w: APP.get(w.approach, {}).get("lgb_params_regressor", APP.get("lgbm_two_stage", {}).get("lgb_params_regressor", "")),
     wildcard_constraints:
         mode = MODE_RE,
         approach = "|".join(ENABLED_APPROACHES),

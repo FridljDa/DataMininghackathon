@@ -169,6 +169,7 @@ def main() -> None:
     relevant_skus = set(plis_candidate["sku"].unique())
 
     # Aggregates from PLIs (pair-level)
+    # avg_price_per_unit = total spend / total quantity (quantity-weighted average price, leakage-free)
     agg = (
         plis_candidate.groupby(group_cols)
         .agg(
@@ -177,6 +178,16 @@ def main() -> None:
             orderdate_min=("orderdate", "min"),
             orderdate_max=("orderdate", "max"),
             orderdates=("orderdate", lambda x: x.dt.to_period("M").unique().tolist()),
+            avg_price_per_unit=(
+                "_spend",
+                lambda x: x.sum()
+                / max(
+                    1e-9,
+                    pd.to_numeric(
+                        plis_candidate.loc[x.index, "quantityvalue"], errors="coerce"
+                    ).fillna(0).sum(),
+                ),
+            ),
         )
         .reset_index()
     )
@@ -188,6 +199,7 @@ def main() -> None:
     out = candidates.merge(agg, on=group_cols, how="left")
     out["n_orders"] = out["n_orders"].fillna(0).astype(int)
     out["historical_purchase_value_total"] = out["historical_purchase_value_total"].fillna(0.0)
+    out["avg_price_per_unit"] = out["avg_price_per_unit"].fillna(0.0)
     out["orderdate_min"] = out["orderdate_min"].fillna(pd.NaT)
     out["orderdate_max"] = out["orderdate_max"].fillna(pd.NaT)
     out["orderdates_str"] = out["orderdates_str"].apply(

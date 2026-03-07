@@ -117,6 +117,7 @@ modelling:
   enabled_approaches:
     #- baseline
     - lgbm_two_stage
+    - lgbm_v3_factorized
     #- pass_through
     - phase3_repro
   # Submission levels: 1 = eclass only, 2 = eclass|manufacturer
@@ -186,6 +187,7 @@ modelling:
   features:
     selected:
       - CV_gap
+      - avg_price_per_unit
       - avg_monthly_orders_pair_tenure
       - avg_monthly_spend_pair_tenure
       - avg_spend_per_order
@@ -226,6 +228,9 @@ modelling:
       # JSON override for LGBMRegressor (value given recurrence); empty = use code defaults
       lgb_params_regressor: '{"num_leaves": 63, "n_estimators": 300, "learning_rate": 0.05, "min_child_samples": 10, "reg_alpha": 0.1, "reg_lambda": 1.0}'
     pass_through: {}
+    lgbm_v3_factorized:
+      # Stage A: Tweedie count regressor for n_orders_val
+      lgb_params_classifier: '{"objective": "tweedie", "tweedie_variance_power": 1.5, "num_leaves": 63, "n_estimators": 300, "learning_rate": 0.05, "min_child_samples": 10, "reg_alpha": 0.1, "reg_lambda": 1.0}'
     phase3_repro:
       # Min orders in lookback to pass gate
       eta: 2

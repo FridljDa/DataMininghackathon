@@ -95,11 +95,9 @@ LEVEL_RE = "|".join(str(l) for l in ENABLED_LEVELS)
 SCORES_APPROACH_PATTERN = f"{DATA_DIR}/12_predictions/{{mode}}/{{approach}}/scores.parquet"
 PORTFOLIO_PATTERN = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/portfolio.parquet"
 SUBMISSION_PATTERN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/submission.csv"
-SCORE_SUMMARY_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/level{{level}}/score_summary.csv"
-SCORE_DETAILS_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/level{{level}}/score_details.parquet"
 ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/online/runs/level{{level}}/.last_archived_{{approach}}"
 SUBMITTED_SENTINEL_PATTERN = f"{DATA_DIR}/14_submission/.submitted_challenge2_{{approach}}_level{{level}}"
-SCORE_SUMMARY_LIVE_PATTERN = f"{SCORES_DIR}/online/{{approach}}/level{{level}}/score_summary_live.csv"
+LIVE_SUMMARY_TEMP_PATTERN = f"{DATA_DIR}/14_submission/.score_summary_live_{{approach}}_level{{level}}.csv"
 FEATURE_ANALYSIS_SUMMARY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_summary.csv"
 
 rule all:
@@ -117,10 +115,7 @@ rule all:
         expand(SCORES_APPROACH_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
         expand(PORTFOLIO_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
         expand(SUBMISSION_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
-        expand(SCORE_SUMMARY_PATTERN, mode=["online"], approach=ENABLED_APPROACHES, level=[1]),
-        expand(SCORE_DETAILS_PATTERN, mode=["online"], approach=ENABLED_APPROACHES, level=[1]),
         expand(ARCHIVE_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=[1]),
-        expand(SCORE_SUMMARY_LIVE_PATTERN, approach=ENABLED_APPROACHES, level=[1]),
         expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=[1]),
 
 rule generate_dag_graph:
@@ -407,34 +402,11 @@ rule write_submission:
         "uv run src/write_submission.py --output {output.submission} "
         "--customer-test {input.customer_test} --plis-training {input.plis}"
 
-rule score_submission:
-    """Score submission against plis_testing holdout; write summary and details per approach/level to data/15_scores/{mode}/{approach}/level{level}/."""
-    input:
-        submission = SUBMISSION_PATTERN,
-        plis_testing = PLIS_TESTING_SPLIT,
-    output:
-        summary = SCORE_SUMMARY_PATTERN,
-        details = SCORE_DETAILS_PATTERN,
-    params:
-        savings_rate = SCORING_PARAMS["savings_rate"],
-        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
-        scoring_months = SCORING_PARAMS["scoring_months"],
-    wildcard_constraints:
-        mode = MODE_RE,
-        approach = APPROACH_RE,
-        level = LEVEL_RE,
-    shell:
-        "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
-        "--summary {output.summary} --details {output.details} "
-        "--level {wildcards.level} --savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
-        "--scoring-months {params.scoring_months}"
-
 rule archive_score_run:
-    """Copy current score outputs into a timestamp+sha run folder under data/15_scores/online/runs/level{level}/."""
+    """Copy live score summary into a timestamp+sha run folder under data/15_scores/online/runs/level{level}/ (score_summary_live.csv + metadata.json only)."""
     input:
-        summary = lambda w: f"{SCORES_DIR}/online/{w.approach}/level{w.level}/score_summary.csv",
-        details = lambda w: f"{SCORES_DIR}/online/{w.approach}/level{w.level}/score_details.parquet",
-        submit_done = lambda w: f"{DATA_DIR}/14_submission/.submitted_challenge2_{w.approach}_level{w.level}",
+        live_summary = LIVE_SUMMARY_TEMP_PATTERN,
+        submit_done = SUBMITTED_SENTINEL_PATTERN,
     output:
         sentinel = ARCHIVE_SENTINEL_PATTERN,
     params:
@@ -443,15 +415,15 @@ rule archive_score_run:
         approach = APPROACH_RE,
         level = LEVEL_RE,
     shell:
-        "uv run src/archive_score_run.py --summary {input.summary} --details {input.details} "
+        "uv run src/archive_score_run.py --live-summary {input.live_summary} "
         "--runs-dir {params.runs_dir} && touch {output.sentinel}"
 
 rule submit_to_portal:
-    """Upload online submission to Unite evaluator (challenge 2) per approach and level. Requires portal_credentials in config.yaml."""
+    """Upload online submission to Unite evaluator (challenge 2) per approach and level. Writes live score to temp file for archive_score_run. Requires portal_credentials in config.yaml."""
     input:
         submission = f"{DATA_DIR}/14_submission/online/{{approach}}/level{{level}}/submission.csv",
     output:
-        summary = SCORE_SUMMARY_LIVE_PATTERN,
+        summary = LIVE_SUMMARY_TEMP_PATTERN,
         sentinel = SUBMITTED_SENTINEL_PATTERN,
     wildcard_constraints:
         approach = APPROACH_RE,

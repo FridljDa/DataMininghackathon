@@ -1,6 +1,6 @@
 """
-Archive current score summary and details into a timestamp+sha run folder.
-Writes score_summary.csv, score_details.parquet, and metadata.json only.
+Archive live score summary into a timestamp+sha run folder.
+Writes score_summary_live.csv and metadata.json only.
 """
 
 from __future__ import annotations
@@ -27,22 +27,18 @@ def _run(cmd: list[str], cwd: Path | None = None) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Archive score outputs into a timestamp+sha run folder (score_summary.csv, score_details.parquet, metadata.json)."
+        description="Archive live score summary into a timestamp+sha run folder (score_summary_live.csv, metadata.json)."
     )
-    parser.add_argument("--summary", required=True, help="Path to score_summary.csv.")
-    parser.add_argument("--details", required=True, help="Path to score_details.parquet.")
+    parser.add_argument("--live-summary", required=True, dest="live_summary", help="Path to live score summary CSV from portal.")
     parser.add_argument("--runs-dir", required=True, dest="runs_dir", help="Base directory for run folders (e.g. data/15_scores/online/runs/level1).")
     args = parser.parse_args()
 
     root = Path.cwd()
-    summary_path = Path(args.summary)
-    details_path = Path(args.details)
+    live_summary_path = Path(args.live_summary)
     runs_dir = Path(args.runs_dir)
 
-    if not summary_path.is_file():
-        raise FileNotFoundError(f"Summary not found: {summary_path}")
-    if not details_path.is_file():
-        raise FileNotFoundError(f"Details not found: {details_path}")
+    if not live_summary_path.is_file():
+        raise FileNotFoundError(f"Live summary not found: {live_summary_path}")
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     try:
@@ -57,8 +53,7 @@ def main() -> None:
     run_dir = runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    shutil.copy2(summary_path, run_dir / "score_summary.csv")
-    shutil.copy2(details_path, run_dir / "score_details.parquet")
+    shutil.copy2(live_summary_path, run_dir / "score_summary_live.csv")
 
     try:
         commit = _run(["git", "rev-parse", "HEAD"], cwd=root)

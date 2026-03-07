@@ -26,23 +26,20 @@ def project_root() -> Path:
 
 
 def test_archive_score_run_writes_flattened_run_folder_only(tmp_path: Path, project_root: Path) -> None:
-    """Archive writes only runs_dir/<timestamp_sha>/ with score_summary.csv, score_details.parquet, metadata.json (no index/history, no _dirty)."""
-    summary = tmp_path / "score_summary.csv"
-    details = tmp_path / "score_details.parquet"
-    summary.write_text(
-        "total_score,total_savings,total_fees,num_hits,num_predictions,spend_capture_rate,total_ground_spend\n"
-        "-100.0,0.0,100.0,0,10,0.0,5000.0\n",
+    """Archive writes only runs_dir/<timestamp_sha>/ with score_summary_live.csv and metadata.json (no score_summary.csv, no score_details.parquet)."""
+    live_summary = tmp_path / "score_summary_live.csv"
+    live_summary.write_text(
+        "total_score,total_savings,total_fees,num_hits,num_predictions,spend_capture_rate,total_ground_spend,submission_id\n"
+        "-100.0,0.0,100.0,0,10,0.0,5000.0,sub-123\n",
         encoding="utf-8",
     )
-    details.write_bytes(b"\x00" * 100)  # placeholder parquet
 
     runs_dir = tmp_path / "runs" / "level1"
 
     result = _run(
         [
             "uv", "run", "src/archive_score_run.py",
-            "--summary", str(summary),
-            "--details", str(details),
+            "--live-summary", str(live_summary),
             "--runs-dir", str(runs_dir),
         ],
         cwd=project_root,
@@ -57,9 +54,8 @@ def test_archive_score_run_writes_flattened_run_folder_only(tmp_path: Path, proj
     assert "_dirty" not in run_id
     assert run_id.count("_") >= 2  # timestamp_sha
 
-    assert (run_dir / "score_summary.csv").exists()
-    assert (run_dir / "score_summary.csv").read_text() == summary.read_text()
-    assert (run_dir / "score_details.parquet").exists()
+    assert (run_dir / "score_summary_live.csv").exists()
+    assert (run_dir / "score_summary_live.csv").read_text() == live_summary.read_text()
     assert (run_dir / "metadata.json").exists()
     meta = json.loads((run_dir / "metadata.json").read_text())
     assert "commit" in meta
@@ -67,9 +63,9 @@ def test_archive_score_run_writes_flattened_run_folder_only(tmp_path: Path, proj
     assert "dirty" in meta
     assert "created_at" in meta
 
-    # No index or history files
-    assert not (tmp_path / "run_index_baseline_level1.csv").exists()
-    assert not (tmp_path / "history").exists()
+    # Only these two files; no offline score artifacts
+    assert not (run_dir / "score_summary.csv").exists()
+    assert not (run_dir / "score_details.parquet").exists()
 
 
 # ---------------------------------------------------------------------------

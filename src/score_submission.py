@@ -115,7 +115,7 @@ def main() -> None:
     parser.add_argument("--details", required=True, help="Output path for score_details.parquet.")
     parser.add_argument("--savings-rate", type=float, required=True, dest="savings_rate")
     parser.add_argument("--fixed-fee-eur", type=float, required=True, dest="fixed_fee_eur")
-    parser.add_argument("--scoring-months", type=int, default=1, dest="scoring_months", help="Reserved for future use.")
+    parser.add_argument("--scoring-months", type=int, default=1, dest="scoring_months", help="Divide savings by this to get per-month score (e.g. 6 when holdout is 6 months).")
     parser.add_argument(
         "--level",
         type=int,
@@ -155,7 +155,7 @@ def main() -> None:
 
     num_hits = len(hit_pairs)
     hit_spend_sum = sum(pair_spend[k] for k in hit_pairs)
-    total_savings = args.savings_rate * hit_spend_sum
+    total_savings = (args.savings_rate * hit_spend_sum) / args.scoring_months
     total_fees = args.fixed_fee_eur * num_predictions
     total_score = total_savings - total_fees
     spend_capture_rate = hit_spend_sum / total_ground_spend if total_ground_spend > 0 else 0.0

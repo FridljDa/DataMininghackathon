@@ -95,7 +95,7 @@ training_validation_split:
 scoring_parameters:
   savings_rate: 0.10
   fixed_fee_eur: 10.00
-  scoring_months: 1
+  scoring_months: 6  # holdout plis_testing is 6 months; normalize to per-month score
 
 modelling:
   # All enabled approaches run through selection and produce portfolio/submission per approach (data/11_predictions, 12_portfolio, 13_submission, 14_scores by {mode}/{approach}/).
@@ -124,11 +124,11 @@ modelling:
   # For pass_through approach, use score_threshold <= 0, min_orders/min_months 1, high_spend 0, top_k_per_buyer large (e.g. 9999) so portfolio = candidates.
   selection:
     score_threshold: 0.0
-    top_k_per_buyer: 9999
+    top_k_per_buyer: 15
     guardrails:
-      min_orders: 1
-      min_months: 1
-      high_spend: 0
+      min_orders: 3
+      min_months: 2
+      high_spend: 500
       min_avg_monthly_spend: 0  # 0 = disabled; when > 0, pass if avg_monthly_spend_buyer_tenure >= this (late joiners)
 
   # Per-feature missing-value handling for features_raw (before derived engineering).

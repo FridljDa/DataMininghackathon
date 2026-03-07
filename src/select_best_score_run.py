@@ -11,18 +11,23 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
 
-def _parse_index_row(row: dict[str, str], index_path: Path) -> dict:
-    run_dir = Path(row["run_dir"].strip())
+def _parse_index_row(row: dict[str, str], index_path: Path, root: Path) -> dict:
+    run_dir_str = row["run_dir"].strip()
+    run_dir = root / run_dir_str.lstrip("/")
+    # Prefer live (portal) score for online runs; fall back to local score_summary
+    live_path = run_dir / "score_summary_live.csv"
     summary_path = run_dir / "score_summary.csv"
+    path_to_use = live_path if live_path.is_file() else summary_path
     meta_path = run_dir / "metadata.json"
-    if not summary_path.is_file():
+    if not path_to_use.is_file():
         return None
     # Parse score summary (single row)
-    with summary_path.open(newline="", encoding="utf-8") as f:
+    with path_to_use.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         score_row = next(reader, None)
     if not score_row:
@@ -40,7 +45,8 @@ def _parse_index_row(row: dict[str, str], index_path: Path) -> dict:
         "created_at": created_at,
         "approach": approach,
         "run_id": row["run_id"].strip(),
-        "run_dir": str(run_dir),
+        "run_dir": run_dir,
+        "run_dir_str": run_dir_str,
         "commit_sha": row.get("commit_sha", "").strip(),
         "branch": row.get("branch", "").strip(),
         "dirty": row.get("dirty", "").strip().lower() == "true",
@@ -69,11 +75,12 @@ def main() -> None:
     index_files = sorted(scores_dir.glob(index_glob))
     candidates: list[dict] = []
 
+    root = Path.cwd()
     for index_path in index_files:
         with index_path.open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                rec = _parse_index_row(row, index_path)
+                rec = _parse_index_row(row, index_path, root)
                 if rec is not None:
                     candidates.append(rec)
 
@@ -100,42 +107,67 @@ def main() -> None:
     best = candidates[0]
     score_row = best["score_row"]
 
-    summary_out.parent.mkdir(parents=True, exist_ok=True)
+    best_dir = summary_out.parent
+    best_dir.mkdir(parents=True, exist_ok=True)
 
     # best_run_summary.csv: score metrics + run identity
     summary_headers = list(score_row.keys()) + ["approach", "run_id", "run_dir", "commit_sha", "branch", "dirty", "created_at"]
-    summary_row = {**score_row, "approach": best["approach"], "run_id": best["run_id"], "run_dir": best["run_dir"], "commit_sha": best["commit_sha"], "branch": best["branch"], "dirty": str(best["dirty"]).lower(), "created_at": best["created_at"]}
+    summary_row = {**score_row, "approach": best["approach"], "run_id": best["run_id"], "run_dir": best["run_dir_str"], "commit_sha": best["commit_sha"], "branch": best["branch"], "dirty": str(best["dirty"]).lower(), "created_at": best["created_at"]}
     with summary_out.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=summary_headers)
         w.writeheader()
         w.writerow(summary_row)
 
-    # best_run_metadata.json: full metadata for reproducibility
+    # best_run_metadata.json: full metadata for reproducibility (live CSV may have empty cells)
+    def _float(v, default=0.0):
+        if v is None or v == "":
+            return default
+        try:
+            x = float(v)
+            return default if x != x else x  # NaN
+        except (ValueError, TypeError):
+            return default
+
+    def _int(v, default=0):
+        if v is None or v == "":
+            return default
+        try:
+            return int(float(v))
+        except (ValueError, TypeError):
+            return default
+
     selected_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     best_metadata = {
         "mode": "online",
         "level": level,
         "approach": best["approach"],
         "run_id": best["run_id"],
-        "run_dir": best["run_dir"],
+        "run_dir": best["run_dir_str"],
         "commit_sha": best["commit_sha"],
         "branch": best["branch"],
         "dirty": best["dirty"],
         "created_at": best["created_at"],
         "total_score": best["total_score"],
-        "total_savings": float(score_row["total_savings"]),
-        "total_fees": float(score_row["total_fees"]),
-        "num_hits": int(score_row["num_hits"]),
-        "num_predictions": int(score_row["num_predictions"]),
-        "spend_capture_rate": float(score_row["spend_capture_rate"]),
-        "total_ground_spend": float(score_row["total_ground_spend"]),
+        "total_savings": _float(score_row.get("total_savings")),
+        "total_fees": _float(score_row.get("total_fees")),
+        "num_hits": _int(score_row.get("num_hits")),
+        "num_predictions": _int(score_row.get("num_predictions")),
+        "spend_capture_rate": _float(score_row.get("spend_capture_rate")),
+        "total_ground_spend": _float(score_row.get("total_ground_spend")),
         "source_index_csv": best["source_index_csv"],
         "selected_at_utc": selected_at,
         "run_metadata": best["metadata_json"],
     }
     metadata_out.write_text(json.dumps(best_metadata, indent=2), encoding="utf-8")
 
-    print(f"Best run for level {level}: {best['approach']} {best['run_id']} (total_score={best['total_score']}) -> {summary_out.parent}")
+    # Copy best run artifacts into 16_scores_best for reproducibility
+    run_dir = best["run_dir"]
+    for name in ("score_summary.csv", "score_summary_live.csv", "score_details.parquet"):
+        src = run_dir / name
+        if src.is_file():
+            shutil.copy2(src, best_dir / name)
+
+    print(f"Best run for level {level}: {best['approach']} {best['run_id']} (total_score={best['total_score']}) -> {best_dir}")
 
 
 if __name__ == "__main__":

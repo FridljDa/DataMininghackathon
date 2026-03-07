@@ -6,8 +6,8 @@ columns (estimated_number_employees, nace_code, secondary_nace_code) use the
 first non-null value per customer (by orderdate). task is taken from
 customer_test when present, else "none".
 
-Cold-start customers from customer_test are appended when they are missing from
-plis_training, so output contains them even without purchasing history.
+Any customer_test buyers missing from plis_training (e.g. cold-start or warm with no
+history) are appended so output contains them even without purchasing history.
 """
 
 import argparse
@@ -48,10 +48,9 @@ def main() -> None:
     customers = customers.merge(test[["legal_entity_id", "task"]], on="legal_entity_id", how="left")
     customers["task"] = customers["task"].fillna("none")
 
-    # Ensure missing cold-start customers are present even without purchase rows.
-    cold_start = test[test["task"] == "cold start"]
-    missing_cold_start = cold_start[~cold_start["legal_entity_id"].isin(customers["legal_entity_id"])]
-    customers = pd.concat([customers, missing_cold_start[out_cols]], ignore_index=True)
+    # Ensure all customer_test buyers are present (warm or cold) even without plis rows.
+    missing = test[~test["legal_entity_id"].isin(customers["legal_entity_id"])]
+    customers = pd.concat([customers, missing[out_cols]], ignore_index=True)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     customers[out_cols].to_csv(out_path, sep="\t", index=False)

@@ -1,10 +1,7 @@
 /.venv/
-/data/01_raw/
-/data/02_meta/
-/data/03_training_validation/
-/data/05_model/
-/data/10_submission/
+/data/*
+!/data/04_plots/
+!/data/04_plots/**
 .idea
 /.snakemake/
 .env
-/data/

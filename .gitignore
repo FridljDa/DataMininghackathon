@@ -1,5 +1,6 @@
 /.venv/
 /data/*
+!/data/01_dag/**
 !/data/06_plots/
 !/data/06_plots/**
 !/data/07_feature_analysis/

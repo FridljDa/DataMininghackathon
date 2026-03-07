@@ -25,6 +25,7 @@ def _read_single_summary_row(summary_csv: Path) -> dict[str, str]:
 
 
 def _assert_summary_metrics(summary_csv: Path) -> None:
+    """Assert generic structural checks for a live summary (single prediction: fees=10, score=savings-fees)."""
     assert summary_csv.exists(), f"Live summary CSV not written: {summary_csv}"
     row = _read_single_summary_row(summary_csv)
 
@@ -44,6 +45,42 @@ def _assert_summary_metrics(summary_csv: Path) -> None:
         f"Expected total_score == total_savings - total_fees. "
         f"Got score={net_score}, savings={savings}, fees={fees}. Row: {row}"
     )
+
+
+# Expected portal metrics for tests/integration/resources/lgbm_two_stage_submission.csv (level 2).
+LGBM_FIXTURE_LEVEL2_EXPECTED = {
+    "total_score": 239068.08,
+    "total_savings": 280718.08,
+    "total_fees": 41650.00,
+    "num_hits": 2451,
+    "spend_capture_rate": 0.112,  # 11.20%
+}
+
+
+def _assert_lgbm_fixture_metrics(summary_csv: Path) -> None:
+    """Assert exact portal metrics for the lgbm_two_stage submission fixture at level 2."""
+    assert summary_csv.exists(), f"Live summary CSV not written: {summary_csv}"
+    row = _read_single_summary_row(summary_csv)
+
+    assert float(row["total_score"]) == pytest.approx(LGBM_FIXTURE_LEVEL2_EXPECTED["total_score"]), (
+        f"total_score: got {row['total_score']}, expected {LGBM_FIXTURE_LEVEL2_EXPECTED['total_score']}"
+    )
+    assert float(row["total_savings"]) == pytest.approx(LGBM_FIXTURE_LEVEL2_EXPECTED["total_savings"]), (
+        f"total_savings: got {row['total_savings']}, expected {LGBM_FIXTURE_LEVEL2_EXPECTED['total_savings']}"
+    )
+    assert float(row["total_fees"]) == pytest.approx(LGBM_FIXTURE_LEVEL2_EXPECTED["total_fees"]), (
+        f"total_fees: got {row['total_fees']}, expected {LGBM_FIXTURE_LEVEL2_EXPECTED['total_fees']}"
+    )
+    assert int(row["num_hits"]) == LGBM_FIXTURE_LEVEL2_EXPECTED["num_hits"], (
+        f"num_hits: got {row['num_hits']}, expected {LGBM_FIXTURE_LEVEL2_EXPECTED['num_hits']}"
+    )
+    assert float(row["spend_capture_rate"]) == pytest.approx(LGBM_FIXTURE_LEVEL2_EXPECTED["spend_capture_rate"]), (
+        f"spend_capture_rate: got {row['spend_capture_rate']}, expected {LGBM_FIXTURE_LEVEL2_EXPECTED['spend_capture_rate']}"
+    )
+    # Structural sanity: score = savings - fees
+    assert float(row["total_score"]) == pytest.approx(
+        float(row["total_savings"]) - float(row["total_fees"])
+    ), f"total_score should equal total_savings - total_fees. Row: {row}"
 
 
 def _run_live_submit(
@@ -123,3 +160,22 @@ def test_submit_challenge_2_live(tmp_path: Path) -> None:
             f"Got:\n{result.stdout}"
         )
         _assert_summary_metrics(summary_csv)
+
+    # Real submission fixture: lgbm_two_stage at level 2; assert exact portal metrics.
+    fixture_csv = project_root / "tests" / "integration" / "resources" / "lgbm_two_stage_submission.csv"
+    assert fixture_csv.exists(), f"Fixture not found: {fixture_csv}"
+    summary_fixture = tmp_path / "score_summary_live_lgbm_fixture_level2.csv"
+    result_fixture = _run_live_submit(
+        project_root=project_root,
+        submission_csv=fixture_csv,
+        level=2,
+        summary_csv=summary_fixture,
+    )
+    assert result_fixture.returncode == 0, (
+        f"submit (lgbm fixture, level 2) exited with code {result_fixture.returncode}\n"
+        f"stdout:\n{result_fixture.stdout}\nstderr:\n{result_fixture.stderr}"
+    )
+    assert "Submission accepted" in result_fixture.stdout or "✓ Submission accepted" in result_fixture.stdout, (
+        f"Expected submission acceptance for lgbm fixture. Got:\n{result_fixture.stdout}"
+    )
+    _assert_lgbm_fixture_metrics(summary_fixture)

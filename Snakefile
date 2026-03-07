@@ -191,6 +191,17 @@ rule split_plis_training_validation:
         "uv run src/split_plis_training_validation.py --input {input.plis} --customer-meta {input.customer} "
         "--train {output.train} --test {output.test} --cutoff-date {params.cutoff}"
 
+rule generate_trending_classes:
+    """Build trending eclass list from training split data."""
+    input:
+        plis = PLIS_TRAINING_SPLIT,
+    output:
+        trending_classes = TRENDING_CLASSES_CSV,
+    params:
+        train_end = WIN["train_end"],
+    shell:
+        "uv run src/generate_trending_classes.py --plis {input.plis} --output {output.trending_classes} --train-end {params.train_end}"
+
 rule generate_candidates:
     """Candidate generation per level: Level 1 = (legal_entity_id, eclass); Level 2 = (legal_entity_id, eclass, manufacturer)."""
     input:

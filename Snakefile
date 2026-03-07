@@ -270,13 +270,13 @@ rule feature_selection:
         "uv run src/feature_selection.py --features {input.features_all} --selected-features '{params.selected_features}' "
         "--output {output.features_selected}"
 
-rule train_baseline:
-    """Baseline scorer and validation labels; outputs scores.parquet."""
+rule train_approach:
+    """Run a modelling approach (baseline or lgbm_two_stage); outputs data/11_predictions/{mode}/{approach}/scores.parquet."""
     input:
         candidates = FEATURES_SELECTED_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
     output:
-        scores = SCORES_PATTERN,
+        scores = SCORES_APPROACH_PATTERN,
     params:
         val_start = MODELLING["val_start"],
         val_end = MODELLING["val_end"],
@@ -289,38 +289,18 @@ rule train_baseline:
         val_months = MODELLING["val_months"],
     wildcard_constraints:
         mode = MODE_RE,
+        approach = "|".join(ENABLED_APPROACHES),
     shell:
-        "uv run src/train_baseline.py --candidates {input.candidates} --plis {input.plis} "
-        "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
-        "--n-min-label {params.n_min_label} --alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
-        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
-
-rule train_lgbm:
-    """Two-stage LightGBM (recurrence classifier + value regressor); outputs scores_lgbm.parquet."""
-    input:
-        candidates = FEATURES_SELECTED_PATTERN,
-        plis = PLIS_TRAINING_SPLIT,
-    output:
-        scores = SCORES_LGBM_PATTERN,
-    params:
-        val_start = MODELLING["val_start"],
-        val_end = MODELLING["val_end"],
-        n_min_label = MODELLING["n_min_label"],
-        savings_rate = SCORING_PARAMS["savings_rate"],
-        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
-        val_months = MODELLING["val_months"],
-    wildcard_constraints:
-        mode = MODE_RE,
-    shell:
-        "uv run src/train_lgbm.py --candidates {input.candidates} --plis {input.plis} "
-        "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
-        "--n-min-label {params.n_min_label} "
+        "uv run python src/modelling/run.py --approach {wildcards.approach} "
+        "--candidates {input.candidates} --plis {input.plis} --output {output.scores} "
+        "--val-start {params.val_start} --val-end {params.val_end} --n-min-label {params.n_min_label} "
+        "--alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
 
 rule select_portfolio:
-    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet (default: two-stage LGBM scores)."""
+    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet (uses modelling.active_approach scores)."""
     input:
-        scores = SCORES_LGBM_PATTERN,
+        scores = SCORES_ACTIVE_PATTERN,
     output:
         portfolio = PORTFOLIO_PATTERN,
     params:
@@ -360,7 +340,7 @@ rule write_submission_warm:
 rule select_portfolio_baseline:
     """Optional: apply threshold/guardrails to baseline scores. Use for diagnostic comparison."""
     input:
-        scores = SCORES_ONLINE_BASELINE,
+        scores = f"{DATA_DIR}/11_predictions/online/baseline/scores.parquet",
     output:
         portfolio = f"{DATA_DIR}/12_portfolio/online/portfolio_baseline.parquet",
     params:

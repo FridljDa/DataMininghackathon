@@ -287,6 +287,15 @@ rule score_submission:
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
         "--scoring-months {params.scoring_months}"
 
+rule submit_to_portal:
+    """Upload submission to Unite evaluator (challenge 2). Requires TEAM and PASSWORD in .env."""
+    input:
+        submission = SUBMISSION_CSV,
+    output:
+        sentinel = "data/10_submission/.submitted_challenge2",
+    shell:
+        "uv run src/submit.py --challenge 2 --file {input.submission} && touch {output.sentinel}"
+
 # --- Offline scoring: predict for testing buyers only, score with Level-1 (eclass) matching ---
 rule generate_candidates_offline:
     """Candidate generation for offline pipeline (task=testing buyers included)."""

@@ -2,9 +2,9 @@
 Automated submission script for the TUM.ai x Unite Hackathon evaluator.
 
 Usage:
-    uv run python submit.py --challenge 2 --file submission.csv
-    uv run python submit.py --challenge 1 --file submission.parquet
-    uv run python submit.py --challenge 2 --file submission.csv --level 1
+    uv run src/submit.py --challenge 2 --file submission.csv
+    uv run src/submit.py --challenge 1 --file submission.parquet
+    uv run src/submit.py --challenge 2 --file submission.csv --level 1
 
 Credentials are read from .env:
     TEAM=<your team name>

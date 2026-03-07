@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from submit import login, submit, main, PORTAL_URL, LOGIN_URL
+from src.submit import login, submit, main, PORTAL_URL, LOGIN_URL
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +263,7 @@ class TestMain:
         with pytest.raises(SystemExit) as exc:
             with patch("sys.argv", ["submit", "--challenge", "2", "--file", str(csv)]):
                 with patch.dict("os.environ", {}, clear=True):
-                    with patch("submit.load_dotenv"):
+                    with patch("src.submit.load_dotenv"):
                         main()
         assert exc.value.code == 1
         assert "TEAM" in capsys.readouterr().err
@@ -281,9 +281,9 @@ class TestMain:
         csv = tmp_path / "s.csv"
         csv.write_text("a,b\n")
         with patch("sys.argv", ["submit", "--challenge", "2", "--file", str(csv), "--level", "3"]):
-            with patch("submit.load_dotenv"):
+            with patch("src.submit.load_dotenv"):
                 with patch.dict("os.environ", {"TEAM": "t", "PASSWORD": "p"}):
-                    with patch("submit.sync_playwright") as mock_pw:
+                    with patch("src.submit.sync_playwright") as mock_pw:
                         side_effect, cache = _make_locator_side_effect()
                         mock_page = MagicMock()
                         mock_page.locator = MagicMock(side_effect=side_effect)

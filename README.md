@@ -43,12 +43,6 @@ To see which commit achieved a given score, open the run folder’s `metadata.js
   - `data/01_raw/customer_test.csv`
   - `data/01_raw/les_cs.csv`
 
-## Env
-Create a file `.env` at the root of the project with credentials:
-```sh
-TEAM=...
-PASSWORD=...
-```
   - `data/02_raw/plis_training.csv`
   - `data/02_raw/customer_test.csv`
   - `data/02_raw/les_cs.csv`
@@ -68,4 +62,4 @@ uv run src/submit.py --challenge 2 --file data/10_submission/online/submission.c
 uv run src/submit.py --challenge 2 --file data/10_submission/online/submission.csv --level 1
 ```
 
-The script reads `TEAM` and `PASSWORD` from the `.env` file above, logs in to the evaluator portal, uploads the file, and waits for the scoring result.
+Set `portal_credentials.team` and `portal_credentials.password` in `config.yaml`; the script logs in to the evaluator portal, uploads the file, and waits for the scoring result.

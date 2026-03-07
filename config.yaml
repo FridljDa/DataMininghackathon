@@ -99,3 +99,7 @@ plots:
     - task_distribution.png
     - cs_task_consistency_heatmap.png
     - nace_by_task_topn.png
+
+portal_credentials:
+  team: "ADD"
+  password: "uniteaad"

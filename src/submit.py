@@ -7,22 +7,32 @@ Usage:
     uv run src/submit.py --challenge 2 --file submission.csv --level 1
     uv run src/submit.py --challenge 2 --file submission.csv --summary-csv data/11_scores/online/score_summary_live.csv
 
-Credentials are read from .env:
-    TEAM=<your team name>
-    PASSWORD=<your password>
+Credentials are read from config.yaml (portal_credentials.team and portal_credentials.password).
 """
 
 import argparse
 import csv
-import os
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
+import yaml
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 PORTAL_URL = "https://unite-evaluator.vercel.app"
 LOGIN_URL = f"{PORTAL_URL}/login"
+
+
+def _load_credentials(config_path: Path | None = None) -> tuple[str, str]:
+    """Load team and password from config.yaml. Returns (team, password); may be empty."""
+    path = config_path or (Path(__file__).resolve().parents[1] / "config.yaml")
+    if not path.exists():
+        return "", ""
+    with path.open() as f:
+        config = yaml.safe_load(f)
+    creds = config.get("portal_credentials") or {}
+    team = (creds.get("team") or "").strip()
+    password = (creds.get("password") or "").strip()
+    return team, password
 
 
 def _parse_euro(s: str) -> float | None:
@@ -134,7 +144,7 @@ def login(page, team: str, password: str) -> None:
     page.goto(PORTAL_URL, wait_until="domcontentloaded")
 
     if "/login" in page.url:
-        raise RuntimeError("Login failed — check TEAM / PASSWORD in your .env file")
+        raise RuntimeError("Login failed — check portal_credentials in config.yaml")
 
     print(f"✓ Logged in as {team}")
 
@@ -278,11 +288,12 @@ def main() -> None:
         print(f"Error: file not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    load_dotenv()
-    team = os.getenv("TEAM")
-    password = os.getenv("PASSWORD")
+    team, password = _load_credentials()
     if not team or not password:
-        print("Error: TEAM and PASSWORD must be set in .env", file=sys.stderr)
+        print(
+            "Error: portal_credentials.team and portal_credentials.password must be set in config.yaml",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     with sync_playwright() as p:

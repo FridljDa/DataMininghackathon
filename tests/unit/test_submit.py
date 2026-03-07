@@ -335,16 +335,15 @@ class TestMain:
         assert exc.value.code == 1
         assert "not found" in capsys.readouterr().err
 
-    def test_missing_env_vars_exits_with_error(self, tmp_path, capsys) -> None:
+    def test_missing_credentials_exits_with_error(self, tmp_path, capsys) -> None:
         csv = tmp_path / "s.csv"
         csv.write_text("a,b\n")
         with pytest.raises(SystemExit) as exc:
             with patch("sys.argv", ["submit", "--challenge", "2", "--file", str(csv)]):
-                with patch.dict("os.environ", {}, clear=True):
-                    with patch("src.submit.load_dotenv"):
-                        main()
+                with patch("src.submit._load_credentials", return_value=("", "")):
+                    main()
         assert exc.value.code == 1
-        assert "TEAM" in capsys.readouterr().err
+        assert "portal_credentials" in capsys.readouterr().err
 
     def test_invalid_level_rejected_by_argparse(self, tmp_path, capsys) -> None:
         csv = tmp_path / "s.csv"
@@ -359,9 +358,8 @@ class TestMain:
         csv = tmp_path / "s.csv"
         csv.write_text("a,b\n")
         with patch("sys.argv", ["submit", "--challenge", "2", "--file", str(csv), "--level", "3"]):
-            with patch("src.submit.load_dotenv"):
-                with patch.dict("os.environ", {"TEAM": "t", "PASSWORD": "p"}):
-                    with patch("src.submit.sync_playwright") as mock_pw:
+            with patch("src.submit._load_credentials", return_value=("t", "p")):
+                with patch("src.submit.sync_playwright") as mock_pw:
                         side_effect, cache = _make_locator_side_effect()
                         mock_page = MagicMock()
                         mock_page.locator = MagicMock(side_effect=side_effect)

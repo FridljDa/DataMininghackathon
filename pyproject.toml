@@ -9,7 +9,7 @@ dependencies = [
     "pandas",
     "playwright",
     "pyarrow",
-    "python-dotenv>=1.2.2",
+    "pyyaml",
     "seaborn",
     "snakemake",
 ]

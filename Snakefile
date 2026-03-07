@@ -71,6 +71,8 @@ rule all:
         SCORE_SUMMARY,
         SCORE_DETAILS,
         ARCHIVE_SENTINEL_ONLINE,
+        "data/11_scores/online/score_summary_live.csv",
+        "data/10_submission/.submitted_challenge2",
 
 rule generate_dag_graph:
     """Write workflow DAG as SVG (no input dependencies; run first)."""
@@ -306,7 +308,7 @@ rule archive_score_run:
         "--runs-dir {params.runs_dir} --index-csv {params.index_csv} && touch {output.sentinel}"
 
 rule submit_to_portal:
-    """Upload submission to Unite evaluator (challenge 2). Requires TEAM and PASSWORD in .env."""
+    """Upload submission to Unite evaluator (challenge 2). Requires portal_credentials in config.yaml."""
     input:
         submission = SUBMISSION_CSV,
     output:

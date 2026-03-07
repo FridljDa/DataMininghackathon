@@ -20,7 +20,6 @@ RAW_COLUMNS = [
     "historical_purchase_value_total",
     "orderdate_min",
     "orderdate_max",
-    "t_last",
     "orderdates_str",
 ]
 

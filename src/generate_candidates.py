@@ -133,7 +133,6 @@ def main() -> None:
         )
         .reset_index()
     )
-    agg["t_last"] = agg["orderdate_max"]
     candidates = agg.merge(eligible, on=["legal_entity_id", "eclass"], how="inner")
 
     # Store orderdates as list of "YYYY-MM" for parquet-safe serialization
@@ -149,7 +148,6 @@ def main() -> None:
         "historical_purchase_value_total",
         "orderdate_min",
         "orderdate_max",
-        "t_last",
         "orderdates_str",
     ]
     candidates = candidates[[c for c in out_cols if c in candidates.columns]]

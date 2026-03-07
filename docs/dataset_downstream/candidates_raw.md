@@ -19,7 +19,7 @@ Practical definition from `src/generate_candidates.py`:
 
 - Format: Parquet
 - Path pattern: `data/07_candidates/online/candidates_raw.parquet` and `data/07_candidates/offline/candidates_raw.parquet`
-- Current columns: 8
+- Current columns: 7
 - Current rows:
   - online: 25,237
   - offline: 47,975
@@ -28,11 +28,11 @@ Practical definition from `src/generate_candidates.py`:
 
 Sample from `data/07_candidates/online/candidates_raw.parquet`:
 
-| legal_entity_id | eclass | n_orders | historical_purchase_value_total | orderdate_min | orderdate_max | t_last | orderdates_str |
-|---:|---:|---:|---:|---|---|---|---|
-| 41165867 | 19010107 | 1 | 551.31 | 2024-10-30 00:00:00 | 2024-10-30 00:00:00 | 2024-10-30 00:00:00 | ['2024-10'] |
-| 41165867 | 19010108 | 1 | 391.67 | 2024-12-12 00:00:00 | 2024-12-12 00:00:00 | 2024-12-12 00:00:00 | ['2024-12'] |
-| 41165867 | 19019090 | 2 | 184.15 | 2024-09-10 00:00:00 | 2024-11-07 00:00:00 | 2024-11-07 00:00:00 | ['2024-09', '2024-11'] |
+| legal_entity_id | eclass | n_orders | historical_purchase_value_total | orderdate_min | orderdate_max | orderdates_str |
+|---:|---:|---:|---:|---|---|---|
+| 41165867 | 19010107 | 1 | 551.31 | 2024-10-30 00:00:00 | 2024-10-30 00:00:00 | ['2024-10'] |
+| 41165867 | 19010108 | 1 | 391.67 | 2024-12-12 00:00:00 | 2024-12-12 00:00:00 | ['2024-12'] |
+| 41165867 | 19019090 | 2 | 184.15 | 2024-09-10 00:00:00 | 2024-11-07 00:00:00 | ['2024-09', '2024-11'] |
 
 ## Columns
 
@@ -41,8 +41,7 @@ Sample from `data/07_candidates/online/candidates_raw.parquet`:
 - `n_orders`: number of line-level purchase records for this (`legal_entity_id`, `eclass`) in train period (`orderdate <= train_end`).
 - `historical_purchase_value_total`: total spend proxy in train period, computed as `sum(quantityvalue * vk_per_item)`.
 - `orderdate_min`: earliest observed purchase date for this buyer-eclass in train period.
-- `orderdate_max`: latest observed purchase date for this buyer-eclass in train period.
-- `t_last`: last observed purchase date (currently equal to `orderdate_max`; kept as explicit recency anchor for downstream features).
+- `orderdate_max`: latest observed purchase date for this buyer-eclass in train period (used as recency anchor in derived features).
 - `orderdates_str`: unique order months encoded as `YYYY-MM` strings for parquet-safe serialization (list-like field).
 
 ## Modeling Notes
@@ -68,7 +67,6 @@ Sanity-check basis: current generated files (full parquet, online + offline).
 
 - (`legal_entity_id`, `eclass`) is unique per row (candidate key).
 - `legal_entity_id` <-> `eclass`: many-to-many (`N:M`) globally.
-- `t_last` == `orderdate_max` for all rows by construction in generator.
 - Online snapshot:
   - buyers: 47
   - unique eclasses: 2,911

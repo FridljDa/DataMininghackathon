@@ -11,6 +11,7 @@ import csv
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -153,8 +154,33 @@ def _run_live_submit(
 
 
 @pytest.mark.integration
-def test_submit_challenge_2_live(tmp_path: Path) -> None:
-    """Run submit script for challenge 2 levels 1 and 2; validate live summary metrics."""
+@pytest.mark.parametrize(
+    ("fixture_filename", "level", "summary_filename", "assert_metrics"),
+    [
+        pytest.param(
+            "phase3_repro_level1_submission.csv",
+            1,
+            "score_summary_live_phase3_fixture_level1.csv",
+            _assert_phase3_level1_fixture_metrics,
+            id="phase3-level1",
+        ),
+        pytest.param(
+            "lgbm_two_stage_submission.csv",
+            2,
+            "score_summary_live_lgbm_fixture_level2.csv",
+            _assert_lgbm_fixture_metrics,
+            id="lgbm-two-stage-level2",
+        ),
+    ],
+)
+def test_submit_challenge_2_live(
+    tmp_path: Path,
+    fixture_filename: str,
+    level: int,
+    summary_filename: str,
+    assert_metrics: Callable[[Path], None],
+) -> None:
+    """Run submit script for challenge 2 fixture submissions at levels 1 and 2."""
     project_root = Path(__file__).resolve().parents[2]
     config_path = project_root / "config.yaml"
     if not config_path.exists():
@@ -170,66 +196,22 @@ def test_submit_challenge_2_live(tmp_path: Path) -> None:
             "to run the live submission test."
         )
 
-    test_cases = [
-        (1, "legal_entity_id,cluster\n1,30020903\n"),
-        (2, "legal_entity_id,cluster\n1,30020903|Bissell\n"),
-    ]
-    for level, csv_content in test_cases:
-        submission_csv = tmp_path / f"submission_level{level}.csv"
-        submission_csv.write_text(csv_content, encoding="utf-8")
-        summary_csv = tmp_path / f"score_summary_live_level{level}.csv"
-
-        result = _run_live_submit(
-            project_root=project_root,
-            submission_csv=submission_csv,
-            level=level,
-            summary_csv=summary_csv,
-        )
-
-        assert result.returncode == 0, (
-            f"submit (level {level}) exited with code {result.returncode}\n"
-            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
-        )
-        assert "Submission accepted" in result.stdout or "✓ Submission accepted" in result.stdout, (
-            f"Expected submission acceptance message for level {level} in stdout. "
-            f"Got:\n{result.stdout}"
-        )
-        _assert_summary_metrics(summary_csv)
-
-    # Real submission fixture: phase3_repro at level 1; assert exact portal metrics.
-    phase3_level1_csv = project_root / "tests" / "integration" / "resources" / "phase3_repro_level1_submission.csv"
-    assert phase3_level1_csv.exists(), f"Fixture not found: {phase3_level1_csv}"
-    summary_phase3_l1 = tmp_path / "score_summary_live_phase3_fixture_level1.csv"
-    result_phase3_l1 = _run_live_submit(
-        project_root=project_root,
-        submission_csv=phase3_level1_csv,
-        level=1,
-        summary_csv=summary_phase3_l1,
-    )
-    assert result_phase3_l1.returncode == 0, (
-        f"submit (phase3 fixture, level 1) exited with code {result_phase3_l1.returncode}\n"
-        f"stdout:\n{result_phase3_l1.stdout}\nstderr:\n{result_phase3_l1.stderr}"
-    )
-    assert "Submission accepted" in result_phase3_l1.stdout or "✓ Submission accepted" in result_phase3_l1.stdout, (
-        f"Expected submission acceptance for phase3 level-1 fixture. Got:\n{result_phase3_l1.stdout}"
-    )
-    _assert_phase3_level1_fixture_metrics(summary_phase3_l1)
-
-    # Real submission fixture: lgbm_two_stage at level 2; assert exact portal metrics.
-    fixture_csv = project_root / "tests" / "integration" / "resources" / "lgbm_two_stage_submission.csv"
+    fixture_csv = project_root / "tests" / "integration" / "resources" / fixture_filename
     assert fixture_csv.exists(), f"Fixture not found: {fixture_csv}"
-    summary_fixture = tmp_path / "score_summary_live_lgbm_fixture_level2.csv"
-    result_fixture = _run_live_submit(
+    summary_csv = tmp_path / summary_filename
+
+    result = _run_live_submit(
         project_root=project_root,
         submission_csv=fixture_csv,
-        level=2,
-        summary_csv=summary_fixture,
+        level=level,
+        summary_csv=summary_csv,
     )
-    assert result_fixture.returncode == 0, (
-        f"submit (lgbm fixture, level 2) exited with code {result_fixture.returncode}\n"
-        f"stdout:\n{result_fixture.stdout}\nstderr:\n{result_fixture.stderr}"
+    assert result.returncode == 0, (
+        f"submit ({fixture_filename}, level {level}) exited with code {result.returncode}\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
-    assert "Submission accepted" in result_fixture.stdout or "✓ Submission accepted" in result_fixture.stdout, (
-        f"Expected submission acceptance for lgbm fixture. Got:\n{result_fixture.stdout}"
+    assert "Submission accepted" in result.stdout or "✓ Submission accepted" in result.stdout, (
+        f"Expected submission acceptance for fixture {fixture_filename} at level {level}. Got:\n{result.stdout}"
     )
-    _assert_lgbm_fixture_metrics(summary_fixture)
+    _assert_summary_metrics(summary_csv)
+    assert_metrics(summary_csv)

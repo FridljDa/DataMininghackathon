@@ -25,11 +25,8 @@ SPLIT_CUSTOMER_CSV = SPLIT["customer_csv"]
 SCORE_OUTPUTS = config["score_outputs"]
 SCORE_SUMMARY = SCORE_OUTPUTS["summary"]
 SCORE_DETAILS = SCORE_OUTPUTS["details"]
-SCORE_SUMMARY_OFFLINE = SCORE_OUTPUTS["summary_offline"]
-SCORE_DETAILS_OFFLINE = SCORE_OUTPUTS["details_offline"]
 SCORE_RUN_ARCHIVE = config["score_run_archive"]
 ARCHIVE_SENTINEL_ONLINE = SCORE_RUN_ARCHIVE["online_runs_dir"] + "/.last_archived"
-ARCHIVE_SENTINEL_OFFLINE = SCORE_RUN_ARCHIVE["offline_runs_dir"] + "/.last_archived"
 SCORING_PARAMS = config["scoring_parameters"]
 
 PLOTS = config["plots"]
@@ -38,19 +35,6 @@ PLOT_FILES = PLOTS["files"]
 PLOT_OUTPUTS = expand(f"{PLOTS_DIR}/{{f}}", f=PLOT_FILES)
 
 MODELLING = config["modelling"]
-CANDIDATES_RAW_PARQUET = MODELLING["candidates_raw_parquet"]
-FEATURES_ALL_PARQUET = MODELLING["features_all_parquet"]
-FEATURES_SELECTED_PARQUET = MODELLING["features_selected_parquet"]
-SCORES_PARQUET = MODELLING["scores_parquet"]
-SCORES_LGBM_PARQUET = MODELLING["scores_lgbm_parquet"]
-PORTFOLIO_PARQUET = MODELLING["portfolio_parquet"]
-CANDIDATES_RAW_OFFLINE_PARQUET = MODELLING["candidates_raw_offline_parquet"]
-FEATURES_ALL_OFFLINE_PARQUET = MODELLING["features_all_offline_parquet"]
-FEATURES_SELECTED_OFFLINE_PARQUET = MODELLING["features_selected_offline_parquet"]
-SCORES_OFFLINE_PARQUET = MODELLING["scores_offline_parquet"]
-SCORES_LGBM_OFFLINE_PARQUET = MODELLING["scores_lgbm_offline_parquet"]
-PORTFOLIO_OFFLINE_PARQUET = MODELLING["portfolio_offline_parquet"]
-SUBMISSION_OFFLINE_CSV = MODELLING["submission_offline_csv"]
 
 FEATURE_ANALYSIS = config["feature_analysis"]
 FEATURE_ANALYSIS_DIR = FEATURE_ANALYSIS["dir"]
@@ -61,46 +45,23 @@ FEATURE_ANALYSIS_PLOTS_OFFLINE = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATU
 
 # Mode (online|offline) configuration: paths and behaviour for modelling/scoring pipeline
 MODES = ["online", "offline"]
+MODE_RE = "|".join(MODES)
 MODE_CFG = {
     "online": {
         "customer_csv": CUSTOMER_META_CSV,
         "buyer_source": "customer-test",
         "customer_input": INPUTS["customer_test"],
         "score_level": "",
-        "candidates_raw": MODELLING["candidates_raw_parquet"],
-        "features_all": MODELLING["features_all_parquet"],
-        "features_selected": MODELLING["features_selected_parquet"],
-        "scores_parquet": MODELLING["scores_parquet"],
-        "scores_lgbm_parquet": MODELLING["scores_lgbm_parquet"],
-        "portfolio_parquet": MODELLING["portfolio_parquet"],
-        "submission_csv": SUBMISSION_CSV,
-        "score_summary": SCORE_OUTPUTS["summary"],
-        "score_details": SCORE_OUTPUTS["details"],
-        "archive_sentinel": ARCHIVE_SENTINEL_ONLINE,
         "runs_dir": SCORE_RUN_ARCHIVE["online_runs_dir"],
         "run_index_csv": SCORE_RUN_ARCHIVE["run_index_online"],
-        "feature_analysis_summary": FEATURE_ANALYSIS["summary_csv"],
-        "feature_analysis_plot_subdir": "online",
     },
     "offline": {
         "customer_csv": SPLIT_CUSTOMER_CSV,
         "buyer_source": "customer-split",
         "customer_input": SPLIT_CUSTOMER_CSV,
         "score_level": "1",
-        "candidates_raw": MODELLING["candidates_raw_offline_parquet"],
-        "features_all": MODELLING["features_all_offline_parquet"],
-        "features_selected": MODELLING["features_selected_offline_parquet"],
-        "scores_parquet": MODELLING["scores_offline_parquet"],
-        "scores_lgbm_parquet": MODELLING["scores_lgbm_offline_parquet"],
-        "portfolio_parquet": MODELLING["portfolio_offline_parquet"],
-        "submission_csv": MODELLING["submission_offline_csv"],
-        "score_summary": SCORE_OUTPUTS["summary_offline"],
-        "score_details": SCORE_OUTPUTS["details_offline"],
-        "archive_sentinel": ARCHIVE_SENTINEL_OFFLINE,
         "runs_dir": SCORE_RUN_ARCHIVE["offline_runs_dir"],
         "run_index_csv": SCORE_RUN_ARCHIVE["run_index_offline"],
-        "feature_analysis_summary": FEATURE_ANALYSIS["summary_offline_csv"],
-        "feature_analysis_plot_subdir": "offline",
     },
 }
 # Path patterns for mode-wildcarded rules (must match config paths)
@@ -207,7 +168,7 @@ rule generate_candidates:
         min_order_frequency = MODELLING["min_order_frequency"],
         min_lookback_spend = MODELLING["min_lookback_spend"],
     wildcard_constraints:
-        mode = "|".join(MODES),
+        mode = MODE_RE,
     shell:
         "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
         "--output {output.candidates_raw} --train-end {params.train_end} "
@@ -225,7 +186,7 @@ rule engineer_features:
     params:
         train_end = MODELLING["train_end"],
     wildcard_constraints:
-        mode = "|".join(MODES),
+        mode = MODE_RE,
     shell:
         "uv run src/engineer_features.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
         "--customer {input.customer} --output {output.features_all} --train-end {params.train_end}"
@@ -242,7 +203,7 @@ rule feature_analysis:
         value_by_period_plot = "data/08_feature_analysis/{mode}/purchase_value_by_period.png",
         quantity_by_period_plot = "data/08_feature_analysis/{mode}/purchase_quantity_by_period.png",
     wildcard_constraints:
-        mode = "|".join(MODES),
+        mode = MODE_RE,
     shell:
         "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
         "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot} "
@@ -258,7 +219,7 @@ rule feature_selection:
     params:
         selected_features = ",".join(MODELLING["selected_features"]),
     wildcard_constraints:
-        mode = "|".join(MODES),
+        mode = MODE_RE,
     shell:
         "uv run src/feature_selection.py --features {input.features_all} --selected-features '{params.selected_features}' "
         "--output {output.features_selected}"
@@ -281,7 +242,7 @@ rule train_baseline:
         fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
         val_months = MODELLING["val_months"],
     wildcard_constraints:
-        mode = "|".join(MODES),
+        mode = MODE_RE,
     shell:
         "uv run src/train_baseline.py --candidates {input.candidates} --plis {input.plis} "
         "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
@@ -303,7 +264,7 @@ rule train_lgbm:
         fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
         val_months = MODELLING["val_months"],
     wildcard_constraints:
-        mode = "|".join(MODES),
+        mode = MODE_RE,
     shell:
         "uv run src/train_lgbm.py --candidates {input.candidates} --plis {input.plis} "
         "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
@@ -323,7 +284,7 @@ rule select_portfolio:
         high_spend_guardrail = MODELLING["high_spend_guardrail"],
         top_k_per_buyer = MODELLING["top_k_per_buyer"],
     wildcard_constraints:
-        mode = "|".join(MODES),
+        mode = MODE_RE,
     shell:
         "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
@@ -341,7 +302,7 @@ rule write_submission_warm:
     params:
         buyer_source = lambda w: MODE_CFG[w.mode]["buyer_source"],
     wildcard_constraints:
-        mode = "|".join(MODES),
+        mode = MODE_RE,
     run:
         arg = "--customer-test" if wildcards.mode == "online" else "--customer-split"
         shell(
@@ -391,17 +352,14 @@ rule score_submission:
         savings_rate = SCORING_PARAMS["savings_rate"],
         fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
         scoring_months = SCORING_PARAMS["scoring_months"],
+        level_opt = lambda w: (" --level " + MODE_CFG[w.mode]["score_level"]) if MODE_CFG[w.mode]["score_level"] else "",
     wildcard_constraints:
-        mode = "|".join(MODES),
-    run:
-        level_opt = " --level 1" if wildcards.mode == "offline" else ""
-        shell(
-            "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
-            "--summary {output.summary} --details {output.details}"
-            + level_opt + " "
-            "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
-            "--scoring-months {params.scoring_months}"
-        )
+        mode = MODE_RE,
+    shell:
+        "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
+        "--summary {output.summary} --details {output.details}"
+        "{params.level_opt} --savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
+        "--scoring-months {params.scoring_months}"
 
 rule archive_score_run:
     """Copy current score outputs into a timestamp+commit run folder and write metadata + run index."""
@@ -414,7 +372,7 @@ rule archive_score_run:
         runs_dir = lambda w: MODE_CFG[w.mode]["runs_dir"],
         index_csv = lambda w: MODE_CFG[w.mode]["run_index_csv"],
     wildcard_constraints:
-        mode = "|".join(MODES),
+        mode = MODE_RE,
     shell:
         "uv run src/archive_score_run.py --summary {input.summary} --details {input.details} "
         "--runs-dir {params.runs_dir} --index-csv {params.index_csv} && touch {output.sentinel}"

@@ -1,0 +1,2 @@
+submission_id,approach,level,submitted_at_utc,submission_path,total_score,total_savings,total_fees,num_hits,num_predictions,spend_capture_rate,total_ground_spend
+a410890b-6170-4eb9-ba55-4fb3c905678a,lgbm_two_stage,1,2026-03-07T18:23:53Z,/Users/danielfridljand/Downloads/Challenge2/data/14_submission/online/lgbm_two_stage/level1/submission.csv,333042.78,355902.78,22860.0,1440,,0.142,

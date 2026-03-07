@@ -1,4 +1,4 @@
-# `data/07_features/{mode}/candidates_raw.parquet`
+# `data/07_candidates/{mode}/candidates_raw.parquet`
 
 ## Purpose
 
@@ -18,7 +18,7 @@ Practical definition from `src/generate_candidates.py`:
 ## File Format
 
 - Format: Parquet
-- Path pattern: `data/07_features/online/candidates_raw.parquet` and `data/07_features/offline/candidates_raw.parquet`
+- Path pattern: `data/07_candidates/online/candidates_raw.parquet` and `data/07_candidates/offline/candidates_raw.parquet`
 - Current columns: 8
 - Current rows:
   - online: 25,237
@@ -26,7 +26,7 @@ Practical definition from `src/generate_candidates.py`:
 
 ## Top 3 Rows (Raw Sample)
 
-Sample from `data/07_features/online/candidates_raw.parquet`:
+Sample from `data/07_candidates/online/candidates_raw.parquet`:
 
 | legal_entity_id | eclass | n_orders | s_total | orderdate_min | orderdate_max | t_last | orderdates_str |
 |---:|---:|---:|---:|---|---|---|---|

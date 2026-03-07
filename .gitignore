@@ -1,11 +1,5 @@
 /.venv/
 /data/*
-!/data/01_dag/**
-!/data/06_plots/
-!/data/06_plots/**
-!/data/08_feature_analysis/
-!/data/08_feature_analysis/**
-!/data/12_scores
 .idea
 /.snakemake/
 .env

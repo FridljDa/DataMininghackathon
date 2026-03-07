@@ -2,7 +2,7 @@
 Snakemake workflow for Core Demand Challenge.
 
 All input/output paths are defined here. Python scripts receive paths only via
-CLI arguments. Final deliverable: data/11_submission/online/submission.csv with header
+CLI arguments. Final deliverable: data/13_submission/online/submission.csv with header
 legal_entity_id,cluster.
 """
 
@@ -65,17 +65,17 @@ MODE_CFG = {
     },
 }
 # Path patterns for mode-wildcarded rules (must match config paths)
-CANDIDATES_RAW_PATTERN = "data/07_features/{mode}/candidates_raw.parquet"
-FEATURES_ALL_PATTERN = "data/07_features/{mode}/features_all.parquet"
-FEATURES_SELECTED_PATTERN = "data/07_features/{mode}/features_selected.parquet"
-SCORES_PATTERN = "data/09_predictions/{mode}/scores.parquet"
-SCORES_LGBM_PATTERN = "data/09_predictions/{mode}/scores_lgbm.parquet"
-PORTFOLIO_PATTERN = "data/10_portfolio/{mode}/portfolio.parquet"
-SUBMISSION_PATTERN = "data/11_submission/{mode}/submission.csv"
-SCORE_SUMMARY_PATTERN = "data/12_scores/{mode}/score_summary.csv"
-SCORE_DETAILS_PATTERN = "data/12_scores/{mode}/score_details.parquet"
-ARCHIVE_SENTINEL_PATTERN = "data/12_scores/{mode}/runs/.last_archived"
-FEATURE_ANALYSIS_SUMMARY_PATTERN = "data/08_feature_analysis/{mode}/feature_summary.csv"
+CANDIDATES_RAW_PATTERN = "data/07_candidates/{mode}/candidates_raw.parquet"
+FEATURES_ALL_PATTERN = "data/08_features/{mode}/features_all.parquet"
+FEATURES_SELECTED_PATTERN = "data/10_features_selected/{mode}/features_selected.parquet"
+SCORES_PATTERN = "data/11_predictions/{mode}/scores.parquet"
+SCORES_LGBM_PATTERN = "data/11_predictions/{mode}/scores_lgbm.parquet"
+PORTFOLIO_PATTERN = "data/12_portfolio/{mode}/portfolio.parquet"
+SUBMISSION_PATTERN = "data/13_submission/{mode}/submission.csv"
+SCORE_SUMMARY_PATTERN = "data/14_scores/{mode}/score_summary.csv"
+SCORE_DETAILS_PATTERN = "data/14_scores/{mode}/score_details.parquet"
+ARCHIVE_SENTINEL_PATTERN = "data/14_scores/{mode}/runs/.last_archived"
+FEATURE_ANALYSIS_SUMMARY_PATTERN = "data/09_feature_analysis/{mode}/feature_summary.csv"
 
 rule all:
     input:
@@ -90,8 +90,8 @@ rule all:
         SCORE_SUMMARY,
         SCORE_DETAILS,
         ARCHIVE_SENTINEL_ONLINE,
-        "data/12_scores/online/score_summary_live.csv",
-        "data/11_submission/.submitted_challenge2",
+        "data/14_scores/online/score_summary_live.csv",
+        "data/13_submission/.submitted_challenge2",
 
 rule generate_dag_graph:
     """Write workflow DAG as SVG (no input dependencies; run first)."""
@@ -198,10 +198,10 @@ rule feature_analysis:
         plis = PLIS_TRAINING_SPLIT,
     output:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_PATTERN,
-        distributions_plot = "data/08_feature_analysis/{mode}/feature_distributions.png",
-        correlations_plot = "data/08_feature_analysis/{mode}/feature_correlations.png",
-        value_by_period_plot = "data/08_feature_analysis/{mode}/purchase_value_by_period.png",
-        quantity_by_period_plot = "data/08_feature_analysis/{mode}/purchase_quantity_by_period.png",
+        distributions_plot = "data/09_feature_analysis/{mode}/feature_distributions.png",
+        correlations_plot = "data/09_feature_analysis/{mode}/feature_correlations.png",
+        value_by_period_plot = "data/09_feature_analysis/{mode}/purchase_value_by_period.png",
+        quantity_by_period_plot = "data/09_feature_analysis/{mode}/purchase_quantity_by_period.png",
     wildcard_constraints:
         mode = MODE_RE,
     shell:
@@ -211,9 +211,10 @@ rule feature_analysis:
         "--quantity-by-period-plot {output.quantity_by_period_plot}"
 
 rule feature_selection:
-    """Keep keys + config-driven selected features for downstream modelling."""
+    """Keep keys + config-driven selected features for downstream modelling (post feature_analysis)."""
     input:
         features_all = FEATURES_ALL_PATTERN,
+        feature_analysis_summary = FEATURE_ANALYSIS_SUMMARY_PATTERN,
     output:
         features_selected = FEATURES_SELECTED_PATTERN,
     params:
@@ -316,7 +317,7 @@ rule select_portfolio_baseline:
     input:
         scores = MODELLING["scores_parquet"],
     output:
-        portfolio = "data/10_portfolio/online/portfolio_baseline.parquet",
+        portfolio = "data/12_portfolio/online/portfolio_baseline.parquet",
     params:
         score_threshold = MODELLING["score_threshold"],
         min_orders_guardrail = MODELLING["min_orders_guardrail"],
@@ -330,18 +331,18 @@ rule select_portfolio_baseline:
         "--top-k-per-buyer {params.top_k_per_buyer}"
 
 rule write_submission:
-    """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/11_submission/submission_baseline.csv' to run."""
+    """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/13_submission/submission_baseline.csv' to run."""
     input:
         customer_test = INPUTS["customer_test"],
         plis = PLIS_TRAINING_CSV,
     output:
-        submission = "data/11_submission/submission_baseline.csv",
+        submission = "data/13_submission/submission_baseline.csv",
     shell:
         "uv run src/write_submission.py --output {output.submission} "
         "--customer-test {input.customer_test} --plis-training {input.plis}"
 
 rule score_submission:
-    """Score submission against plis_testing holdout; write summary and details to data/12_scores."""
+    """Score submission against plis_testing holdout; write summary and details to data/14_scores."""
     input:
         submission = SUBMISSION_PATTERN,
         plis_testing = PLIS_TESTING_SPLIT,
@@ -382,8 +383,8 @@ rule submit_to_portal:
     input:
         submission = SUBMISSION_CSV,
     output:
-        summary = "data/12_scores/online/score_summary_live.csv",
-        sentinel = "data/11_submission/.submitted_challenge2",
+        summary = "data/14_scores/online/score_summary_live.csv",
+        sentinel = "data/13_submission/.submitted_challenge2",
     shell:
         "uv run src/submit.py --challenge 2 --file {input.submission} --summary-csv {output.summary} && touch {output.sentinel}"
 

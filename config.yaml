@@ -7,7 +7,7 @@ inputs:
 plis_training_csv: "data/02_raw/plis_training.csv"
 customer_meta_csv: "data/03_meta/customer.csv"
 output_dir: "outputs"
-submission_csv: "data/11_submission/online/submission.csv"
+submission_csv: "data/13_submission/online/submission.csv"
 
 training_validation_split:
   cutoff_date: "2025-07-01"
@@ -22,17 +22,17 @@ scoring_parameters:
   fixed_fee_eur: 10.00
   scoring_months: 1
 
-scores_dir: "data/12_scores"
+scores_dir: "data/14_scores"
 score_outputs:
-  summary: "data/12_scores/online/score_summary.csv"
-  details: "data/12_scores/online/score_details.parquet"
-  summary_offline: "data/12_scores/offline/score_summary.csv"
-  details_offline: "data/12_scores/offline/score_details.parquet"
+  summary: "data/14_scores/online/score_summary.csv"
+  details: "data/14_scores/online/score_details.parquet"
+  summary_offline: "data/14_scores/offline/score_summary.csv"
+  details_offline: "data/14_scores/offline/score_details.parquet"
 score_run_archive:
-  online_runs_dir: "data/12_scores/online/runs"
-  offline_runs_dir: "data/12_scores/offline/runs"
-  run_index_online: "data/12_scores/online/run_index.csv"
-  run_index_offline: "data/12_scores/offline/run_index.csv"
+  online_runs_dir: "data/14_scores/online/runs"
+  offline_runs_dir: "data/14_scores/offline/runs"
+  run_index_online: "data/14_scores/online/run_index.csv"
+  run_index_offline: "data/14_scores/offline/run_index.csv"
 
 modelling:
   train_end: "2024-12-31"
@@ -51,19 +51,19 @@ modelling:
   high_spend_guardrail: 500.0
   top_k_per_buyer: 15
   val_months: 6.0
-  candidates_raw_parquet: "data/07_features/online/candidates_raw.parquet"
-  features_all_parquet: "data/07_features/online/features_all.parquet"
-  features_selected_parquet: "data/07_features/online/features_selected.parquet"
-  scores_parquet: "data/09_predictions/online/scores.parquet"
-  scores_lgbm_parquet: "data/09_predictions/online/scores_lgbm.parquet"
-  portfolio_parquet: "data/10_portfolio/online/portfolio.parquet"
-  candidates_raw_offline_parquet: "data/07_features/offline/candidates_raw.parquet"
-  features_all_offline_parquet: "data/07_features/offline/features_all.parquet"
-  features_selected_offline_parquet: "data/07_features/offline/features_selected.parquet"
-  scores_offline_parquet: "data/09_predictions/offline/scores.parquet"
-  scores_lgbm_offline_parquet: "data/09_predictions/offline/scores_lgbm.parquet"
-  portfolio_offline_parquet: "data/10_portfolio/offline/portfolio.parquet"
-  submission_offline_csv: "data/11_submission/offline/submission.csv"
+  candidates_raw_parquet: "data/07_candidates/online/candidates_raw.parquet"
+  features_all_parquet: "data/08_features/online/features_all.parquet"
+  features_selected_parquet: "data/10_features_selected/online/features_selected.parquet"
+  scores_parquet: "data/11_predictions/online/scores.parquet"
+  scores_lgbm_parquet: "data/11_predictions/online/scores_lgbm.parquet"
+  portfolio_parquet: "data/12_portfolio/online/portfolio.parquet"
+  candidates_raw_offline_parquet: "data/07_candidates/offline/candidates_raw.parquet"
+  features_all_offline_parquet: "data/08_features/offline/features_all.parquet"
+  features_selected_offline_parquet: "data/10_features_selected/offline/features_selected.parquet"
+  scores_offline_parquet: "data/11_predictions/offline/scores.parquet"
+  scores_lgbm_offline_parquet: "data/11_predictions/offline/scores_lgbm.parquet"
+  portfolio_offline_parquet: "data/12_portfolio/offline/portfolio.parquet"
+  submission_offline_csv: "data/13_submission/offline/submission.csv"
   selected_features:
     - n_orders
     - m_active
@@ -99,9 +99,9 @@ modelling:
     - nace_code
 
 feature_analysis:
-  dir: "data/08_feature_analysis"
-  summary_csv: "data/08_feature_analysis/online/feature_summary.csv"
-  summary_offline_csv: "data/08_feature_analysis/offline/feature_summary.csv"
+  dir: "data/09_feature_analysis"
+  summary_csv: "data/09_feature_analysis/online/feature_summary.csv"
+  summary_offline_csv: "data/09_feature_analysis/offline/feature_summary.csv"
   plot_files:
     - online/feature_distributions.png
     - online/feature_correlations.png

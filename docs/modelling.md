@@ -311,15 +311,15 @@ $$
 \hat{n}_{b,e}\cdot \bar{v}_{b,e}
 $$
 
-and then:
+and then, applying the approximate savings scaling from Section 9 (savings scale roughly with $ \sqrt{\text{spend}} $):
 
 $$
 \widehat{EU}(b,e)
 :=
-g(\hat{z}_{b,e}^{\text{factorized}}) - F
+\sqrt{\hat{n}_{b,e}\cdot \bar{v}_{b,e}} - F
 $$
 
-where $ g(\cdot) $ is a scorer-aligned transformation or calibrated proxy (e.g. $ \sqrt{\cdot} $ to match the approximate savings scaling noted in Section 9).
+where $ F = €10 $ is the fixed monthly fee per predicted element.
 
 Why this can make sense:
 

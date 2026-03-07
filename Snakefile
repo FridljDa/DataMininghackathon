@@ -51,6 +51,13 @@ PLOT_OUTPUTS = expand(f"{PLOTS_DIR}/{{f}}", f=PLOT_FILES)
 
 # Modelling (params only from config; paths are patterns below)
 MODELLING = config["modelling"]
+WIN = MODELLING["windows"]
+VAL = WIN["validation"]
+CAND = MODELLING["candidates"]
+SEL = MODELLING["selection"]
+GRD = SEL["guardrails"]
+FEAT = MODELLING["features"]
+APP = MODELLING["approaches"]
 
 # Feature analysis
 FEATURE_ANALYSIS_DIR = f"{DATA_DIR}/09_feature_analysis"
@@ -190,10 +197,10 @@ rule generate_candidates:
     output:
         candidates_raw = CANDIDATES_RAW_PATTERN,
     params:
-        train_end = MODELLING["train_end"],
-        lookback_months = MODELLING["lookback_months"],
-        min_order_frequency = MODELLING["min_order_frequency"],
-        min_lookback_spend = MODELLING["min_lookback_spend"],
+        train_end = WIN["train_end"],
+        lookback_months = CAND["lookback_months"],
+        min_order_frequency = CAND["min_order_frequency"],
+        min_lookback_spend = CAND["min_lookback_spend"],
     wildcard_constraints:
         mode = MODE_RE,
     shell:
@@ -212,7 +219,7 @@ rule engineer_features:
     output:
         features_all = FEATURES_ALL_PATTERN,
     params:
-        train_end = MODELLING["train_end"],
+        train_end = WIN["train_end"],
     wildcard_constraints:
         mode = MODE_RE,
     shell:
@@ -232,9 +239,9 @@ rule feature_analysis:
         distributions_plot = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_distributions.png",
         correlations_plot = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_correlations.png",
     params:
-        val_start = MODELLING["val_start"],
-        val_end = MODELLING["val_end"],
-        n_min_label = MODELLING["n_min_label"],
+        val_start = VAL["start"],
+        val_end = VAL["end"],
+        n_min_label = VAL["n_min_label"],
     wildcard_constraints:
         mode = MODE_RE,
     shell:
@@ -244,7 +251,7 @@ rule feature_analysis:
         "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot}"
 
 rule suggest_features:
-    """Suggest feature list from feature_summary.csv and feature_redundancy.csv for manual use in config selected_features."""
+    """Suggest feature list from feature_summary.csv and feature_redundancy.csv for manual use in config modelling.features.selected."""
     input:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_PATTERN,
         redundancy_csv = FEATURE_ANALYSIS_REDUNDANCY_PATTERN,
@@ -263,7 +270,7 @@ rule feature_selection:
     output:
         features_selected = FEATURES_SELECTED_PATTERN,
     params:
-        selected_features = ",".join(MODELLING["selected_features"]),
+        selected_features = ",".join(FEAT["selected"]),
     wildcard_constraints:
         mode = MODE_RE,
     shell:
@@ -278,15 +285,15 @@ rule train_approach:
     output:
         scores = SCORES_APPROACH_PATTERN,
     params:
-        val_start = MODELLING["val_start"],
-        val_end = MODELLING["val_end"],
-        n_min_label = MODELLING["n_min_label"],
-        alpha = MODELLING["alpha"],
-        beta = MODELLING["beta"],
-        gamma = MODELLING["gamma"],
+        val_start = VAL["start"],
+        val_end = VAL["end"],
+        n_min_label = VAL["n_min_label"],
+        alpha = APP["baseline"]["alpha"],
+        beta = APP["baseline"]["beta"],
+        gamma = APP["baseline"]["gamma"],
         savings_rate = SCORING_PARAMS["savings_rate"],
         fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
-        val_months = MODELLING["val_months"],
+        val_months = VAL["months"],
     wildcard_constraints:
         mode = MODE_RE,
         approach = "|".join(ENABLED_APPROACHES),
@@ -304,11 +311,11 @@ rule select_portfolio:
     output:
         portfolio = PORTFOLIO_PATTERN,
     params:
-        score_threshold = MODELLING["score_threshold"],
-        min_orders_guardrail = MODELLING["min_orders_guardrail"],
-        min_months_guardrail = MODELLING["min_months_guardrail"],
-        high_spend_guardrail = MODELLING["high_spend_guardrail"],
-        top_k_per_buyer = MODELLING["top_k_per_buyer"],
+        score_threshold = SEL["score_threshold"],
+        min_orders_guardrail = GRD["min_orders"],
+        min_months_guardrail = GRD["min_months"],
+        high_spend_guardrail = GRD["high_spend"],
+        top_k_per_buyer = SEL["top_k_per_buyer"],
     wildcard_constraints:
         mode = MODE_RE,
     shell:
@@ -344,11 +351,11 @@ rule select_portfolio_baseline:
     output:
         portfolio = f"{DATA_DIR}/12_portfolio/online/portfolio_baseline.parquet",
     params:
-        score_threshold = MODELLING["score_threshold"],
-        min_orders_guardrail = MODELLING["min_orders_guardrail"],
-        min_months_guardrail = MODELLING["min_months_guardrail"],
-        high_spend_guardrail = MODELLING["high_spend_guardrail"],
-        top_k_per_buyer = MODELLING["top_k_per_buyer"],
+        score_threshold = SEL["score_threshold"],
+        min_orders_guardrail = GRD["min_orders"],
+        min_months_guardrail = GRD["min_months"],
+        high_spend_guardrail = GRD["high_spend"],
+        top_k_per_buyer = SEL["top_k_per_buyer"],
     shell:
         "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "

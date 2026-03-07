@@ -442,6 +442,7 @@ rule write_submission_warm:
         customer = lambda w: MODE_CFG[w.mode]["customer_input"],
         plis = PLIS_TRAINING_SPLIT,
         nace_codes = INPUTS["nace_codes"],
+        scores = SCORES_APPROACH_PATTERN,
     output:
         submission = SUBMISSION_PATTERN,
     params:
@@ -456,7 +457,7 @@ rule write_submission_warm:
         shell(
             "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
             "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} "
-            "--nace-codes {input.nace_codes} --level {wildcards.level} "
+            "--nace-codes {input.nace_codes} --scores {input.scores} --level {wildcards.level} "
             "--cold-start-top-k {params.cold_start_top_k} --output {output.submission}"
         )
 

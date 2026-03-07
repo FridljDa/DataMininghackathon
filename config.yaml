@@ -76,6 +76,16 @@ modelling:
     - s_median_line
     - w_e_b
     - delta_trend
+    - last_order_month_cos
+    - last_order_month_sin
+    - last_order_quarter_cos
+    - last_order_quarter_sin
+    - q4_share
+    - recent_3m_count
+    - recent_6m_count
+    - recent_3_over_6
+    - recency_to_gap_ratio
+    - delta_vs_expected_gap
     - log_employees
     - nace_2
     - nace_code
@@ -101,5 +111,5 @@ plots:
     - nace_by_task_topn.png
 
 portal_credentials:
-  team: "ADD"
-  password: "uniteaad"
+  team: 'AAD'
+  password: 'uniteaad'

@@ -156,6 +156,68 @@ def main() -> None:
         lambda x: _trend(x, train_end)
     )
 
+    # Calendar and momentum (aggregated per candidate)
+    end_period = train_end.to_period("M")
+
+    def _last_order_month_cos_sin(periods: list) -> tuple[float, float]:
+        if not periods:
+            return np.nan, np.nan
+        last = max(periods)
+        month_1based = last.month
+        x = 2 * np.pi * (month_1based - 1) / 12
+        return float(np.cos(x)), float(np.sin(x))
+
+    def _last_order_quarter_cos_sin(periods: list) -> tuple[float, float]:
+        if not periods:
+            return np.nan, np.nan
+        last = max(periods)
+        quarter = (last.month - 1) // 3 + 1
+        x = 2 * np.pi * (quarter - 1) / 4
+        return float(np.cos(x)), float(np.sin(x))
+
+    def _q4_share(periods: list) -> float:
+        if not periods:
+            return np.nan
+        q4_count = sum(1 for p in periods if p.month >= 10)
+        return float(q4_count) / len(periods)
+
+    def _recent_counts(periods: list, end: pd.Period) -> tuple[float, float]:
+        if not periods:
+            return 0.0, 0.0
+        n_3 = sum(1 for p in periods if _month_diff(end, p) <= 2)
+        n_6 = sum(1 for p in periods if _month_diff(end, p) <= 5)
+        return float(n_3), float(n_6)
+
+    last_month_results = list(zip(*candidates["orderdates"].map(_last_order_month_cos_sin)))
+    candidates["last_order_month_cos"] = last_month_results[0]
+    candidates["last_order_month_sin"] = last_month_results[1]
+
+    last_quarter_results = list(zip(*candidates["orderdates"].map(_last_order_quarter_cos_sin)))
+    candidates["last_order_quarter_cos"] = last_quarter_results[0]
+    candidates["last_order_quarter_sin"] = last_quarter_results[1]
+
+    candidates["q4_share"] = candidates["orderdates"].map(_q4_share)
+
+    recent_results = list(zip(*candidates["orderdates"].map(lambda x: _recent_counts(x, end_period))))
+    candidates["recent_3m_count"] = recent_results[0]
+    candidates["recent_6m_count"] = recent_results[1]
+    candidates["recent_3_over_6"] = np.where(
+        candidates["recent_6m_count"] >= 1,
+        candidates["recent_3m_count"] / candidates["recent_6m_count"],
+        np.nan,
+    )
+
+    candidates["recency_to_gap_ratio"] = np.where(
+        (candidates["mu_gap"] > 0) & candidates["mu_gap"].notna(),
+        candidates["delta_recency"] / candidates["mu_gap"],
+        np.nan,
+    )
+    candidates["delta_vs_expected_gap"] = np.where(
+        candidates["mu_gap"].notna(),
+        candidates["delta_recency"] - candidates["mu_gap"],
+        np.nan,
+    )
+
     # Buyer context
     customer = _read_customer(customer_path)
     customer["legal_entity_id"] = customer["legal_entity_id"].astype(str)
@@ -183,6 +245,16 @@ def main() -> None:
         "s_median_line",
         "w_e_b",
         "delta_trend",
+        "last_order_month_cos",
+        "last_order_month_sin",
+        "last_order_quarter_cos",
+        "last_order_quarter_sin",
+        "q4_share",
+        "recent_3m_count",
+        "recent_6m_count",
+        "recent_3_over_6",
+        "recency_to_gap_ratio",
+        "delta_vs_expected_gap",
         "log_employees",
         "nace_2",
         "nace_code",

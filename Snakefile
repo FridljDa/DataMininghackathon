@@ -250,7 +250,7 @@ rule sanitize_features_raw:
 rule engineer_features_derived:
     """Derived feature engineering: raw features + plis/customer/nace -> full feature matrix; level2 keeps manufacturer in key."""
     input:
-        features_sanitized = FEATURES_SANITIZED_PATTERN,
+        features_raw = FEATURES_RAW_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
         customer = lambda w: MODE_CFG[w.mode]["customer_csv"],
         nace_codes = INPUTS["nace_codes"],
@@ -263,7 +263,7 @@ rule engineer_features_derived:
         mode = MODE_RE,
         level = LEVEL_RE,
     shell:
-        "uv run src/engineer_features_derived.py --features-raw {input.features_sanitized} --plis {input.plis} "
+        "uv run src/engineer_features_derived.py --features-raw {input.features_raw} --plis {input.plis} "
         "--customer {input.customer} --nace-codes {input.nace_codes} --output {output.features_all} --train-end {params.train_end} --lookback-months {params.lookback_months} --level {wildcards.level}"
 
 FEATURE_ANALYSIS_REDUNDANCY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/level{{level}}/feature_redundancy.csv"

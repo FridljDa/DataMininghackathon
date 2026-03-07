@@ -35,9 +35,9 @@ modelling:
       months: 6.0
 
   candidates:
-    lookback_months: 18
-    min_order_frequency: 2
-    min_lookback_spend: 100
+    lookback_months: 60
+    min_order_frequency: 1
+    min_lookback_spend: 0
 
   # For pass_through approach, use score_threshold <= 0, min_orders/min_months 1, high_spend 0, top_k_per_buyer large (e.g. 9999) so portfolio = candidates.
   selection:

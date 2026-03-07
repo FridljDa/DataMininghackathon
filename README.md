@@ -34,3 +34,20 @@ PASSWORD=...
   - `data/02_raw/plis_training.csv`
   - `data/02_raw/customer_test.csv`
   - `data/02_raw/les_cs.csv`
+
+## Submit Predictions
+
+Use `submit.py` to upload predictions and see scores:
+
+```bash
+# Challenge 1 (parquet)
+uv run python submit.py --challenge 1 --file data/10_submission/submission.parquet
+
+# Challenge 2 (csv, default level 2)
+uv run python submit.py --challenge 2 --file data/10_submission/submission.csv
+
+# Challenge 2 with explicit level
+uv run python submit.py --challenge 2 --file data/10_submission/submission.csv --level 1
+```
+
+The script reads `TEAM` and `PASSWORD` from the `.env` file above, logs in to the evaluator portal, uploads the file, and waits for the scoring result.

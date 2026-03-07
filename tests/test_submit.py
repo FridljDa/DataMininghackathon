@@ -12,10 +12,24 @@ from submit import login, submit, main, PORTAL_URL, LOGIN_URL
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _make_locator_side_effect():
+    """Return a side_effect function that gives distinct mocks per CSS selector."""
+    _cache: dict[str, MagicMock] = {}
+
+    def _side_effect(selector, *args, **kwargs):
+        if selector not in _cache:
+            _cache[selector] = MagicMock(name=f"locator({selector!r})")
+        return _cache[selector]
+
+    return _side_effect, _cache
+
+
 def _make_page(url: str = PORTAL_URL) -> MagicMock:
     """Return a minimal mock of a Playwright page."""
     page = MagicMock()
     type(page).url = property(lambda self: url)
+    side_effect, _cache = _make_locator_side_effect()
+    page.locator = MagicMock(side_effect=side_effect)
     return page
 
 
@@ -51,15 +65,16 @@ class TestLogin:
         page = _make_page(url=PORTAL_URL)  # not /login → success
         login(page, "myteam", "secret")
 
-        page.goto.assert_any_call(LOGIN_URL)
-        # Both fill calls go through page.locator().fill; verify both values
-        # were passed (order matches the login implementation).
-        fill_calls = page.locator.return_value.fill.call_args_list
-        assert call("myteam") in fill_calls
-        assert call("secret") in fill_calls
+        page.goto.assert_any_call(LOGIN_URL, wait_until="domcontentloaded")
+        # Verify the correct selectors were used for each field.
+        page.locator.assert_any_call("#teamName")
+        page.locator.assert_any_call("#password")
+        page.locator("#teamName").fill.assert_called_once_with("myteam")
+        page.locator("#password").fill.assert_called_once_with("secret")
+        page.locator.assert_any_call("button[type=submit]")
         page.locator("button[type=submit]").click.assert_called_once()
         # must navigate to portal root after Supabase cookie is set
-        page.goto.assert_called_with(PORTAL_URL)
+        page.goto.assert_called_with(PORTAL_URL, wait_until="domcontentloaded")
 
     def test_failed_login_raises(self) -> None:
         page = _make_page(url=f"{PORTAL_URL}/login")
@@ -83,13 +98,24 @@ class TestSubmit:
         response_body: dict | None = None,
         body_text: str = "Your Submissions\nTotal Score:\n€0.00\nSpend Captured: 0.00%",
     ) -> MagicMock:
+        side_effect, cache = _make_locator_side_effect()
         page = MagicMock()
-        page.locator.return_value.all.return_value = buttons
-        page.locator.return_value.inner_text.return_value = body_text
+        page.locator = MagicMock(side_effect=side_effect)
+
+        # Wire up selector-specific behaviour.
+        cache["button[type=button]"] = MagicMock(name="locator('button[type=button]')")
+        cache["button[type=button]"].all.return_value = buttons
+
+        cache["input[type=file]"] = MagicMock(name="locator('input[type=file]')")
+        cache["button[type=submit]"] = MagicMock(name="locator('button[type=submit]')")
+
+        body_locator = MagicMock(name="locator('body')")
+        body_locator.inner_text.return_value = body_text
+        cache["body"] = body_locator
+
         page.expect_response = _make_response_ctx(
             response_body or {"success": True, "submission": {"id": "abc-123"}}
         )
-        page.locator("body").inner_text.return_value = body_text
         return page
 
     # --- level selection ---
@@ -158,6 +184,7 @@ class TestSubmit:
 
         submit(page, challenge_id=2, file_path=csv, level=2)
 
+        page.locator.assert_any_call("input[type=file]")
         page.locator("input[type=file]").set_input_files.assert_called_once_with(
             str(csv.resolve())
         )
@@ -214,7 +241,7 @@ class TestSubmit:
 
         submit(page, challenge_id=2, file_path=csv, level=2)
 
-        page.goto.assert_called_once_with(f"{PORTAL_URL}/challenges/2")
+        page.goto.assert_called_once_with(f"{PORTAL_URL}/challenges/2", wait_until="domcontentloaded")
 
 
 # ---------------------------------------------------------------------------
@@ -257,9 +284,11 @@ class TestMain:
             with patch("submit.load_dotenv"):
                 with patch.dict("os.environ", {"TEAM": "t", "PASSWORD": "p"}):
                     with patch("submit.sync_playwright") as mock_pw:
-                        # Make the browser/page chain raise RuntimeError (level 3 not found)
+                        side_effect, cache = _make_locator_side_effect()
                         mock_page = MagicMock()
-                        mock_page.locator.return_value.all.return_value = []
+                        mock_page.locator = MagicMock(side_effect=side_effect)
+                        cache["button[type=button]"] = MagicMock()
+                        cache["button[type=button]"].all.return_value = []
                         mock_pw.return_value.__enter__.return_value.chromium.launch.return_value \
                             .new_context.return_value.new_page.return_value = mock_page
                         # url property after login must not contain /login

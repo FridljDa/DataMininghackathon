@@ -25,16 +25,17 @@ LOGIN_URL = f"{PORTAL_URL}/login"
 
 def login(page, team: str, password: str) -> None:
     """Authenticate and establish a browser session."""
-    page.goto(LOGIN_URL)
-    page.wait_for_load_state("networkidle")
+    page.goto(LOGIN_URL, wait_until="domcontentloaded")
     page.locator("#teamName").fill(team)
     page.locator("#password").fill(password)
     page.locator("button[type=submit]").click()
 
-    # Auth token is set via Supabase; navigate away from login to apply the session.
-    page.wait_for_timeout(3000)
-    page.goto(PORTAL_URL)
-    page.wait_for_load_state("networkidle")
+    # Auth token is set via Supabase; wait for redirect or session cookie.
+    try:
+        page.wait_for_url(lambda url: "/login" not in url, timeout=10_000)
+    except PlaywrightTimeout:
+        pass
+    page.goto(PORTAL_URL, wait_until="domcontentloaded")
 
     if "/login" in page.url:
         raise RuntimeError("Login failed — check TEAM / PASSWORD in your .env file")
@@ -50,8 +51,7 @@ def submit(
 ) -> None:
     """Navigate to a challenge page, set granularity, upload file, and submit."""
     challenge_url = f"{PORTAL_URL}/challenges/{challenge_id}"
-    page.goto(challenge_url)
-    page.wait_for_load_state("networkidle")
+    page.goto(challenge_url, wait_until="domcontentloaded")
 
     print(f"✓ Opened challenge {challenge_id}")
 

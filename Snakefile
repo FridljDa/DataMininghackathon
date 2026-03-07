@@ -34,6 +34,9 @@ SCORE_RUN_ARCHIVE = {
 SCORING_PARAMS = config["scoring_parameters"]
 BEST_RUN_COPIED_SENTINEL_PATTERN = f"{SCORES_BEST_DIR}/online/level{{level}}/best_run/.copied"
 
+# Submission tuning diagnostics (plots and summary CSVs per level)
+SUBMISSION_TUNING_DIR = f"{DATA_DIR}/17_submission_tuning"
+
 # Exploration plots
 PLOTS_DIR = f"{DATA_DIR}/06_plots"
 PLOT_FILES = [
@@ -98,6 +101,15 @@ ENABLED_APPROACHES = MODELLING["enabled_approaches"]
 ENABLED_LEVELS = MODELLING["enabled_levels"]
 APPROACH_RE = "|".join(ENABLED_APPROACHES)
 LEVEL_RE = "|".join(str(l) for l in ENABLED_LEVELS)
+SUBMISSION_TUNING_OUTPUTS = (
+    expand(f"{SUBMISSION_TUNING_DIR}/run_metrics_level{{level}}.csv", level=ENABLED_LEVELS)
+    + expand(f"{SUBMISSION_TUNING_DIR}/param_effects_level{{level}}.csv", level=ENABLED_LEVELS)
+    + expand(f"{SUBMISSION_TUNING_DIR}/current_submission_shape_level{{level}}.csv", level=ENABLED_LEVELS)
+    + expand(f"{SUBMISSION_TUNING_DIR}/score_vs_predictions_level{{level}}.png", level=ENABLED_LEVELS)
+    + expand(f"{SUBMISSION_TUNING_DIR}/score_vs_capture_level{{level}}.png", level=ENABLED_LEVELS)
+    + expand(f"{SUBMISSION_TUNING_DIR}/run_timeline_level{{level}}.png", level=ENABLED_LEVELS)
+    + expand(f"{SUBMISSION_TUNING_DIR}/submission_size_vs_score_level{{level}}.png", level=ENABLED_LEVELS)
+)
 SCORES_APPROACH_PATTERN = f"{DATA_DIR}/12_predictions/{{mode}}/{{approach}}/level{{level}}/scores.parquet"
 PORTFOLIO_PATTERN = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/level{{level}}/portfolio.parquet"
 SUBMISSION_PATTERN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/submission.csv"
@@ -123,6 +135,7 @@ rule all:
         expand(ARCHIVE_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(BEST_RUN_COPIED_SENTINEL_PATTERN, level=ENABLED_LEVELS),
+        SUBMISSION_TUNING_OUTPUTS,
 
 rule generate_dag_graph:
     """Write high-level workflow graph as SVG (rule-level, not job-level)."""
@@ -499,6 +512,33 @@ rule copy_best_online_run:
     shell:
         "uv run src/select_best_score_run.py --scores-dir {params.scores_dir} --level {wildcards.level} "
         "--best-run-dir {params.best_run_dir} && touch {output.sentinel}"
+
+rule analyze_submission_tuning:
+    """Produce submission-tuning diagnostics: run metrics, param effects, submission shape CSVs and plots per level (for hyperparameter choice)."""
+    input:
+        submissions = expand(
+            SUBMISSION_PATTERN,
+            mode=["online"],
+            approach=ENABLED_APPROACHES,
+            level="{level}",
+        ),
+    output:
+        run_metrics = f"{SUBMISSION_TUNING_DIR}/run_metrics_level{{level}}.csv",
+        param_effects = f"{SUBMISSION_TUNING_DIR}/param_effects_level{{level}}.csv",
+        current_shape = f"{SUBMISSION_TUNING_DIR}/current_submission_shape_level{{level}}.csv",
+        plot_score_predictions = f"{SUBMISSION_TUNING_DIR}/score_vs_predictions_level{{level}}.png",
+        plot_score_capture = f"{SUBMISSION_TUNING_DIR}/score_vs_capture_level{{level}}.png",
+        plot_timeline = f"{SUBMISSION_TUNING_DIR}/run_timeline_level{{level}}.png",
+        plot_size_score = f"{SUBMISSION_TUNING_DIR}/submission_size_vs_score_level{{level}}.png",
+    params:
+        runs_dir = f"{SCORES_DIR}/online/runs/level{{level}}",
+        best_run_dir = f"{SCORES_BEST_DIR}/online/level{{level}}/best_run",
+        out_dir = SUBMISSION_TUNING_DIR,
+    wildcard_constraints:
+        level = LEVEL_RE,
+    shell:
+        "uv run src/analyze_submission_tuning.py --level {wildcards.level} --output-dir {params.out_dir} "
+        "--runs-dir {params.runs_dir} --best-run-dir {params.best_run_dir} --submissions {input.submissions}"
 
 rule submit_to_portal:
     """Upload online submission to Unite evaluator (challenge 2) per approach and level. Writes live score to temp file for archive_score_run. Requires portal_credentials in config.yaml."""

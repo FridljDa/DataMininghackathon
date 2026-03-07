@@ -220,16 +220,25 @@ rule generate_candidates:
         "--trending-classes {input.trending_classes} --output {output.candidates_raw} --train-end {params.train_end} --level {wildcards.level}"
 
 rule engineer_features_raw:
-    """Pass-through raw feature columns from candidates (no derivation); level2 includes manufacturer."""
+    """Pass-through raw feature columns from candidates plus top-K SKU attributes from features_per_sku; level2 includes manufacturer."""
     input:
         candidates_raw = CANDIDATES_RAW_PATTERN,
+        plis = PLIS_TRAINING_SPLIT,
+        features_per_sku = INPUTS["features_per_sku"],
     output:
         features_raw = FEATURES_RAW_PATTERN,
+    params:
+        train_end = WIN["train_end"],
+        top_k_keys = MODELLING["features_per_sku"]["top_k_keys"],
+        top_k_values_per_key = MODELLING["features_per_sku"]["top_k_values_per_key"],
+        chunksize = MODELLING["features_per_sku"]["chunksize"],
     wildcard_constraints:
         mode = MODE_RE,
         level = LEVEL_RE,
     shell:
-        "uv run src/engineer_features_raw.py --candidates-raw {input.candidates_raw} --output {output.features_raw} --level {wildcards.level}"
+        "uv run src/engineer_features_raw.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
+        "--features-per-sku {input.features_per_sku} --output {output.features_raw} --level {wildcards.level} "
+        "--train-end {params.train_end} --top-k-keys {params.top_k_keys} --top-k-values-per-key {params.top_k_values_per_key} --chunksize {params.chunksize}"
 
 rule sanitize_features_raw:
     """Apply per-feature missing-value policies (drop_row, ignore, fill) from config to features_raw."""

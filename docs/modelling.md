@@ -5,10 +5,13 @@
 Given from data/problem setup:
 
 - $ \mathcal{B} $: all buyers
-- $ \mathcal{B}_{\text{warm}} \subseteq \mathcal{B} $: warm buyers (`cs = 1`)
-- $ \mathcal{B}_{\text{cold}} = \mathcal{B} \setminus \mathcal{B}_{\text{warm}} $: cold buyers (`cs = 0`)
+- $ \mathcal{B}_{\text{scored}} \subseteq \mathcal{B} $: buyers included by the evaluator
 - $ \mathcal{E} $: all E-Class identifiers (eclasses)
 - $ \text{history}(b) \subseteq \mathcal{E} $: eclasses buyer $ b $ purchased in observed history
+
+Optional segmentation (if used in a specific run):
+- $ \mathcal{B}_{\text{warm}} \subseteq \mathcal{B} $: warm buyers (`cs = 1`)
+- $ \mathcal{B}_{\text{cold}} = \mathcal{B} \setminus \mathcal{B}_{\text{warm}} $: cold buyers (`cs = 0`)
 
 Defined by our modelling choices:
 
@@ -17,18 +20,24 @@ Defined by our modelling choices:
 
 Core symbols:
 - $ T $: training cutoff timestamp
-- $ L $: lookback window
+- $ L $: lookback length (months)
+- $ H $: forward/scoring horizon length (months)
 - $ F $: fixed fee per predicted element (monthly)
 - $ b $ indexes buyers, $ e $ indexes eclasses
+
+Time-window notation (half-open intervals):
+
+- $ I_{\text{lookback}}(T,L) := [T-L,\;T) $
+- $ I_{\text{future}}(T,H) := [T,\;T+H) $
 
 ---
 
 ## 1. Problem Framing
 
-For each scored warm buyer $ b \in \mathcal{B}_{\text{warm}} $ we must select a portfolio $ \hat{S}_b \subseteq \mathcal{E} $ of E-Class identifiers that maximises **net economic benefit**:
+For each scored buyer $ b \in \mathcal{B}_{\text{scored}} $ we must select a portfolio $ \hat{S}_b \subseteq \mathcal{E} $ of E-Class identifiers that maximises **net economic benefit**:
 
 $$
-\text{Score} = \sum_{b \in \mathcal{B}_{\text{warm}}} \left[ \sum_{e \in \hat{S}_b} \text{Savings}(b, e) - |\hat{S}_b| \cdot F \right]
+\text{Score} = \sum_{b \in \mathcal{B}_{\text{scored}}} \left[ \sum_{e \in \hat{S}_b} \text{Savings}(b, e) - |\hat{S}_b| \cdot F \right]
 $$
 
 where $ F = €10 $ is the fixed monthly fee per predicted element and savings are realised only when prediction $ e $ matches actual future purchases.
@@ -44,6 +53,7 @@ Selection is precision-first: every element that is not a true recurring need pa
 Raw inputs:
 - `data/02_raw/plis_training.csv` (all historical PLIs)
 - `data/02_raw/customer_test.csv` (buyers to predict for online submission)
+- `data/02_raw/features_per_sku.csv` (product attributes: SKU → key/value; used in `engineer_features_raw` to add top-K attribute columns to `data/08_features_raw`).
 
 Focus for this modelling document: warm-buyer recurrence logic for Level 1 (`cluster = eclass`) trained on observed history and used for online submission.
 
@@ -57,15 +67,17 @@ Available columns used from historical PLIs:
 
 ## 3. Target Definition
 
-Modeling uses a temporal cutoff $ T $:
+Modeling uses a temporal cutoff $ T $ and two explicit time intervals:
 
-- history up to $ T $ is used for features
-- the period after $ T $ is the scoring horizon for target construction in training experiments
+- features are computed from pre-cutoff data, primarily from $ I_{\text{lookback}}(T,L) $
+- targets are computed from $ I_{\text{future}}(T,H) $
 
 For each candidate pair $ (b,e) $, define:
 
 $$
-y_{b,e} = \mathbf{1}\!\left[\text{orders in horizon}(b,e) \ge n_{\min}\right]
+y_{b,e}
+=
+\mathbf{1}\!\left[n_{\text{orders}}\!\left(b,e, I_{\text{future}}(T,H)\right)\ge n_{\min}\right]
 $$
 
 with default $ n_{\min}=1 $.
@@ -73,7 +85,10 @@ with default $ n_{\min}=1 $.
 Future spend target:
 
 $$
-s_{\text{future}}(b,e)=\sum_{\text{rows in horizon}} \text{quantityvalue}\times \text{vk\_per\_item}
+s_{\text{future}}(b,e)
+=
+\sum_{\substack{\text{rows for }(b,e)\\ \text{with } \text{orderdate}\in I_{\text{future}}(T,H)}}
+\text{quantityvalue}\times \text{vk\_per\_item}
 $$
 
 Default learning target is binary recurrence ($ y_{b,e} $), with spend used for value-aware ranking.
@@ -84,30 +99,37 @@ Default learning target is binary recurrence ($ y_{b,e} $), with spend used for 
 
 ## 4. Candidate Generation
 
-For each warm buyer, restrict the candidate set to reduce fee leakage.
+For each scored buyer, restrict the candidate set to reduce fee leakage.
 
 We construct $ \mathcal{C}_b $ as:
 
 $$
-\mathcal{C}_b = \{ e \in \text{history}(b) \mid n_{\text{orders}}(b,e, L) \ge \eta \;\land\; s_{\text{lookback}}(b,e,L) \ge \tau \}
+\mathcal{C}_b
+=
+\left\{
+e \in \text{history}(b)\ \middle|\ 
+n_{\text{orders}}\!\left(b,e, I_{\text{lookback}}(T,L)\right)\ge \eta
+\ \land\
+s_{\text{lookback}}\!\left(b,e, I_{\text{lookback}}(T,L)\right)\ge \tau
+\right\}
 $$
 
 Interpretation:
 - $ \text{history}(b) \subseteq \mathcal{E} $ is the set of eclasses buyer $ b $ has ever purchased
-- $ n_{\text{orders}}(b,e, L) $ is the number of orders of eclass $ e $ by buyer $ b $ within the lookback window $ L $
-- $ s_{\text{lookback}}(b,e,L) = \sum_{\text{rows in } L} \text{quantityvalue} \times \text{vk\_per\_item} $: total spend on eclass $ e $ by buyer $ b $ in the lookback window (EUR)
+- $ n_{\text{orders}}(b,e, I_{\text{lookback}}(T,L)) $ is the number of orders of eclass $ e $ by buyer $ b $ in interval $ [T-L, T) $
+- $ s_{\text{lookback}}(b,e, I_{\text{lookback}}(T,L)) = \sum_{\substack{\text{rows for }(b,e)\\ \text{with } \text{orderdate}\in [T-L,T)}} \text{quantityvalue} \times \text{vk\_per\_item} $: total spend on eclass $ e $ by buyer $ b $ in the lookback interval (EUR)
 - $ T $ is the training cutoff timestamp
-- $ L $ is the lookback window (default: 18 months)
+- $ L $ is the lookback length (default: 18 months)
 - $ \eta $ is the minimum order frequency threshold (default: 1)
 - $ \tau $ is the minimum lookback spend threshold in EUR (default: 100)
-- So $ \mathcal{C}_b $ keeps only eclasses from $ b $'s history that were bought at least $ \eta $ times and with at least $ \tau $ EUR spend in the lookback window
+- So $ \mathcal{C}_b $ keeps only eclasses from $ b $'s history that were bought at least $ \eta $ times and with at least $ \tau $ EUR spend in $ [T-L, T) $
 - Therefore, by construction, $ \mathcal{C}_b \subseteq \text{history}(b) \subseteq \mathcal{E} $
 
 ---
 
 ## 5. Feature Engineering
 
-For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{warm}} $ and $ e \in \mathcal{C}_b $ in the train period, derive a flexible feature set from these families:
+For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{scored}} $ and $ e \in \mathcal{C}_b $, derive a flexible feature set from pre-cutoff history (primarily $ I_{\text{lookback}}(T,L) $):
 
 ### Core feature families
 - Frequency/intensity signals (how often and how consistently a pair is purchased).
@@ -187,14 +209,14 @@ Define two targets:
   $$
   y_{b,e} \in \{0,1\}
   $$
-- Future spend target in the scoring horizon:
+- Future spend target in $ I_{\text{future}}(T,H) $:
   $$
   z_{b,e} := s_{\text{future}}(b,e) \ge 0
   $$
 
 where:
-- $ y_{b,e}=1 $ means the pair recurs in the future window.
-- $ z_{b,e} $ is the euro spend for that pair in the same future window.
+- $ y_{b,e}=1 $ means the pair recurs in interval $ I_{\text{future}}(T,H) $.
+- $ z_{b,e} $ is the euro spend for that pair in the same interval.
 
 **Stage A — recurrence model (classification):**
 
@@ -237,7 +259,7 @@ So:
 
 ### Pass-through (candidate-only)
 
-The **pass_through** approach is an explicit “model” that performs no scoring: every candidate is assigned a constant positive score so that, when the selection policy is configured for pass-through (see below), no further filtering is applied. Use it to submit exactly the candidate set $ \mathcal{C}_b $ for each warm buyer — e.g. for diagnostics or as an upper-bound on recall.
+The **pass_through** approach is an explicit “model” that performs no scoring: every candidate is assigned a constant positive score so that, when the selection policy is configured for pass-through (see below), no further filtering is applied. Use it to submit exactly the candidate set $ \mathcal{C}_b $ for each scored buyer — e.g. for diagnostics or as an upper-bound on recall.
 
 - Enable the `pass_through` approach in `modelling.enabled_approaches` and use the pass-through selection configuration; then $ \hat{S}_b = \mathcal{C}_b $ for every $ b $.
 
@@ -245,7 +267,7 @@ The **pass_through** approach is an explicit “model” that performs no scorin
 
 ## 7. Selection Policy
 
-For each buyer $ b \in \mathcal{B}_{\text{warm}} $:
+For each buyer $ b \in \mathcal{B}_{\text{scored}} $:
 
 1. Compute $ \widehat{EU}(b, e) $ for all $ e \in \mathcal{C}_b $.
 2. Keep only pairs above an EU threshold $ \tau_{EU} $:
@@ -265,7 +287,7 @@ $$
 - Set $ \tau_{EU} \leq 0 $ (e.g. `score_threshold: 0`; pass_through sets all scores $ > 0 $)
 - Set $ X = 1 $, $ Y = 1 $, and $ \tau_{\text{high}} = 0 $
 - Set $ K \geq \max_b |\mathcal{C}_b| $ (e.g. `top_k_per_buyer: 9999`)
-- Then $ \hat{S}_b = \mathcal{C}_b $ for every warm buyer $ b $ (portfolio equals candidate set)
+- Then $ \hat{S}_b = \mathcal{C}_b $ for every scored buyer $ b $ (portfolio equals candidate set)
 
 ---
 

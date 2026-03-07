@@ -1,6 +1,7 @@
 # Paths to raw input files
 inputs:
   customer_test: "data/02_raw/customer_test.csv"
+  features_per_sku: "data/02_raw/features_per_sku.csv"
   les_cs: "data/02_raw/les_cs.csv"
   nace_codes: "data/02_raw/nace_codes.csv"
 # Raw PLI source; Snakefile materializes the cleaned file
@@ -161,6 +162,12 @@ modelling:
       high_spend: 200
       # 0 = disabled; when > 0, pass if avg_monthly_spend_buyer_tenure >= this (late joiners)
       min_avg_monthly_spend: 0
+
+  # SKU attribute features from features_per_sku.csv (top-K keys/values per candidate key)
+  features_per_sku:
+    top_k_keys: 20
+    top_k_values_per_key: 10
+    chunksize: 200_000
 
   # Per-feature missing-value handling for features_raw (before derived engineering). Actions: drop_row, ignore, fill (use value for constant). Unlisted features use default_action.
   missing_value_sanitation:

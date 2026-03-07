@@ -34,6 +34,7 @@ def test_submit_challenge_2_live(tmp_path: Path) -> None:
         "legal_entity_id,cluster\n1,30020903|Bissell\n",
         encoding="utf-8",
     )
+    summary_csv = tmp_path / "score_summary_live.csv"
 
     cmd = [
         sys.executable,
@@ -45,6 +46,8 @@ def test_submit_challenge_2_live(tmp_path: Path) -> None:
         str(submission_csv),
         "--level",
         "2",
+        "--summary-csv",
+        str(summary_csv),
     ]
     env = os.environ.copy()
     env["TEAM"] = team
@@ -66,3 +69,7 @@ def test_submit_challenge_2_live(tmp_path: Path) -> None:
     assert "Submission accepted" in result.stdout or "✓ Submission accepted" in result.stdout, (
         f"Expected submission acceptance message in stdout. Got:\n{result.stdout}"
     )
+    assert summary_csv.exists(), f"Live summary CSV not written: {summary_csv}"
+    content = summary_csv.read_text()
+    assert "total_score" in content, f"score_summary_live.csv must contain total_score. Got:\n{content}"
+    assert "submission_id" in content, f"score_summary_live.csv must contain submission_id. Got:\n{content}"

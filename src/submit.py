@@ -5,6 +5,7 @@ Usage:
     uv run src/submit.py --challenge 2 --file submission.csv
     uv run src/submit.py --challenge 1 --file submission.parquet
     uv run src/submit.py --challenge 2 --file submission.csv --level 1
+    uv run src/submit.py --challenge 2 --file submission.csv --summary-csv data/11_scores/online/score_summary_live.csv
 
 Credentials are read from .env:
     TEAM=<your team name>
@@ -12,6 +13,7 @@ Credentials are read from .env:
 """
 
 import argparse
+import csv
 import os
 import sys
 from pathlib import Path
@@ -21,6 +23,100 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 
 PORTAL_URL = "https://unite-evaluator.vercel.app"
 LOGIN_URL = f"{PORTAL_URL}/login"
+
+
+def _parse_euro(s: str) -> float | None:
+    """Parse a string like '€26,822.37' or '€1,000.00' to float. Returns None if not parseable."""
+    if not s or not isinstance(s, str):
+        return None
+    s = s.strip().replace("€", "").replace(",", "").strip()
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _parse_percent(s: str) -> float | None:
+    """Parse a string like '12.34%' or '0.1234' to a proportion in [0, 1]. Returns None if not parseable."""
+    if not s or not isinstance(s, str):
+        return None
+    s = s.strip().replace("%", "").replace(",", ".").strip()
+    if not s:
+        return None
+    try:
+        v = float(s)
+        if v > 1 and v <= 100:
+            return v / 100.0
+        return v if 0 <= v <= 1 else None
+    except ValueError:
+        return None
+
+
+def _parse_portal_result_text(result_text: str) -> dict[str, float | int | None]:
+    """
+    Parse the 'Your Submissions' section body text into a row compatible with score_summary CSV.
+    Labels are typically followed by the value on the next line (e.g. 'Total Score:' then '€26,822.37').
+    """
+    lines = [ln.strip() for ln in result_text.splitlines() if ln.strip()]
+    row: dict[str, float | int | None] = {
+        "total_score": None,
+        "total_savings": None,
+        "total_fees": None,
+        "num_hits": None,
+        "num_predictions": None,
+        "spend_capture_rate": None,
+        "total_ground_spend": None,
+    }
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # Value often follows label on next line
+        next_val = lines[i + 1] if i + 1 < len(lines) else ""
+        if line == "Total Score:":
+            row["total_score"] = _parse_euro(next_val)
+            i += 2
+            continue
+        if line == "Savings:":
+            row["total_savings"] = _parse_euro(next_val)
+            i += 2
+            continue
+        if line == "Fees:":
+            row["total_fees"] = _parse_euro(next_val)
+            i += 2
+            continue
+        if line == "Hits:":
+            try:
+                row["num_hits"] = int(next_val.replace(",", "").strip())
+            except (ValueError, AttributeError):
+                row["num_hits"] = None
+            i += 2
+            continue
+        if line.startswith("Spend Captured:") or line == "Spend Captured":
+            # Value may be on same line after colon or on next line
+            part = line.split(":", 1)[-1].strip() if ":" in line else next_val
+            row["spend_capture_rate"] = _parse_percent(part)
+            if row["spend_capture_rate"] is None and next_val and next_val != part:
+                row["spend_capture_rate"] = _parse_percent(next_val)
+            i += 2
+            continue
+        i += 1
+    return row
+
+
+def _write_summary_csv(path: Path, row: dict[str, float | int | None], submission_id: str | None) -> None:
+    """Write a one-row CSV for pipeline consumption. Uses same column names as offline score_summary."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "total_score", "total_savings", "total_fees", "num_hits", "num_predictions",
+        "spend_capture_rate", "total_ground_spend", "submission_id",
+    ]
+    out_row = {k: (row.get(k) if k != "submission_id" else submission_id) for k in fieldnames}
+    with path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        w.writeheader()
+        w.writerow(out_row)
 
 
 def login(page, team: str, password: str) -> None:
@@ -48,8 +144,10 @@ def submit(
     challenge_id: int,
     file_path: Path,
     level: int = 2,
-) -> None:
-    """Navigate to a challenge page, set granularity, upload file, and submit."""
+) -> tuple[str | None, str | None]:
+    """Navigate to a challenge page, set granularity, upload file, and submit.
+    Returns (result_text, submission_id) for the submissions section and API id, or (None, None) on early failure.
+    """
     challenge_url = f"{PORTAL_URL}/challenges/{challenge_id}"
     page.goto(challenge_url, wait_until="domcontentloaded")
 
@@ -106,11 +204,11 @@ def submit(
             print("  Response text (truncated):", body_preview)
         except Exception as inner_exc:
             print("  Additionally failed to read raw response text:", inner_exc)
-        return
+        return None, None
 
     if not submission_result.get("success"):
         print("✗ Submission API did not confirm success:", submission_result)
-        return
+        return None, None
 
     submission = submission_result.get("submission")
     submission_id = submission.get("id") if isinstance(submission, dict) else None
@@ -152,6 +250,7 @@ def submit(
             # Stop after the first submission block.
             if line.startswith("Spend Captured:") or line.startswith("0."):
                 break
+    return result_text, submission_id
 
 
 def main() -> None:
@@ -166,6 +265,13 @@ def main() -> None:
         help="Matching granularity level for challenge 2 (default: 2; level 3 may not be available yet)",
     )
     parser.add_argument("--headed", action="store_true", help="Run browser in headed (visible) mode")
+    parser.add_argument(
+        "--summary-csv",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Write one-row live score summary CSV (e.g. data/11_scores/online/score_summary_live.csv).",
+    )
     args = parser.parse_args()
 
     if not args.file.exists():
@@ -185,9 +291,26 @@ def main() -> None:
         page = context.new_page()
         try:
             login(page, team, password)
-            submit(page, args.challenge, args.file, level=args.level)
+            result_text, submission_id = submit(page, args.challenge, args.file, level=args.level)
         finally:
             browser.close()
+
+    if args.summary_csv is not None:
+        if result_text is None:
+            print("Error: submission did not complete; cannot write live summary CSV.", file=sys.stderr)
+            sys.exit(1)
+        try:
+            row = _parse_portal_result_text(result_text)
+            if row.get("total_score") is None and row.get("total_savings") is None:
+                raise ValueError(
+                    "Could not parse Total Score or Savings from portal result; "
+                    "live summary CSV would be incomplete."
+                )
+            _write_summary_csv(args.summary_csv, row, submission_id)
+            print(f"Wrote live score summary: {args.summary_csv}")
+        except Exception as e:
+            print(f"Error writing live summary CSV: {e}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -11,12 +11,12 @@ uv sync
 uv run snakemake --cores 1
 ```
 
-That command runs the default `all` target in `Snakefile` and produces:
+That command runs the default `all` target in `Snakefile`.
 
-- `data/03_meta/customer.csv`
-- `data/06_plots/` (EDA: seasonal volume, violin by task, task distribution, cs/task heatmap, NACE by task)
-- `data/07_feature_analysis/` (feature summary CSVs and distribution/correlation plots)
-- `data/10_submission/submission.csv`
+To force generate everything, run 
+```bash
+uv run snakemake --cores 1
+```
 
 ## Notes
 
@@ -42,13 +42,13 @@ Use `src/submit.py` to upload predictions and see scores:
 
 ```bash
 # Challenge 1 (parquet)
-uv run src/submit.py --challenge 1 --file data/10_submission/submission.parquet
+uv run src/submit.py --challenge 1 --file data/10_submission/online/submission.parquet
 
 # Challenge 2 (csv, default level 2)
-uv run src/submit.py --challenge 2 --file data/10_submission/submission.csv
+uv run src/submit.py --challenge 2 --file data/10_submission/online/submission.csv
 
 # Challenge 2 with explicit level
-uv run src/submit.py --challenge 2 --file data/10_submission/submission.csv --level 1
+uv run src/submit.py --challenge 2 --file data/10_submission/online/submission.csv --level 1
 ```
 
 The script reads `TEAM` and `PASSWORD` from the `.env` file above, logs in to the evaluator portal, uploads the file, and waits for the scoring result.

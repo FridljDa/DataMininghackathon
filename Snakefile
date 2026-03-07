@@ -2,7 +2,7 @@
 Snakemake workflow for Core Demand Challenge.
 
 All input/output paths are defined here. Python scripts receive paths only via
-CLI arguments. Final deliverable: data/10_submission/submission.csv with header
+CLI arguments. Final deliverable: data/10_submission/online/submission.csv with header
 legal_entity_id,cluster.
 """
 
@@ -166,8 +166,8 @@ rule feature_analysis:
         features_all = FEATURES_ALL_PARQUET,
     output:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_CSV,
-        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/feature_distributions.png",
-        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/feature_correlations.png",
+        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/online/feature_distributions.png",
+        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/online/feature_correlations.png",
     shell:
         "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
         "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot}"
@@ -292,9 +292,10 @@ rule submit_to_portal:
     input:
         submission = SUBMISSION_CSV,
     output:
+        summary = "data/11_scores/online/score_summary_live.csv",
         sentinel = "data/10_submission/.submitted_challenge2",
     shell:
-        "uv run src/submit.py --challenge 2 --file {input.submission} && touch {output.sentinel}"
+        "uv run src/submit.py --challenge 2 --file {input.submission} --summary-csv {output.summary} && touch {output.sentinel}"
 
 # --- Offline scoring: predict for testing buyers only, score with Level-1 (eclass) matching ---
 rule generate_candidates_offline:
@@ -333,8 +334,8 @@ rule feature_analysis_offline:
         features_all = FEATURES_ALL_OFFLINE_PARQUET,
     output:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV,
-        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/feature_distributions_offline.png",
-        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/feature_correlations_offline.png",
+        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/offline/feature_distributions.png",
+        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/offline/feature_correlations.png",
     shell:
         "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
         "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot}"

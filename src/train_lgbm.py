@@ -20,25 +20,10 @@ try:
 except ImportError:
     raise ImportError("lightgbm is required. Install with: uv add lightgbm")
 
-FEATURE_COLS = [
-    "n_orders",
-    "m_active",
-    "rho_freq",
-    "delta_recency",
-    "sigma_gap",
-    "CV_gap",
-    "historical_purchase_value_sqrt",
-    "s_median_line",
-    "w_e_b",
-    "delta_trend",
-    "log_employees",
-]
-CATEGORICAL_FEATURES = ["nace_2"]
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--candidates", required=True, help="Path to candidates.parquet.")
+    parser.add_argument("--candidates", required=True, help="Path to selected features parquet.")
     parser.add_argument(
         "--plis",
         required=True,
@@ -86,9 +71,16 @@ def main() -> None:
     val_end = pd.Timestamp(args.val_end)
 
     df = pd.read_parquet(candidates_path)
-    for col in FEATURE_COLS:
-        if col not in df.columns:
-            raise ValueError(f"candidates must contain '{col}'. Got: {list(df.columns)}")
+    
+    # Non-feature columns to exclude from training
+    EXCLUDE_COLS = {
+        "legal_entity_id", 
+        "eclass", 
+        "label", 
+        "s_val", 
+        "n_orders_val", 
+        "score_base"
+    }
 
     # Attach validation labels and spend (same logic as train_baseline)
     plis = pd.read_csv(plis_path, sep="\t", low_memory=False)
@@ -111,11 +103,9 @@ def main() -> None:
     df["s_val"] = df["s_val"].fillna(0)
     df["label"] = (df["n_orders_val"] >= args.n_min_label).astype(int)
 
-    # Prepare feature matrix: fill NaN, handle categorical
-    use_cat = [c for c in CATEGORICAL_FEATURES if c in df.columns]
-    X_cols = [c for c in FEATURE_COLS if c in df.columns]
-    if use_cat:
-        X_cols = X_cols + use_cat
+    # Dynamically identify feature columns and their types
+    X_cols = [c for c in df.columns if c not in EXCLUDE_COLS]
+    use_cat = [c for c in X_cols if df[c].dtype == "object" or df[c].dtype.name == "category"]
 
     X = df[X_cols].copy()
     for c in X_cols:
@@ -124,8 +114,13 @@ def main() -> None:
         else:
             X[c] = pd.to_numeric(X[c], errors="coerce").fillna(0)
 
+    print(f"Training with {len(X_cols)} features: {X_cols}")
+    if use_cat:
+        print(f"Categorical features: {use_cat}")
+
     y_label = df["label"].values
     s_val = df["s_val"].values
+
 
     # Stage A: recurrence classifier
     default_clf = {"objective": "binary", "verbosity": -1, "num_leaves": 31, "n_estimators": 100}

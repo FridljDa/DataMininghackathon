@@ -31,11 +31,19 @@ def _read_customer(path: Path) -> pd.DataFrame:
     return df
 
 
+def _read_nace_codes(path: Path) -> pd.DataFrame:
+    df = pd.read_csv(path, sep="\t", dtype=str)
+    # Ensure nace_code is string for joining
+    df["nace_code"] = df["nace_code"].astype(str).str.strip()
+    return df
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidates-raw", required=True, dest="candidates_raw", help="Path to raw candidates parquet.")
     parser.add_argument("--plis", required=True, help="Path to plis_training (split) TSV.")
     parser.add_argument("--customer", required=True, help="Path to customer metadata TSV.")
+    parser.add_argument("--nace-codes", required=False, dest="nace_codes", help="Path to nace_codes.csv reference.")
     parser.add_argument("--output", required=True, help="Path to output features parquet.")
     parser.add_argument(
         "--train-end",
@@ -293,13 +301,41 @@ def main() -> None:
     # Buyer context
     customer = _read_customer(customer_path)
     customer["legal_entity_id"] = customer["legal_entity_id"].astype(str)
-    cust_sub = customer[["legal_entity_id", "estimated_number_employees", "nace_code"]].drop_duplicates(
+    
+    # Enrich with NACE hierarchy if reference is provided
+    if args.nace_codes:
+        nace_ref = _read_nace_codes(Path(args.nace_codes))
+        # Keep only hierarchy columns for primary NACE
+        nace_hierarchy = nace_ref[["nace_code", "toplevel_section", "nace_3digits"]].drop_duplicates(subset="nace_code")
+        customer = customer.merge(nace_hierarchy, on="nace_code", how="left")
+        customer = customer.rename(columns={
+            "toplevel_section": "nace_section",
+            "nace_3digits": "nace_3"
+        })
+
+    # Keep relevant context columns
+    context_cols = ["legal_entity_id", "estimated_number_employees", "nace_code", "secondary_nace_code"]
+    if "nace_section" in customer.columns:
+        context_cols += ["nace_section", "nace_3"]
+    
+    cust_sub = customer[[c for c in context_cols if c in customer.columns]].drop_duplicates(
         subset="legal_entity_id"
     )
     candidates = candidates.merge(cust_sub, on="legal_entity_id", how="left")
+    
     emp = pd.to_numeric(candidates["estimated_number_employees"], errors="coerce").fillna(0)
     candidates["log_employees"] = np.log1p(emp)
-    candidates["nace_2"] = candidates["nace_code"].astype(str).str[:2].replace("nan", "")
+    
+    # Primary NACE features
+    candidates["nace_2"] = candidates["nace_code"].astype(str).str.strip().str[:2].replace("nan", "")
+    
+    # Secondary NACE features
+    candidates["secondary_nace_2"] = candidates["secondary_nace_code"].astype(str).str.strip().str[:2].replace("nan", "")
+    candidates["nace_mismatch"] = (
+        (candidates["nace_2"] != "") & 
+        (candidates["secondary_nace_2"] != "") & 
+        (candidates["nace_2"] != candidates["secondary_nace_2"])
+    ).astype(float)
 
     out_cols = [
         "legal_entity_id",
@@ -338,9 +374,15 @@ def main() -> None:
         "spend_recent_ratio",
         "order_value_cv",
         "log_employees",
+        "nace_section",
+        "nace_3",
         "nace_2",
         "nace_code",
+        "secondary_nace_2",
+        "secondary_nace_code",
+        "nace_mismatch",
     ]
+
     candidates = candidates[[c for c in out_cols if c in candidates.columns]]
     out_path.parent.mkdir(parents=True, exist_ok=True)
     candidates.to_parquet(out_path, index=False)

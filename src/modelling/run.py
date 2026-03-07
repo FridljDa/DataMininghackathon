@@ -70,6 +70,11 @@ def run_main() -> None:
     # LGBM
     parser.add_argument("--lgb-params-classifier", type=str, default="", dest="lgb_params_classifier")
     parser.add_argument("--lgb-params-regressor", type=str, default="", dest="lgb_params_regressor")
+    # Phase 3 repro (sparse-history gate)
+    parser.add_argument("--eta", type=int, default=2, dest="eta")
+    parser.add_argument("--tau", type=float, default=100.0, dest="tau")
+    parser.add_argument("--sparse-eta-multiplier", type=int, default=3, dest="sparse_eta_multiplier")
+    parser.add_argument("--sparse-tau-multiplier", type=float, default=2.0, dest="sparse_tau_multiplier")
     args = parser.parse_args()
 
     candidates_path = Path(args.candidates)
@@ -93,6 +98,10 @@ def run_main() -> None:
         "gamma": args.gamma,
         "lgb_params_classifier": args.lgb_params_classifier,
         "lgb_params_regressor": args.lgb_params_regressor,
+        "eta": args.eta,
+        "tau": args.tau,
+        "sparse_eta_multiplier": args.sparse_eta_multiplier,
+        "sparse_tau_multiplier": args.sparse_tau_multiplier,
     }
     df = approach.run(df, **params)
 

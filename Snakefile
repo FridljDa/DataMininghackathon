@@ -217,11 +217,12 @@ rule engineer_features:
         features_all = FEATURES_ALL_PATTERN,
     params:
         train_end = WIN["train_end"],
+        lookback_months = CAND["lookback_months"],
     wildcard_constraints:
         mode = MODE_RE,
     shell:
         "uv run src/engineer_features.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
-        "--customer {input.customer} --nace-codes {input.nace_codes} --output {output.features_all} --train-end {params.train_end}"
+        "--customer {input.customer} --nace-codes {input.nace_codes} --output {output.features_all} --train-end {params.train_end} --lookback-months {params.lookback_months}"
 
 FEATURE_ANALYSIS_REDUNDANCY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_redundancy.csv"
 
@@ -291,6 +292,10 @@ rule train_approach:
         savings_rate = SCORING_PARAMS["savings_rate"],
         fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
         val_months = VAL["months"],
+        eta = APP["phase3_repro"]["eta"],
+        tau = APP["phase3_repro"]["tau"],
+        sparse_eta_multiplier = APP["phase3_repro"]["sparse_eta_multiplier"],
+        sparse_tau_multiplier = APP["phase3_repro"]["sparse_tau_multiplier"],
     wildcard_constraints:
         mode = MODE_RE,
         approach = "|".join(ENABLED_APPROACHES),
@@ -299,7 +304,9 @@ rule train_approach:
         "--candidates {input.candidates} --plis {input.plis} --output {output.scores} "
         "--val-start {params.val_start} --val-end {params.val_end} --n-min-label {params.n_min_label} "
         "--alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
-        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
+        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months} "
+        "--eta {params.eta} --tau {params.tau} "
+        "--sparse-eta-multiplier {params.sparse_eta_multiplier} --sparse-tau-multiplier {params.sparse_tau_multiplier}"
 
 rule select_portfolio:
     """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach."""

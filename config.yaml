@@ -21,9 +21,10 @@ modelling:
     - baseline
     - lgbm_two_stage
     - pass_through
+    - phase3_repro
 
   windows:
-    train_end: "2024-12-31"
+    train_end: "2025-12-31"
     validation:
       start: "2025-01-01"
       end: "2025-06-30"
@@ -31,18 +32,18 @@ modelling:
       months: 6.0
 
   candidates:
-    lookback_months: 60
-    min_order_frequency: 1
-    min_lookback_spend: 0
+    lookback_months: 18
+    min_order_frequency: 2
+    min_lookback_spend: 100
 
   # For pass_through approach, use score_threshold <= 0, min_orders/min_months 1, high_spend 0, top_k_per_buyer large (e.g. 9999) so portfolio = candidates.
   selection:
     score_threshold: 0.0
-    top_k_per_buyer: 15
+    top_k_per_buyer: 9999
     guardrails:
-      min_orders: 3
-      min_months: 2
-      high_spend: 500.0
+      min_orders: 1
+      min_months: 1
+      high_spend: 0
 
   features:
     selected:
@@ -77,6 +78,11 @@ modelling:
       - secondary_nace_code
       - spend_recent_3m
       - spend_recent_ratio
+      - n_orders_in_lookback
+      - lookback_spend
+      - avg_spend_per_order
+      - days_since_last
+      - history_cohort
 
   # Per-approach config (output paths are data/11_predictions/{mode}/{approach}/scores.parquet)
   approaches:
@@ -86,6 +92,11 @@ modelling:
       gamma: 0.5
     lgbm_two_stage: {}
     pass_through: {}
+    phase3_repro:
+      eta: 2
+      tau: 100.0
+      sparse_eta_multiplier: 3
+      sparse_tau_multiplier: 2.0
 
 portal_credentials:
   team: 'AAD'

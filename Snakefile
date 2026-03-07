@@ -186,6 +186,7 @@ rule engineer_features:
         candidates_raw = CANDIDATES_RAW_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
         customer = lambda w: MODE_CFG[w.mode]["customer_csv"],
+        nace_codes = INPUTS["nace_codes"],
     output:
         features_all = FEATURES_ALL_PATTERN,
     params:
@@ -194,7 +195,7 @@ rule engineer_features:
         mode = MODE_RE,
     shell:
         "uv run src/engineer_features.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
-        "--customer {input.customer} --output {output.features_all} --train-end {params.train_end}"
+        "--customer {input.customer} --nace-codes {input.nace_codes} --output {output.features_all} --train-end {params.train_end}"
 
 rule feature_analysis:
     """Summary statistics and informativeness plots for all engineered features."""

@@ -99,8 +99,13 @@ modelling:
     - spend_recent_ratio
     - order_value_cv
     - log_employees
+    - nace_section
+    - nace_3
     - nace_2
     - nace_code
+    - secondary_nace_2
+    - secondary_nace_code
+    - nace_mismatch
 
 feature_analysis:
   dir: "data/09_feature_analysis"

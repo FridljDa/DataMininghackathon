@@ -196,6 +196,9 @@ modelling:
       sparse_tau_multiplier: 2.0
       use_monthly_lookback_rates: false  # if true, score uses avg_monthly_*_in_lookback for tenure fairness
 
+submission:
+  cold_start_top_k: 30  # max eclasses/clusters per cold-start buyer (lift-based NACE ranking)
+
 portal_credentials:
   team: 'AAD'
   password: 'uniteaad'

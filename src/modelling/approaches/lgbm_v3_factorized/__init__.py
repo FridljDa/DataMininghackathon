@@ -50,7 +50,7 @@ def run(
         if c in use_cat:
             X[c] = X[c].fillna("").astype(str).astype("category")
         else:
-            X[c] = pd.to_numeric(X[c], errors="coerce").fillna(0)
+            X[c] = pd.to_numeric(X[c], errors="coerce")
 
     y_count = df["n_orders_val"].values.astype(np.float64)
 

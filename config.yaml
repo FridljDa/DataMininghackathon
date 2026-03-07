@@ -32,9 +32,9 @@ modelling:
       months: 6.0
 
   candidates:
-    lookback_months: 36
+    lookback_months: 60
     min_order_frequency: 1
-    min_lookback_spend: 20
+    min_lookback_spend: 0
 
   selection:
     score_threshold: 0.0

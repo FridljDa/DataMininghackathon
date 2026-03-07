@@ -8,43 +8,61 @@ legal_entity_id,cluster.
 
 configfile: "config.yaml"
 
-# Centralized path configuration (single source of truth)
-DATA_DIR = config["data_dir"]
-DAG_SVG = config["dag_svg"]
+# --- Directory layout (single source of truth in Snakefile) ---
+DATA_DIR = "data"
+OUTPUT_DIR = "outputs"
+DAG_SVG = f"{DATA_DIR}/01_dag/dag.svg"
+
+# Raw input paths (config may override for alternate locations)
 INPUTS = config["inputs"]
 PLIS_TRAINING_CSV = config["plis_training_csv"]
 CUSTOMER_META_CSV = config["customer_meta_csv"]
-OUTPUT_DIR = config["output_dir"]
-SUBMISSION_CSV = config["submission_csv"]
+SUBMISSION_CSV = f"{DATA_DIR}/13_submission/online/submission.csv"
 
+# Training/validation split (params from config; paths derived here)
 SPLIT = config["training_validation_split"]
-PLIS_TRAINING_SPLIT = SPLIT["plis_training"]
-PLIS_TESTING_SPLIT = SPLIT["plis_testing"]
-SPLIT_CUSTOMER_CSV = SPLIT["customer_csv"]
+SPLIT_CUSTOMER_CSV = f"{DATA_DIR}/04_customer/customer.csv"
+PLIS_TRAINING_SPLIT = f"{DATA_DIR}/05_training_validation/plis_training.csv"
+PLIS_TESTING_SPLIT = f"{DATA_DIR}/05_training_validation/plis_testing.csv"
 
-SCORE_OUTPUTS = config["score_outputs"]
-SCORE_SUMMARY = SCORE_OUTPUTS["summary"]
-SCORE_DETAILS = SCORE_OUTPUTS["details"]
-SCORE_RUN_ARCHIVE = config["score_run_archive"]
+# Score outputs and archive
+SCORES_DIR = f"{DATA_DIR}/14_scores"
+SCORE_SUMMARY = f"{SCORES_DIR}/online/score_summary.csv"
+SCORE_DETAILS = f"{SCORES_DIR}/online/score_details.parquet"
+SCORE_RUN_ARCHIVE = {
+    "online_runs_dir": f"{SCORES_DIR}/online/runs",
+    "offline_runs_dir": f"{SCORES_DIR}/offline/runs",
+    "run_index_online": f"{SCORES_DIR}/online/run_index.csv",
+    "run_index_offline": f"{SCORES_DIR}/offline/run_index.csv",
+}
 ARCHIVE_SENTINEL_ONLINE = SCORE_RUN_ARCHIVE["online_runs_dir"] + "/.last_archived"
 SCORING_PARAMS = config["scoring_parameters"]
 
-PLOTS = config["plots"]
-PLOTS_DIR = PLOTS["dir"]
-PLOT_FILES = PLOTS["files"]
+# Exploration plots
+PLOTS_DIR = f"{DATA_DIR}/06_plots"
+PLOT_FILES = [
+    "seasonal_purchase_volume.png",
+    "purchase_value_by_task_violin.png",
+    "task_distribution.png",
+    "cs_task_consistency_heatmap.png",
+    "nace_by_task_topn.png",
+]
 PLOT_OUTPUTS = expand(f"{PLOTS_DIR}/{{f}}", f=PLOT_FILES)
 
+# Modelling (params only from config; paths are patterns below)
 MODELLING = config["modelling"]
 
-FEATURE_ANALYSIS = config["feature_analysis"]
-FEATURE_ANALYSIS_DIR = FEATURE_ANALYSIS["dir"]
-FEATURE_ANALYSIS_SUMMARY_CSV = FEATURE_ANALYSIS["summary_csv"]
-FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV = FEATURE_ANALYSIS["summary_offline_csv"]
-FEATURE_ANALYSIS_PLOTS = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS["plot_files"])
-FEATURE_ANALYSIS_PLOTS_OFFLINE = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS["plot_files_offline"])
-FEATURE_ANALYSIS_SUGGESTION_ONLINE = FEATURE_ANALYSIS["suggestion_online"]
-FEATURE_ANALYSIS_SUGGESTION_OFFLINE = FEATURE_ANALYSIS["suggestion_offline"]
-FEATURE_ANALYSIS_SUGGESTIONS_PATTERN = "data/09_feature_analysis/{mode}/feature_suggestions.yaml"
+# Feature analysis
+FEATURE_ANALYSIS_DIR = f"{DATA_DIR}/09_feature_analysis"
+FEATURE_ANALYSIS_SUMMARY_CSV = f"{FEATURE_ANALYSIS_DIR}/online/feature_summary.csv"
+FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV = f"{FEATURE_ANALYSIS_DIR}/offline/feature_summary.csv"
+FEATURE_ANALYSIS_PLOT_FILES = ["online/feature_distributions.png", "online/feature_correlations.png"]
+FEATURE_ANALYSIS_PLOT_FILES_OFFLINE = ["offline/feature_distributions.png", "offline/feature_correlations.png"]
+FEATURE_ANALYSIS_PLOTS = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS_PLOT_FILES)
+FEATURE_ANALYSIS_PLOTS_OFFLINE = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS_PLOT_FILES_OFFLINE)
+FEATURE_ANALYSIS_SUGGESTION_ONLINE = f"{FEATURE_ANALYSIS_DIR}/online/feature_suggestions.yaml"
+FEATURE_ANALYSIS_SUGGESTION_OFFLINE = f"{FEATURE_ANALYSIS_DIR}/offline/feature_suggestions.yaml"
+FEATURE_ANALYSIS_SUGGESTIONS_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_suggestions.yaml"
 
 # Mode (online|offline) configuration: paths and behaviour for modelling/scoring pipeline
 MODES = ["online", "offline"]
@@ -67,18 +85,21 @@ MODE_CFG = {
         "run_index_csv": SCORE_RUN_ARCHIVE["run_index_offline"],
     },
 }
-# Path patterns for mode-wildcarded rules (must match config paths)
-CANDIDATES_RAW_PATTERN = "data/07_candidates/{mode}/candidates_raw.parquet"
-FEATURES_ALL_PATTERN = "data/08_features/{mode}/features_all.parquet"
-FEATURES_SELECTED_PATTERN = "data/10_features_selected/{mode}/features_selected.parquet"
-SCORES_PATTERN = "data/11_predictions/{mode}/scores.parquet"
-SCORES_LGBM_PATTERN = "data/11_predictions/{mode}/scores_lgbm.parquet"
-PORTFOLIO_PATTERN = "data/12_portfolio/{mode}/portfolio.parquet"
-SUBMISSION_PATTERN = "data/13_submission/{mode}/submission.csv"
-SCORE_SUMMARY_PATTERN = "data/14_scores/{mode}/score_summary.csv"
-SCORE_DETAILS_PATTERN = "data/14_scores/{mode}/score_details.parquet"
-ARCHIVE_SENTINEL_PATTERN = "data/14_scores/{mode}/runs/.last_archived"
-FEATURE_ANALYSIS_SUMMARY_PATTERN = "data/09_feature_analysis/{mode}/feature_summary.csv"
+# Path patterns for mode-wildcarded rules
+CANDIDATES_RAW_PATTERN = f"{DATA_DIR}/07_candidates/{{mode}}/candidates_raw.parquet"
+FEATURES_ALL_PATTERN = f"{DATA_DIR}/08_features/{{mode}}/features_all.parquet"
+FEATURES_SELECTED_PATTERN = f"{DATA_DIR}/10_features_selected/{{mode}}/features_selected.parquet"
+# Per-approach scores: data/11_predictions/{mode}/{approach}/scores.parquet
+ENABLED_APPROACHES = MODELLING["enabled_approaches"]
+ACTIVE_APPROACH = MODELLING["active_approach"]
+SCORES_APPROACH_PATTERN = f"{DATA_DIR}/11_predictions/{{mode}}/{{approach}}/scores.parquet"
+SCORES_ACTIVE_PATTERN = f"{DATA_DIR}/11_predictions/{{mode}}/" + ACTIVE_APPROACH + "/scores.parquet"
+PORTFOLIO_PATTERN = f"{DATA_DIR}/12_portfolio/{{mode}}/portfolio.parquet"
+SUBMISSION_PATTERN = f"{DATA_DIR}/13_submission/{{mode}}/submission.csv"
+SCORE_SUMMARY_PATTERN = f"{SCORES_DIR}/{{mode}}/score_summary.csv"
+SCORE_DETAILS_PATTERN = f"{SCORES_DIR}/{{mode}}/score_details.parquet"
+ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/{{mode}}/runs/.last_archived"
+FEATURE_ANALYSIS_SUMMARY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_summary.csv"
 
 rule all:
     input:
@@ -92,11 +113,12 @@ rule all:
         FEATURE_ANALYSIS_PLOTS_OFFLINE,
         FEATURE_ANALYSIS_SUGGESTION_ONLINE,
         FEATURE_ANALYSIS_SUGGESTION_OFFLINE,
+        expand(SCORES_APPROACH_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
         SCORE_SUMMARY,
         SCORE_DETAILS,
         ARCHIVE_SENTINEL_ONLINE,
-        "data/14_scores/online/score_summary_live.csv",
-        "data/13_submission/.submitted_challenge2",
+        f"{SCORES_DIR}/online/score_summary_live.csv",
+        f"{DATA_DIR}/13_submission/.submitted_challenge2",
 
 rule generate_dag_graph:
     """Write workflow DAG as SVG (no input dependencies; run first)."""
@@ -197,7 +219,7 @@ rule engineer_features:
         "uv run src/engineer_features.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
         "--customer {input.customer} --nace-codes {input.nace_codes} --output {output.features_all} --train-end {params.train_end}"
 
-FEATURE_ANALYSIS_REDUNDANCY_PATTERN = "data/09_feature_analysis/{mode}/feature_redundancy.csv"
+FEATURE_ANALYSIS_REDUNDANCY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_redundancy.csv"
 
 rule feature_analysis:
     """Summary statistics, target-aware signal, redundancy, and plots for all engineered features."""
@@ -207,8 +229,8 @@ rule feature_analysis:
     output:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_PATTERN,
         redundancy_csv = FEATURE_ANALYSIS_REDUNDANCY_PATTERN,
-        distributions_plot = "data/09_feature_analysis/{mode}/feature_distributions.png",
-        correlations_plot = "data/09_feature_analysis/{mode}/feature_correlations.png",
+        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_distributions.png",
+        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_correlations.png",
     params:
         val_start = MODELLING["val_start"],
         val_end = MODELLING["val_end"],
@@ -338,9 +360,9 @@ rule write_submission_warm:
 rule select_portfolio_baseline:
     """Optional: apply threshold/guardrails to baseline scores. Use for diagnostic comparison."""
     input:
-        scores = MODELLING["scores_parquet"],
+        scores = SCORES_ONLINE_BASELINE,
     output:
-        portfolio = "data/12_portfolio/online/portfolio_baseline.parquet",
+        portfolio = f"{DATA_DIR}/12_portfolio/online/portfolio_baseline.parquet",
     params:
         score_threshold = MODELLING["score_threshold"],
         min_orders_guardrail = MODELLING["min_orders_guardrail"],
@@ -359,7 +381,7 @@ rule write_submission:
         customer_test = INPUTS["customer_test"],
         plis = PLIS_TRAINING_CSV,
     output:
-        submission = "data/13_submission/submission_baseline.csv",
+        submission = f"{DATA_DIR}/13_submission/submission_baseline.csv",
     shell:
         "uv run src/write_submission.py --output {output.submission} "
         "--customer-test {input.customer_test} --plis-training {input.plis}"
@@ -406,8 +428,8 @@ rule submit_to_portal:
     input:
         submission = SUBMISSION_CSV,
     output:
-        summary = "data/14_scores/online/score_summary_live.csv",
-        sentinel = "data/13_submission/.submitted_challenge2",
+        summary = f"{SCORES_DIR}/online/score_summary_live.csv",
+        sentinel = f"{DATA_DIR}/13_submission/.submitted_challenge2",
     shell:
         "uv run src/submit.py --challenge 2 --file {input.submission} --summary-csv {output.summary} && touch {output.sentinel}"
 

@@ -1,40 +1,27 @@
-data_dir: "data"
-dag_svg: "data/01_dag/dag.svg"
 inputs:
   customer_test: "data/02_raw/customer_test.csv"
   les_cs: "data/02_raw/les_cs.csv"
   nace_codes: "data/02_raw/nace_codes.csv"
 plis_training_csv: "data/02_raw/plis_training.csv"
 customer_meta_csv: "data/03_meta/customer.csv"
-output_dir: "outputs"
-submission_csv: "data/13_submission/online/submission.csv"
 
 training_validation_split:
   cutoff_date: "2025-07-01"
   test_customers_count: 50
   random_seed: 42
-  customer_csv: "data/04_customer/customer.csv"
-  plis_training: "data/05_training_validation/plis_training.csv"
-  plis_testing: "data/05_training_validation/plis_testing.csv"
 
 scoring_parameters:
   savings_rate: 0.10
   fixed_fee_eur: 10.00
   scoring_months: 1
 
-scores_dir: "data/14_scores"
-score_outputs:
-  summary: "data/14_scores/online/score_summary.csv"
-  details: "data/14_scores/online/score_details.parquet"
-  summary_offline: "data/14_scores/offline/score_summary.csv"
-  details_offline: "data/14_scores/offline/score_details.parquet"
-score_run_archive:
-  online_runs_dir: "data/14_scores/online/runs"
-  offline_runs_dir: "data/14_scores/offline/runs"
-  run_index_online: "data/14_scores/online/run_index.csv"
-  run_index_offline: "data/14_scores/offline/run_index.csv"
-
 modelling:
+  # Which approach drives portfolio and submission (single source of truth)
+  active_approach: "lgbm_two_stage"
+  # Approaches to run for comparison/diagnostics (all produce scores under data/11_predictions/{mode}/{approach}/)
+  enabled_approaches:
+    - baseline
+    - lgbm_two_stage
   train_end: "2024-12-31"
   val_start: "2025-01-01"
   val_end: "2025-06-30"
@@ -42,36 +29,27 @@ modelling:
   lookback_months: 36
   min_order_frequency: 1
   min_lookback_spend: 20
+  # Shared selection policy (used after any approach)
+  score_threshold: 0.0
+  # Legacy/compat: baseline params (also under approaches.baseline)
   alpha: 1.0
   beta: 1.0
   gamma: 0.5
-  score_threshold: 0.0
   min_orders_guardrail: 3
   min_months_guardrail: 2
   high_spend_guardrail: 500.0
   top_k_per_buyer: 15
   val_months: 6.0
-  candidates_raw_parquet: "data/07_candidates/online/candidates_raw.parquet"
-  features_all_parquet: "data/08_features/online/features_all.parquet"
-  features_selected_parquet: "data/10_features_selected/online/features_selected.parquet"
-  scores_parquet: "data/11_predictions/online/scores.parquet"
-  scores_lgbm_parquet: "data/11_predictions/online/scores_lgbm.parquet"
-  portfolio_parquet: "data/12_portfolio/online/portfolio.parquet"
-  candidates_raw_offline_parquet: "data/07_candidates/offline/candidates_raw.parquet"
-  features_all_offline_parquet: "data/08_features/offline/features_all.parquet"
-  features_selected_offline_parquet: "data/10_features_selected/offline/features_selected.parquet"
-  scores_offline_parquet: "data/11_predictions/offline/scores.parquet"
-  scores_lgbm_offline_parquet: "data/11_predictions/offline/scores_lgbm.parquet"
-  portfolio_offline_parquet: "data/12_portfolio/offline/portfolio.parquet"
-  submission_offline_csv: "data/13_submission/offline/submission.csv"
   selected_features:
     - CV_gap
     - active_month_share_12m
+    - delta_recency
     - delta_trend
     - first_order_year
     - has_gap_history
     - has_recent_spend_6m
     - historical_purchase_value_sqrt
+    - historical_purchase_value_total
     - last_order_month_cos
     - last_order_month_sin
     - last_order_quarter_cos
@@ -80,6 +58,7 @@ modelling:
     - log_employees
     - m_active
     - mu_gap
+    - n_orders
     - nace_2
     - nace_code
     - nace_mismatch
@@ -93,30 +72,13 @@ modelling:
     - secondary_nace_code
     - spend_recent_3m
     - spend_recent_ratio
-
-feature_analysis:
-  dir: "data/09_feature_analysis"
-  summary_csv: "data/09_feature_analysis/online/feature_summary.csv"
-  summary_offline_csv: "data/09_feature_analysis/offline/feature_summary.csv"
-  redundancy_csv: "data/09_feature_analysis/online/feature_redundancy.csv"
-  redundancy_offline_csv: "data/09_feature_analysis/offline/feature_redundancy.csv"
-  suggestion_online: "data/09_feature_analysis/online/feature_suggestions.yaml"
-  suggestion_offline: "data/09_feature_analysis/offline/feature_suggestions.yaml"
-  plot_files:
-    - online/feature_distributions.png
-    - online/feature_correlations.png
-  plot_files_offline:
-    - offline/feature_distributions.png
-    - offline/feature_correlations.png
-
-plots:
-  dir: "data/06_plots"
-  files:
-    - seasonal_purchase_volume.png
-    - purchase_value_by_task_violin.png
-    - task_distribution.png
-    - cs_task_consistency_heatmap.png
-    - nace_by_task_topn.png
+  # Per-approach config (output paths are data/11_predictions/{mode}/{approach}/scores.parquet)
+  approaches:
+    baseline:
+      alpha: 1.0
+      beta: 1.0
+      gamma: 0.5
+    lgbm_two_stage: {}
 
 portal_credentials:
   team: 'AAD'

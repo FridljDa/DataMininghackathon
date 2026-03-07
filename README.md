@@ -37,7 +37,7 @@ To see which commit achieved a given score, open the run folder’s `metadata.js
 
 ## Notes
 
-- Input/output paths are configured in `config.yaml`.
+- Input/output paths and directory layout are defined in the Snakefile; `config.yaml` holds tunable parameters, raw input file refs, and portal credentials.
 - Raw input files expected by the current workflow:
   - `data/01_raw/plis_training.csv`
   - `data/01_raw/customer_test.csv`

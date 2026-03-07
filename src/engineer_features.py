@@ -337,6 +337,22 @@ def main() -> None:
         (candidates["nace_2"] != candidates["secondary_nace_2"])
     ).astype(float)
 
+    # Missingness / history flags (preserve undefined vs zero for downstream fillna(0))
+    candidates["has_gap_history"] = (
+        candidates["mu_gap"].notna() & candidates["sigma_gap"].notna()
+    ).astype(float)
+    candidates["has_recent_6m_activity"] = (
+        candidates["recent_6m_count"].fillna(0) > 0
+    ).astype(float)
+    candidates["has_recent_spend_6m"] = (
+        candidates["spend_recent_6m"].fillna(0) > 0
+    ).astype(float)
+    sec_nace = candidates["secondary_nace_code"].astype(str).str.strip().replace("nan", "")
+    candidates["has_secondary_nace"] = (sec_nace != "").astype(float)
+    candidates["has_multi_year_history"] = (
+        candidates["active_year_span"].fillna(0) > 1
+    ).astype(float)
+
     out_cols = [
         "legal_entity_id",
         "eclass",
@@ -381,6 +397,11 @@ def main() -> None:
         "secondary_nace_2",
         "secondary_nace_code",
         "nace_mismatch",
+        "has_gap_history",
+        "has_recent_6m_activity",
+        "has_recent_spend_6m",
+        "has_secondary_nace",
+        "has_multi_year_history",
     ]
 
     candidates = candidates[[c for c in out_cols if c in candidates.columns]]

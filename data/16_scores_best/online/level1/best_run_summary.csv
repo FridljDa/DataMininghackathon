@@ -1,2 +1,0 @@
-total_score,total_savings,total_fees,num_hits,num_predictions,spend_capture_rate,total_ground_spend,approach,run_id,run_dir,commit_sha,branch,dirty,created_at
--22860.0,0.0,22860.0,0,2286,0.0,9908835.520110056,lgbm_two_stage,20260307_182433_e0647a3_dirty,data/15_scores/online/runs/lgbm_two_stage/level1/20260307_182433_e0647a3_dirty,e0647a30e5799beababcc5e22f603e53ea0512d6,main,true,2026-03-07T18:24:33Z

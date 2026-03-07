@@ -16,6 +16,7 @@ import csv
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -177,6 +178,39 @@ def _write_summary_csv(path: Path, row: dict[str, float | int | None], submissio
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
+        w.writerow(out_row)
+
+
+def _append_live_submission_history(
+    history_path: Path,
+    submission_id: str | None,
+    approach: str,
+    level: int,
+    submission_path: Path,
+    row: dict[str, float | int | None],
+) -> None:
+    """Append one row to the per-level submissions_live_history.csv (append-only)."""
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "submission_id", "approach", "level", "submitted_at_utc", "submission_path",
+        "total_score", "total_savings", "total_fees", "num_hits", "num_predictions",
+        "spend_capture_rate", "total_ground_spend",
+    ]
+    submitted_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    score_keys = ["total_score", "total_savings", "total_fees", "num_hits", "num_predictions", "spend_capture_rate", "total_ground_spend"]
+    out_row = {
+        "submission_id": submission_id or "",
+        "approach": approach,
+        "level": level,
+        "submitted_at_utc": submitted_at,
+        "submission_path": str(submission_path.resolve()),
+        **{k: row.get(k) for k in score_keys},
+    }
+    file_exists = history_path.exists()
+    with history_path.open("a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        if not file_exists:
+            w.writeheader()
         w.writerow(out_row)
 
 
@@ -424,6 +458,14 @@ def main() -> None:
         metavar="PATH",
         help="Write one-row live score summary CSV (e.g. data/14_scores/online/score_summary_live.csv).",
     )
+    parser.add_argument(
+        "--history-csv",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="If set, append one row to this submissions_live_history.csv (per level).",
+    )
+    parser.add_argument("--approach", default=None, help="Required if --history-csv is set.")
     args = parser.parse_args()
 
     if not args.file.exists():
@@ -448,21 +490,34 @@ def main() -> None:
         finally:
             browser.close()
 
-    if args.summary_csv is not None:
+    if args.summary_csv is not None or args.history_csv is not None:
         if result_text is None:
             print("Error: submission did not complete; cannot write live summary CSV.", file=sys.stderr)
             sys.exit(1)
         try:
             row = _parse_portal_result_text(result_text)
-            if row.get("total_score") is None and row.get("total_savings") is None:
-                raise ValueError(
-                    "Could not parse Total Score or Savings from portal result; "
-                    "live summary CSV would be incomplete."
+            if args.summary_csv is not None:
+                if row.get("total_score") is None and row.get("total_savings") is None:
+                    raise ValueError(
+                        "Could not parse Total Score or Savings from portal result; "
+                        "live summary CSV would be incomplete."
+                    )
+                _write_summary_csv(args.summary_csv, row, submission_id)
+                print(f"Wrote live score summary: {args.summary_csv}")
+            if args.history_csv is not None:
+                if args.approach is None:
+                    raise ValueError("--history-csv requires --approach")
+                _append_live_submission_history(
+                    args.history_csv,
+                    submission_id,
+                    args.approach,
+                    args.level,
+                    args.file,
+                    row,
                 )
-            _write_summary_csv(args.summary_csv, row, submission_id)
-            print(f"Wrote live score summary: {args.summary_csv}")
+                print(f"Appended to live submission history: {args.history_csv}")
         except Exception as e:
-            print(f"Error writing live summary CSV: {e}", file=sys.stderr)
+            print(f"Error writing live summary/history: {e}", file=sys.stderr)
             sys.exit(1)
 
 

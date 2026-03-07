@@ -109,6 +109,10 @@ SCORE_DETAILS_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/level{{level}}/scor
 ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/{{mode}}/runs/{{approach}}/level{{level}}/.last_archived"
 SUBMITTED_SENTINEL_PATTERN = f"{DATA_DIR}/14_submission/.submitted_challenge2_{{approach}}_level{{level}}"
 SCORE_SUMMARY_LIVE_PATTERN = f"{SCORES_DIR}/online/{{approach}}/level{{level}}/score_summary_live.csv"
+# Online latest run (one row per level, newest across approaches) and history (append-only)
+ONLINE_LATEST_PATTERN = f"{SCORES_DIR}/online/latest/level{{level}}/latest_run_summary.csv"
+ONLINE_HISTORY_RUNS_PATTERN = f"{SCORES_DIR}/online/history/level{{level}}/runs_history.csv"
+ONLINE_HISTORY_SUBMISSIONS_PATTERN = f"{SCORES_DIR}/online/history/level{{level}}/submissions_live_history.csv"
 FEATURE_ANALYSIS_SUMMARY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_summary.csv"
 
 rule all:
@@ -133,6 +137,7 @@ rule all:
         expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(SCORES_BEST_SUMMARY_PATTERN, level=ENABLED_LEVELS),
         expand(SCORES_BEST_METADATA_PATTERN, level=ENABLED_LEVELS),
+        expand(ONLINE_LATEST_PATTERN, level=ENABLED_LEVELS),
 
 rule generate_dag_graph:
     """Write high-level workflow graph as SVG (rule-level, not job-level)."""
@@ -439,7 +444,7 @@ rule score_submission:
         "--scoring-months {params.scoring_months}"
 
 rule archive_score_run:
-    """Copy current score outputs into a timestamp+commit run folder and write metadata + run index (per mode, approach, level)."""
+    """Copy current score outputs into a timestamp+commit run folder and write metadata + run index (per mode, approach, level). Online: also append to history/level{level}/runs_history.csv."""
     input:
         summary = SCORE_SUMMARY_PATTERN,
         details = SCORE_DETAILS_PATTERN,
@@ -448,16 +453,47 @@ rule archive_score_run:
     params:
         runs_dir = lambda w: f"{SCORES_DIR}/{w.mode}/runs/{w.approach}/level{w.level}",
         index_csv = lambda w: f"{SCORES_DIR}/{w.mode}/run_index_{w.approach}_level{w.level}.csv",
+        history_csv = lambda w: f"{SCORES_DIR}/online/history/level{w.level}/runs_history.csv" if w.mode == "online" else "",
     wildcard_constraints:
         mode = MODE_RE,
         approach = APPROACH_RE,
         level = LEVEL_RE,
+    run:
+        cmd = (
+            "uv run src/archive_score_run.py --summary {summary} --details {details} "
+            "--runs-dir {runs_dir} --index-csv {index_csv}"
+        ).format(
+            summary=input.summary, details=input.details,
+            runs_dir=params.runs_dir, index_csv=params.index_csv,
+        )
+        if params.history_csv:
+            cmd += " --history-csv {history_csv} --approach {approach} --level {level}".format(
+                history_csv=params.history_csv, approach=wildcards.approach, level=wildcards.level,
+            )
+        cmd += " && touch " + str(output.sentinel)
+        shell(cmd)
+
+rule select_latest_online_run:
+    """Write latest online run (by created_at) per level to data/15_scores/online/latest/level{level}/."""
+    input:
+        lambda w: expand(
+            ARCHIVE_SENTINEL_PATTERN,
+            mode=["online"],
+            approach=ENABLED_APPROACHES,
+            level=[w.level],
+        ),
+    output:
+        latest = ONLINE_LATEST_PATTERN,
+    params:
+        scores_dir = f"{SCORES_DIR}/online",
+    wildcard_constraints:
+        level = LEVEL_RE,
     shell:
-        "uv run src/archive_score_run.py --summary {input.summary} --details {input.details} "
-        "--runs-dir {params.runs_dir} --index-csv {params.index_csv} && touch {output.sentinel}"
+        "uv run src/select_latest_online_run.py --scores-dir {params.scores_dir} --level {wildcards.level} "
+        "--output-csv {output.latest}"
 
 rule select_best_score_run:
-    """Pick best online archived run per level by total_score; write to data/16_scores_best/online/level{level}/."""
+    """Pick best online archived run per level by total_score; write to data/16_scores_best/online/level{level}/ and copy artifacts."""
     input:
         lambda w: expand(
             ARCHIVE_SENTINEL_PATTERN,
@@ -477,14 +513,17 @@ rule select_best_score_run:
         "--summary-csv {output.summary} --metadata-json {output.metadata}"
 
 rule submit_to_portal:
-    """Upload online submission to Unite evaluator (challenge 2) per approach and level. Requires portal_credentials in config.yaml."""
+    """Upload online submission to Unite evaluator (challenge 2) per approach and level. Requires portal_credentials in config.yaml. Appends to submissions_live_history.csv."""
     input:
         submission = f"{DATA_DIR}/14_submission/online/{{approach}}/level{{level}}/submission.csv",
     output:
         summary = SCORE_SUMMARY_LIVE_PATTERN,
         sentinel = SUBMITTED_SENTINEL_PATTERN,
+    params:
+        history_csv = lambda w: f"{SCORES_DIR}/online/history/level{w.level}/submissions_live_history.csv",
     wildcard_constraints:
         approach = APPROACH_RE,
         level = LEVEL_RE,
     shell:
-        "uv run src/submit.py --challenge 2 --file {input.submission} --level {wildcards.level} --summary-csv {output.summary} && touch {output.sentinel}"
+        "uv run src/submit.py --challenge 2 --file {input.submission} --level {wildcards.level} "
+        "--summary-csv {output.summary} --history-csv {params.history_csv} --approach {wildcards.approach} && touch {output.sentinel}"

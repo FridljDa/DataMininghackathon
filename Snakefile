@@ -2,7 +2,7 @@
 Snakemake workflow for Core Demand Challenge.
 
 All input/output paths are defined here. Python scripts receive paths only via
-CLI arguments. Final deliverable: data/10_submission/online/submission.csv with header
+CLI arguments. Final deliverable: data/11_submission/online/submission.csv with header
 legal_entity_id,cluster.
 """
 
@@ -71,8 +71,8 @@ rule all:
         SCORE_SUMMARY,
         SCORE_DETAILS,
         ARCHIVE_SENTINEL_ONLINE,
-        "data/11_scores/online/score_summary_live.csv",
-        "data/10_submission/.submitted_challenge2",
+        "data/12_scores/online/score_summary_live.csv",
+        "data/11_submission/.submitted_challenge2",
 
 rule generate_dag_graph:
     """Write workflow DAG as SVG (no input dependencies; run first)."""
@@ -265,18 +265,18 @@ rule write_submission_warm:
 
 
 rule write_submission:
-    """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/10_submission/submission_baseline.csv' to run."""
+    """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/11_submission/submission_baseline.csv' to run."""
     input:
         customer_test = INPUTS["customer_test"],
         plis = PLIS_TRAINING_CSV,
     output:
-        submission = "data/10_submission/submission_baseline.csv",
+        submission = "data/11_submission/submission_baseline.csv",
     shell:
         "uv run src/write_submission.py --output {output.submission} "
         "--customer-test {input.customer_test} --plis-training {input.plis}"
 
 rule score_submission:
-    """Score submission against plis_testing holdout; write summary and details to data/11_scores."""
+    """Score submission against plis_testing holdout; write summary and details to data/12_scores."""
     input:
         submission = SUBMISSION_CSV,
         plis_testing = PLIS_TESTING_SPLIT,
@@ -312,8 +312,8 @@ rule submit_to_portal:
     input:
         submission = SUBMISSION_CSV,
     output:
-        summary = "data/11_scores/online/score_summary_live.csv",
-        sentinel = "data/10_submission/.submitted_challenge2",
+        summary = "data/12_scores/online/score_summary_live.csv",
+        sentinel = "data/11_submission/.submitted_challenge2",
     shell:
         "uv run src/submit.py --challenge 2 --file {input.submission} --summary-csv {output.summary} && touch {output.sentinel}"
 

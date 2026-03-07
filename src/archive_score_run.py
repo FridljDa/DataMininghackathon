@@ -31,7 +31,7 @@ def main() -> None:
     )
     parser.add_argument("--summary", required=True, help="Path to score_summary.csv.")
     parser.add_argument("--details", required=True, help="Path to score_details.parquet.")
-    parser.add_argument("--runs-dir", required=True, dest="runs_dir", help="Base directory for run folders (e.g. data/11_scores/offline/runs).")
+    parser.add_argument("--runs-dir", required=True, dest="runs_dir", help="Base directory for run folders (e.g. data/12_scores/offline/runs).")
     parser.add_argument("--index-csv", required=True, dest="index_csv", help="Path to run_index.csv (created/appended).")
     args = parser.parse_args()
 

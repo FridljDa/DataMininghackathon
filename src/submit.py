@@ -5,7 +5,7 @@ Usage:
     uv run src/submit.py --challenge 2 --file submission.csv
     uv run src/submit.py --challenge 1 --file submission.parquet
     uv run src/submit.py --challenge 2 --file submission.csv --level 1
-    uv run src/submit.py --challenge 2 --file submission.csv --summary-csv data/11_scores/online/score_summary_live.csv
+    uv run src/submit.py --challenge 2 --file submission.csv --summary-csv data/12_scores/online/score_summary_live.csv
 
 Credentials are read from config.yaml (portal_credentials.team and portal_credentials.password),
 or from environment variables UNITE_TEAM_NAME and UNITE_PASSWORD.
@@ -340,7 +340,7 @@ def main() -> None:
         type=Path,
         default=None,
         metavar="PATH",
-        help="Write one-row live score summary CSV (e.g. data/11_scores/online/score_summary_live.csv).",
+        help="Write one-row live score summary CSV (e.g. data/12_scores/online/score_summary_live.csv).",
     )
     args = parser.parse_args()
 

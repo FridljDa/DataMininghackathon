@@ -133,40 +133,23 @@ Interpretation:
 
 ## 5. Feature Engineering
 
-For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{warm}} $ and $ e \in \mathcal{C}_b $ in the train period, compute:
+For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{warm}} $ and $ e \in \mathcal{C}_b $ in the train period, derive a flexible feature set from these families:
 
-### Frequency features
-- $ n_{\text{orders}} $: total number of PLI rows
-- $ m_{\text{active}} $: number of distinct calendar months with at least one purchase
-- $ \rho_{\text{freq}} = m_{\text{active}} / m_{\text{observed}} $: purchase rate (months active / months buyer was observed)
+### Core feature families
+- Frequency/intensity signals (how often and how consistently a pair is purchased).
+- Recency and inter-purchase timing signals (time since last activity, gap behavior).
+- Economic/value signals (spend magnitude, spend concentration, value stability).
+- Calendar and seasonality signals (month/quarter/year effects and cyclical timing).
+- Momentum/trend signals (recent acceleration/deceleration versus prior periods).
+- Buyer-context signals (size/sector metadata and related static attributes).
 
-### Recency features
-- $ \delta_{\text{recency}} $: months since last purchase of $ e $ by $ b $
+### Design principles
+- Keep the concrete feature list configurable and versioned with experiments.
+- Use only information available up to the train cutoff (strict no-leakage rule).
+- Prefer robust transforms/encodings for skewed values and cyclical calendar fields.
+- Revisit, add, or remove features as scoring objectives and model behavior evolve.
 
-### Regularity features
-- $ \sigma_{\text{gap}} $: standard deviation of inter-purchase gaps (in months)
-- $ \text{CV}_{\text{gap}} = \sigma_{\text{gap}} / \mu_{\text{gap}} $: coefficient of variation (low = regular)
-
-### Economic weight features
-- $ s_{\text{total}} = \sum \text{quantityvalue} \times \text{vk\_per\_item} $: total spend
-- $ \tilde{s} = \sqrt{s_{\text{total}}} $: square-root transformed spend (aligns with scoring hint)
-- $ \bar{s}_{\text{line}} $: median spend per line item
-- $ w_e^b = s_{\text{total}}(b,e) / s_{\text{total}}(b) $: eclass share of buyer's total spend
-
-### Trend features
-- $ \Delta_{\text{trend}} = m_{\text{active, last 3mo}} - m_{\text{active, prior 6mo}}/2 $: recent activity change
-
-### Explicit year features
-- `first_order_year`: calendar year of earliest observed order month for $ (b, e) $
-- `last_order_year`: calendar year of latest observed order month
-- `years_since_last_order`: train-end year minus `last_order_year`
-- `active_year_span`: inclusive number of calendar years between first and last order (last_order_year − first_order_year + 1)
-
-All year deltas and spans are computed from train-period history only (no future leakage).
-
-### Buyer context (static)
-- $ \log(\text{employees} + 1) $
-- NACE 2-digit code (categorical)
+The exact active columns for any run are controlled by pipeline configuration and may change over time.
 
 ---
 

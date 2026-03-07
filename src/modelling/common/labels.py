@@ -2,6 +2,7 @@
 Attach validation-period labels and spend to a candidates/features dataframe.
 
 Uses plis (split) rows in [val_start, val_end] to compute n_orders_val, s_val, label.
+n_orders_val = distinct order count per key (nunique of set_id); label = 1 if n_orders_val >= n_min_label else 0.
 Level 1: key = (legal_entity_id, eclass); Level 2: key = (legal_entity_id, eclass, manufacturer).
 """
 
@@ -24,11 +25,13 @@ def attach_validation_labels(
     Merge validation-period order count and spend onto df; add label.
 
     Adds columns: n_orders_val, s_val, label.
-    label = 1 if n_orders_val >= n_min_label else 0.
+    n_orders_val is distinct order count (nunique of set_id); label = 1 if n_orders_val >= n_min_label else 0.
     """
     key_cols = ["legal_entity_id", "eclass", "manufacturer"] if level == 2 else ["legal_entity_id", "eclass"]
 
     plis = pd.read_csv(plis_path, sep="\t", low_memory=False)
+    if "set_id" not in plis.columns:
+        raise ValueError("plis must contain 'set_id' to compute distinct order counts.")
     plis["orderdate"] = pd.to_datetime(plis["orderdate"], format="%Y-%m-%d")
     plis["legal_entity_id"] = plis["legal_entity_id"].astype(str)
     plis["eclass"] = plis["eclass"].astype(str).str.strip().replace("nan", "")
@@ -45,7 +48,7 @@ def attach_validation_labels(
 
     val_agg = (
         plis.groupby(key_cols)
-        .agg(n_orders_val=("_spend", "count"), s_val=("_spend", "sum"))
+        .agg(n_orders_val=("set_id", "nunique"), s_val=("_spend", "sum"))
         .reset_index()
     )
     out = df.merge(val_agg, on=key_cols, how="left")

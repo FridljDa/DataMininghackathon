@@ -61,12 +61,26 @@ meta:
     reason: numeric n_unique=1 < 2
   - feature: history_cohort
     reason: categorical n_unique=1 < 2
-  - feature: years_since_last_order
-    reason: redundant with last_order_year
-  - feature: delta_recency
-    reason: redundant with last_order_year
-  - feature: days_since_last
-    reason: redundant with last_order_year
+  - feature: has_multi_year_history
+    reason: redundant with active_year_span
+  - feature: m_observed
+    reason: redundant with active_year_span
+  - feature: avg_monthly_orders_buyer_tenure
+    reason: redundant with active_year_span
+  - feature: avg_monthly_orders_in_lookback
+    reason: redundant with active_year_span
+  - feature: m_active
+    reason: redundant with active_year_span
+  - feature: n_orders_in_lookback
+    reason: redundant with active_year_span
+  - feature: n_orders
+    reason: redundant with active_year_span
+  - feature: rho_freq
+    reason: redundant with active_year_span
+  - feature: has_gap_history
+    reason: redundant with active_year_span
+  - feature: order_value_cv
+    reason: redundant with active_year_span
   - feature: w_e_b
     reason: redundant with avg_monthly_spend_pair_tenure
   - feature: avg_monthly_spend_buyer_tenure
@@ -83,29 +97,15 @@ meta:
     reason: redundant with avg_monthly_spend_pair_tenure
   - feature: s_median_line
     reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: effective_lookback_months
-    reason: redundant with buyer_tenure_months
-  - feature: has_multi_year_history
-    reason: redundant with active_year_span
-  - feature: m_observed
-    reason: redundant with active_year_span
-  - feature: avg_monthly_orders_in_lookback
-    reason: redundant with active_year_span
-  - feature: avg_monthly_orders_buyer_tenure
-    reason: redundant with active_year_span
-  - feature: m_active
-    reason: redundant with active_year_span
-  - feature: n_orders_in_lookback
-    reason: redundant with active_year_span
-  - feature: n_orders
-    reason: redundant with active_year_span
-  - feature: rho_freq
-    reason: redundant with active_year_span
-  - feature: has_gap_history
-    reason: redundant with active_year_span
-  - feature: order_value_cv
-    reason: redundant with active_year_span
   - feature: n_distinct_manufacturers
     reason: redundant with top_manufacturer_share
+  - feature: years_since_last_order
+    reason: redundant with last_order_year
+  - feature: delta_recency
+    reason: redundant with last_order_year
+  - feature: days_since_last
+    reason: redundant with last_order_year
+  - feature: effective_lookback_months
+    reason: redundant with buyer_tenure_months
   - feature: pair_tenure_months
     reason: redundant with first_order_year

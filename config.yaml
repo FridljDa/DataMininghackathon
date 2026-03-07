@@ -118,7 +118,7 @@ modelling:
     #- baseline
     - lgbm_two_stage
     - lgbm_v3_factorized
-    #- pass_through
+    - pass_through
     - phase3_repro
   # Submission levels: 1 = eclass only, 2 = eclass|manufacturer
   enabled_levels:

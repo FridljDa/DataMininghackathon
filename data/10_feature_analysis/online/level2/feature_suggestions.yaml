@@ -11,6 +11,7 @@ suggested_features:
 - last_order_month_sin
 - last_order_quarter_cos
 - last_order_quarter_sin
+- last_order_year
 - log_employees
 - nace_2
 - nace_3
@@ -21,7 +22,6 @@ suggested_features:
 - secondary_nace_2
 - secondary_nace_code
 - top_manufacturer_share
-- years_since_last_order
 meta:
   source: data/10_feature_analysis/online/level2/feature_summary.csv
   redundancy_source: data/10_feature_analysis/online/level2/feature_redundancy.csv
@@ -60,13 +60,29 @@ meta:
     reason: numeric n_unique=1 < 2
   - feature: history_cohort
     reason: categorical n_unique=1 < 2
+  - feature: w_e_b
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: avg_monthly_spend_in_lookback
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: avg_monthly_spend_buyer_tenure
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: lookback_spend
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: historical_purchase_value_total
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: historical_purchase_value_sqrt
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: avg_spend_per_order
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: s_median_line
+    reason: redundant with avg_monthly_spend_pair_tenure
   - feature: has_multi_year_history
     reason: redundant with active_year_span
   - feature: m_observed
     reason: redundant with active_year_span
-  - feature: avg_monthly_orders_in_lookback
-    reason: redundant with active_year_span
   - feature: avg_monthly_orders_buyer_tenure
+    reason: redundant with active_year_span
+  - feature: avg_monthly_orders_in_lookback
     reason: redundant with active_year_span
   - feature: m_active
     reason: redundant with active_year_span
@@ -80,28 +96,12 @@ meta:
     reason: redundant with active_year_span
   - feature: order_value_cv
     reason: redundant with active_year_span
-  - feature: w_e_b
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: avg_monthly_spend_in_lookback
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: avg_monthly_spend_buyer_tenure
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: historical_purchase_value_total
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: lookback_spend
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: historical_purchase_value_sqrt
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: avg_spend_per_order
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: s_median_line
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: last_order_year
-    reason: redundant with years_since_last_order
+  - feature: years_since_last_order
+    reason: redundant with last_order_year
   - feature: delta_recency
-    reason: redundant with years_since_last_order
+    reason: redundant with last_order_year
   - feature: days_since_last
-    reason: redundant with years_since_last_order
+    reason: redundant with last_order_year
   - feature: pair_tenure_months
     reason: redundant with first_order_year
   - feature: n_distinct_manufacturers

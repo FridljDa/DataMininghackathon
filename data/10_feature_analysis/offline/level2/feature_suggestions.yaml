@@ -3,9 +3,9 @@ suggested_features:
 - active_year_span
 - avg_monthly_orders_pair_tenure
 - avg_monthly_spend_pair_tenure
-- buyer_tenure_months
 - delta_trend
 - eclass_n_buyers_global
+- effective_lookback_months
 - first_order_year
 - history_cohort
 - last_order_month_cos
@@ -14,18 +14,20 @@ suggested_features:
 - last_order_quarter_sin
 - last_order_year
 - log_employees
-- n_distinct_manufacturers
 - nace_2
 - nace_3
 - nace_code
 - nace_mismatch
 - nace_section
 - q4_share
+- secondary_nace_2
+- secondary_nace_code
+- top_manufacturer_share
 meta:
   source: data/10_feature_analysis/offline/level2/feature_summary.csv
   redundancy_source: data/10_feature_analysis/offline/level2/feature_redundancy.csv
-  n_suggested: 22
-  n_dropped: 41
+  n_suggested: 24
+  n_dropped: 39
   dropped:
   - feature: sigma_gap
     reason: null_rate 0.67 > 0.5
@@ -51,43 +53,17 @@ meta:
     reason: numeric n_unique=1 < 2
   - feature: spend_recent_ratio
     reason: null_rate 1.00 > 0.5
-  - feature: secondary_nace_2
-    reason: null_rate 0.51 > 0.5
-  - feature: secondary_nace_code
-    reason: null_rate 0.51 > 0.5
   - feature: has_recent_6m_activity
     reason: numeric n_unique=1 < 2
   - feature: has_recent_spend_6m
     reason: numeric n_unique=1 < 2
   - feature: has_secondary_nace
     reason: numeric n_unique=1 < 2
-  - feature: pair_tenure_months
-    reason: redundant with first_order_year
-  - feature: has_multi_year_history
-    reason: redundant with active_year_span
-  - feature: m_observed
-    reason: redundant with active_year_span
-  - feature: avg_monthly_orders_buyer_tenure
-    reason: redundant with active_year_span
-  - feature: avg_monthly_orders_in_lookback
-    reason: redundant with active_year_span
-  - feature: m_active
-    reason: redundant with active_year_span
-  - feature: n_orders_in_lookback
-    reason: redundant with active_year_span
-  - feature: n_orders
-    reason: redundant with active_year_span
-  - feature: rho_freq
-    reason: redundant with active_year_span
-  - feature: has_gap_history
-    reason: redundant with active_year_span
-  - feature: order_value_cv
-    reason: redundant with active_year_span
-  - feature: avg_monthly_spend_buyer_tenure
+  - feature: w_e_b
     reason: redundant with avg_monthly_spend_pair_tenure
   - feature: avg_monthly_spend_in_lookback
     reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: w_e_b
+  - feature: avg_monthly_spend_buyer_tenure
     reason: redundant with avg_monthly_spend_pair_tenure
   - feature: lookback_spend
     reason: redundant with avg_monthly_spend_pair_tenure
@@ -99,13 +75,35 @@ meta:
     reason: redundant with avg_monthly_spend_pair_tenure
   - feature: s_median_line
     reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: has_multi_year_history
+    reason: redundant with active_year_span
+  - feature: m_observed
+    reason: redundant with active_year_span
+  - feature: avg_monthly_orders_in_lookback
+    reason: redundant with active_year_span
+  - feature: avg_monthly_orders_buyer_tenure
+    reason: redundant with active_year_span
+  - feature: m_active
+    reason: redundant with active_year_span
+  - feature: n_orders
+    reason: redundant with active_year_span
+  - feature: n_orders_in_lookback
+    reason: redundant with active_year_span
+  - feature: rho_freq
+    reason: redundant with active_year_span
+  - feature: has_gap_history
+    reason: redundant with active_year_span
+  - feature: order_value_cv
+    reason: redundant with active_year_span
   - feature: years_since_last_order
     reason: redundant with last_order_year
   - feature: delta_recency
     reason: redundant with last_order_year
   - feature: days_since_last
     reason: redundant with last_order_year
-  - feature: top_manufacturer_share
-    reason: redundant with n_distinct_manufacturers
-  - feature: effective_lookback_months
-    reason: redundant with buyer_tenure_months
+  - feature: n_distinct_manufacturers
+    reason: redundant with top_manufacturer_share
+  - feature: pair_tenure_months
+    reason: redundant with first_order_year
+  - feature: buyer_tenure_months
+    reason: redundant with effective_lookback_months

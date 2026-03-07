@@ -3,11 +3,13 @@
 import modelling.approaches.baseline as baseline_mod
 import modelling.approaches.lgbm_two_stage as lgbm_two_stage_mod
 import modelling.approaches.pass_through as pass_through_mod
+import modelling.approaches.phase3_repro as phase3_repro_mod
 
 APPROACHES = {
     "baseline": baseline_mod,
     "lgbm_two_stage": lgbm_two_stage_mod,
     "pass_through": pass_through_mod,
+    "phase3_repro": phase3_repro_mod,
 }
 
 

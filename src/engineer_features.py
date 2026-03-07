@@ -51,6 +51,13 @@ def main() -> None:
         dest="train_end",
         help="Last date of train period (YYYY-MM-DD).",
     )
+    parser.add_argument(
+        "--lookback-months",
+        type=int,
+        default=18,
+        dest="lookback_months",
+        help="Lookback window in months for Phase 3 features (default: 18).",
+    )
     args = parser.parse_args()
 
     raw_path = Path(args.candidates_raw)
@@ -58,6 +65,7 @@ def main() -> None:
     customer_path = Path(args.customer)
     out_path = Path(args.output)
     train_end = pd.Timestamp(args.train_end)
+    lookback_months = args.lookback_months
 
     candidates = pd.read_parquet(raw_path)
     for col in ("legal_entity_id", "eclass", "n_orders", "historical_purchase_value_total", "orderdate_min", "orderdate_max", "orderdates_str"):
@@ -124,6 +132,45 @@ def main() -> None:
     q = pd.to_numeric(plis["quantityvalue"], errors="coerce").fillna(0)
     v = pd.to_numeric(plis["vk_per_item"], errors="coerce").fillna(0)
     plis["_spend"] = q * v
+
+    # Phase 3 exact lookback features (n_orders_in_lookback, lookback_spend, avg_spend_per_order, days_since_last, history_cohort)
+    lookback_start = train_end - pd.DateOffset(months=lookback_months)
+    plis_lookback = plis[
+        (plis["orderdate"] >= lookback_start) & (plis["orderdate"] <= train_end)
+    ]
+    lookback_agg = (
+        plis_lookback.groupby(["legal_entity_id", "eclass"])
+        .agg(
+            n_orders_in_lookback=("_spend", "count"),
+            lookback_spend=("_spend", "sum"),
+        )
+        .reset_index()
+    )
+    candidates = candidates.merge(
+        lookback_agg, on=["legal_entity_id", "eclass"], how="left"
+    )
+    candidates["avg_spend_per_order"] = (
+        candidates["lookback_spend"]
+        / candidates["n_orders_in_lookback"].clip(lower=1)
+    )
+    candidates["days_since_last"] = (
+        train_end - candidates["orderdate_max"]
+    ).dt.days
+
+    buyer_active_months = (
+        plis[plis["orderdate"] <= train_end]
+        .groupby("legal_entity_id")["orderdate"]
+        .apply(lambda x: x.dt.to_period("M").nunique())
+        .reset_index(name="buyer_active_months_total")
+    )
+    candidates = candidates.merge(
+        buyer_active_months, on="legal_entity_id", how="left"
+    )
+    candidates["history_cohort"] = candidates["buyer_active_months_total"].fillna(0).apply(
+        lambda m: "sparse_history"
+        if 0 < m <= 3
+        else ("cold_start" if m == 0 else "rich_history")
+    )
 
     line_median = (
         plis.groupby(["legal_entity_id", "eclass"])["_spend"]
@@ -402,6 +449,11 @@ def main() -> None:
         "has_recent_spend_6m",
         "has_secondary_nace",
         "has_multi_year_history",
+        "n_orders_in_lookback",
+        "lookback_spend",
+        "avg_spend_per_order",
+        "days_since_last",
+        "history_cohort",
     ]
 
     candidates = candidates[[c for c in out_cols if c in candidates.columns]]

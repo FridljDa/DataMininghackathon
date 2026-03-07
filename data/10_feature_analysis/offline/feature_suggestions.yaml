@@ -59,25 +59,15 @@ meta:
     reason: redundant with avg_monthly_spend_pair_tenure
   - feature: w_e_b
     reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: last_order_year
-    reason: redundant with active_month_share_12m
-  - feature: years_since_last_order
-    reason: redundant with active_month_share_12m
-  - feature: delta_recency
-    reason: redundant with active_month_share_12m
-  - feature: days_since_last
-    reason: redundant with active_month_share_12m
-  - feature: delta_trend
-    reason: redundant with active_month_share_12m
   - feature: active_year_span
     reason: redundant with avg_monthly_orders_pair_tenure
   - feature: m_observed
     reason: redundant with avg_monthly_orders_pair_tenure
   - feature: m_active
     reason: redundant with avg_monthly_orders_pair_tenure
-  - feature: avg_monthly_orders_in_lookback
-    reason: redundant with avg_monthly_orders_pair_tenure
   - feature: avg_monthly_orders_buyer_tenure
+    reason: redundant with avg_monthly_orders_pair_tenure
+  - feature: avg_monthly_orders_in_lookback
     reason: redundant with avg_monthly_orders_pair_tenure
   - feature: has_multi_year_history
     reason: redundant with avg_monthly_orders_pair_tenure
@@ -89,15 +79,25 @@ meta:
     reason: redundant with avg_monthly_orders_pair_tenure
   - feature: has_gap_history
     reason: redundant with avg_monthly_orders_pair_tenure
-  - feature: effective_lookback_months
-    reason: redundant with buyer_tenure_months
+  - feature: years_since_last_order
+    reason: redundant with active_month_share_12m
+  - feature: last_order_year
+    reason: redundant with active_month_share_12m
+  - feature: delta_recency
+    reason: redundant with active_month_share_12m
+  - feature: days_since_last
+    reason: redundant with active_month_share_12m
+  - feature: delta_trend
+    reason: redundant with active_month_share_12m
   - feature: rho_freq
     reason: redundant with recency_to_gap_ratio
   - feature: mu_gap
     reason: redundant with recency_to_gap_ratio
-  - feature: s_median_line
-    reason: redundant with avg_spend_per_order
-  - feature: sigma_gap
-    reason: redundant with CV_gap
   - feature: pair_tenure_months
     reason: redundant with first_order_year
+  - feature: sigma_gap
+    reason: redundant with CV_gap
+  - feature: s_median_line
+    reason: redundant with avg_spend_per_order
+  - feature: effective_lookback_months
+    reason: redundant with buyer_tenure_months

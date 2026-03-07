@@ -1,4 +1,4 @@
-# `data/01_raw/plis_training.csv`
+# `data/02_raw/plis_training.csv`
 
 ## Purpose
 Historical transaction-level training data. Each row is a purchased item line, used to learn recurring demand patterns and build candidate Core Demand portfolios.

@@ -1,4 +1,4 @@
-# `data/01_raw/customer_test.csv`
+# `data/02_raw/customer_test.csv`
 
 ## Purpose
 

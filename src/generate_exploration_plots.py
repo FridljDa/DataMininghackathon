@@ -1,5 +1,5 @@
 """
-Generate EDA plots from raw CSVs and customer metadata into data/04_plots.
+Generate EDA plots from raw CSVs and customer metadata into data/06_plots.
 
 Reads plis_training (tab), customer_test (tab), les_cs (comma), customer (tab).
 Produces: seasonal purchase volume, violin of purchase value by task,
@@ -135,8 +135,8 @@ def main() -> None:
     parser.add_argument("--plis", required=True, help="Path to plis_training.csv")
     parser.add_argument("--customer-test", required=True, dest="customer_test", help="Path to customer_test.csv")
     parser.add_argument("--les-cs", required=True, dest="les_cs", help="Path to les_cs.csv")
-    parser.add_argument("--customer-meta", required=True, dest="customer_meta", help="Path to data/02_meta/customer.csv")
-    parser.add_argument("--output-dir", required=True, dest="output_dir", help="Directory for plot files (e.g. data/04_plots)")
+    parser.add_argument("--customer-meta", required=True, dest="customer_meta", help="Path to data/03_meta/customer.csv")
+    parser.add_argument("--output-dir", required=True, dest="output_dir", help="Directory for plot files (e.g. data/06_plots)")
     args = parser.parse_args()
 
     out_dir = Path(args.output_dir)

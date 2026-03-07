@@ -1,10 +1,11 @@
 data_dir: "data"
+dag_svg: "data/01_dag/dag.svg"
 inputs:
-  customer_test: "data/01_raw/customer_test.csv"
-  les_cs: "data/01_raw/les_cs.csv"
-  nace_codes: "data/nace_codes.csv"
-plis_training_csv: "data/01_raw/plis_training.csv"
-customer_meta_csv: "data/02_meta/customer.csv"
+  customer_test: "data/02_raw/customer_test.csv"
+  les_cs: "data/02_raw/les_cs.csv"
+  nace_codes: "data/02_raw/nace_codes.csv"
+plis_training_csv: "data/02_raw/plis_training.csv"
+customer_meta_csv: "data/03_meta/customer.csv"
 output_dir: "outputs"
 submission_csv: "data/10_submission/submission.csv"
 
@@ -12,8 +13,9 @@ training_validation_split:
   cutoff_date: "2025-07-01"
   test_customers_count: 50
   random_seed: 42
-  plis_training: "data/03_training_validation/plis_training.csv"
-  plis_testing: "data/03_training_validation/plis_testing.csv"
+  customer_csv: "data/04_customer/customer.csv"
+  plis_training: "data/05_training_validation/plis_training.csv"
+  plis_testing: "data/05_training_validation/plis_testing.csv"
 
 scoring_parameters:
   savings_rate: 0.10
@@ -43,17 +45,49 @@ modelling:
   high_spend_guardrail: 500.0
   top_k_per_buyer: 15
   val_months: 6.0
-  candidates_parquet: "data/05_features/candidates.parquet"
-  scores_parquet: "data/06_predictions/scores.parquet"
-  scores_lgbm_parquet: "data/06_predictions/scores_lgbm.parquet"
-  portfolio_parquet: "data/07_portfolio/portfolio.parquet"
-  candidates_offline_parquet: "data/05_features/candidates_offline.parquet"
-  scores_offline_parquet: "data/06_predictions/scores_offline.parquet"
-  portfolio_offline_parquet: "data/07_portfolio/portfolio_offline.parquet"
+  candidates_raw_parquet: "data/07_features/candidates_raw.parquet"
+  features_all_parquet: "data/07_features/features_all.parquet"
+  features_selected_parquet: "data/07_features/features_selected.parquet"
+  scores_parquet: "data/08_predictions/scores.parquet"
+  scores_lgbm_parquet: "data/08_predictions/scores_lgbm.parquet"
+  portfolio_parquet: "data/09_portfolio/portfolio.parquet"
+  candidates_raw_offline_parquet: "data/07_features/candidates_raw_offline.parquet"
+  features_all_offline_parquet: "data/07_features/features_all_offline.parquet"
+  features_selected_offline_parquet: "data/07_features/features_selected_offline.parquet"
+  scores_offline_parquet: "data/08_predictions/scores_offline.parquet"
+  portfolio_offline_parquet: "data/09_portfolio/portfolio_offline.parquet"
   submission_offline_csv: "data/10_submission/submission_offline.csv"
+  selected_features:
+    - n_orders
+    - m_active
+    - m_observed
+    - rho_freq
+    - delta_recency
+    - sigma_gap
+    - mu_gap
+    - CV_gap
+    - s_total
+    - s_total_sqrt
+    - s_median_line
+    - w_e_b
+    - delta_trend
+    - log_employees
+    - nace_2
+    - nace_code
+
+feature_analysis:
+  dir: "data/06_plots/features"
+  summary_csv: "data/06_plots/features/feature_summary.csv"
+  summary_offline_csv: "data/06_plots/features/feature_summary_offline.csv"
+  plot_files:
+    - feature_distributions.png
+    - feature_correlations.png
+  plot_files_offline:
+    - feature_distributions_offline.png
+    - feature_correlations_offline.png
 
 plots:
-  dir: "data/04_plots"
+  dir: "data/06_plots"
   files:
     - seasonal_purchase_volume.png
     - purchase_value_by_task_violin.png

@@ -1,4 +1,4 @@
-# `data/01_raw/nace_codes.csv`
+# `data/02_raw/nace_codes.csv`
 
 ## Purpose
 Reference lookup for NACE industry taxonomy. Use this file to map NACE codes to human-readable descriptions and hierarchy levels.

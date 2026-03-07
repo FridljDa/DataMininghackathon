@@ -1,9 +1,9 @@
 """
-Candidate generation and feature engineering for Level 1 (E-Class) core demand.
+Feature engineering for Level 1 (E-Class) candidates.
 
-Reads split plis_training and customer metadata; restricts to warm buyers (task == predict future).
-Builds candidates with lookback window and singleton filter, then computes all features
-from modelling.md §4-5. Output: one row per (legal_entity_id, eclass) with feature columns.
+Reads raw candidates parquet (from generate_candidates), plis and customer metadata.
+Computes all modelling features: m_active, rho_freq, delta_recency, gap stats,
+economic features, trend, buyer context. Output: full feature matrix parquet.
 """
 
 from __future__ import annotations
@@ -17,15 +17,7 @@ import pandas as pd
 
 def _read_plis(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, sep="\t", low_memory=False)
-    for col in (
-        "legal_entity_id",
-        "orderdate",
-        "eclass",
-        "quantityvalue",
-        "vk_per_item",
-        "nace_code",
-        "estimated_number_employees",
-    ):
+    for col in ("legal_entity_id", "orderdate", "eclass", "quantityvalue", "vk_per_item"):
         if col not in df.columns:
             raise ValueError(f"plis must contain '{col}'. Got: {list(df.columns)}")
     return df
@@ -33,7 +25,7 @@ def _read_plis(path: Path) -> pd.DataFrame:
 
 def _read_customer(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, sep="\t", dtype=str)
-    for col in ("legal_entity_id", "task", "nace_code", "estimated_number_employees"):
+    for col in ("legal_entity_id", "nace_code", "estimated_number_employees"):
         if col not in df.columns:
             raise ValueError(f"customer must contain '{col}'. Got: {list(df.columns)}")
     return df
@@ -41,102 +33,56 @@ def _read_customer(path: Path) -> pd.DataFrame:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--candidates-raw", required=True, dest="candidates_raw", help="Path to raw candidates parquet.")
     parser.add_argument("--plis", required=True, help="Path to plis_training (split) TSV.")
     parser.add_argument("--customer", required=True, help="Path to customer metadata TSV.")
-    parser.add_argument("--output", required=True, help="Path to output candidates.parquet.")
+    parser.add_argument("--output", required=True, help="Path to output features parquet.")
     parser.add_argument(
         "--train-end",
         required=True,
         dest="train_end",
-        help="Last date of train period (YYYY-MM-DD). Features use only data on or before this.",
-    )
-    parser.add_argument(
-        "--lookback-months",
-        type=int,
-        default=18,
-        dest="lookback_months",
-        help="Months of lookback for candidate recency (default: 18).",
-    )
-    parser.add_argument(
-        "--min-spend-singleton",
-        type=float,
-        default=50.0,
-        dest="min_spend_singleton",
-        help="Drop singleton eclass with total spend below this (default: 50).",
+        help="Last date of train period (YYYY-MM-DD).",
     )
     args = parser.parse_args()
 
+    raw_path = Path(args.candidates_raw)
     plis_path = Path(args.plis)
     customer_path = Path(args.customer)
     out_path = Path(args.output)
     train_end = pd.Timestamp(args.train_end)
-    lookback_months = args.lookback_months
-    min_spend_singleton = args.min_spend_singleton
 
-    plis = _read_plis(plis_path)
-    plis["orderdate"] = pd.to_datetime(plis["orderdate"], format="%Y-%m-%d")
-    plis["legal_entity_id"] = plis["legal_entity_id"].astype(str)
-    plis["eclass"] = plis["eclass"].astype(str).str.strip().replace("nan", "")
-    plis = plis[plis["eclass"] != ""]
+    candidates = pd.read_parquet(raw_path)
+    for col in ("legal_entity_id", "eclass", "n_orders", "s_total", "orderdate_min", "orderdate_max", "orderdates_str"):
+        if col not in candidates.columns:
+            raise ValueError(f"candidates_raw must contain '{col}'. Got: {list(candidates.columns)}")
 
-    q = pd.to_numeric(plis["quantityvalue"], errors="coerce").fillna(0)
-    v = pd.to_numeric(plis["vk_per_item"], errors="coerce").fillna(0)
-    plis["_spend"] = q * v
+    # Restore orderdates as list of periods for feature computation (parquet may give list or ndarray)
+    def _str_to_periods(ss) -> list:
+        if ss is None:
+            return []
+        if isinstance(ss, np.ndarray):
+            ss = ss.tolist()
+        if not isinstance(ss, list) or len(ss) == 0:
+            return []
+        return [pd.Period(s, freq="M") for s in ss if isinstance(s, str)]
 
-    customer = _read_customer(customer_path)
-    customer["legal_entity_id"] = customer["legal_entity_id"].astype(str)
-    task_norm = customer["task"].str.strip().str.lower()
-    warm_ids = set(
-        customer.loc[
-            task_norm.isin(["predict future", "testing"]),
-            "legal_entity_id",
-        ].unique().tolist()
-    )
+    candidates["orderdates"] = candidates["orderdates_str"].apply(_str_to_periods)
 
-    plis_train = plis[plis["orderdate"] <= train_end].copy()
-    plis_train = plis_train[plis_train["legal_entity_id"].isin(warm_ids)]
-
-    t_min = train_end - pd.DateOffset(months=lookback_months)
-
-    # Aggregate per (legal_entity_id, eclass) in train period
-    agg = (
-        plis_train.groupby(["legal_entity_id", "eclass"])
-        .agg(
-            n_orders=("_spend", "count"),
-            s_total=("_spend", "sum"),
-            orderdate_min=("orderdate", "min"),
-            orderdate_max=("orderdate", "max"),
-            orderdates=("orderdate", lambda x: x.dt.to_period("M").unique().tolist()),
-        )
-        .reset_index()
-    )
-
-    # Candidate filter: last purchase >= T - L
-    agg["t_last"] = agg["orderdate_max"]
-    candidates = agg[agg["t_last"] >= t_min].copy()
-
-    # Singleton filter: n_orders == 1 and s_total < tau_s -> drop
-    drop_singleton = (candidates["n_orders"] == 1) & (
-        candidates["s_total"] < min_spend_singleton
-    )
-    candidates = candidates[~drop_singleton].copy()
-
-    # --- Feature engineering ---
-    # m_active: distinct months with at least one purchase
+    # m_active, m_observed, rho_freq
     candidates["m_active"] = candidates["orderdates"].apply(len)
-    # m_observed: months between first and last purchase (buyer-level would need plis; use span of (b,e) as proxy)
     candidates["_span_months"] = (
         (candidates["orderdate_max"] - candidates["orderdate_min"]).dt.days / 30.44
     ).clip(lower=1)
     candidates["m_observed"] = candidates["_span_months"].round().astype(int).clip(lower=1)
     candidates["rho_freq"] = candidates["m_active"] / candidates["m_observed"]
 
-    # Recency: months since last purchase (relative to train_end)
+    # delta_recency
+    candidates["t_last"] = candidates["orderdate_max"]
     candidates["delta_recency"] = (
         (train_end - candidates["t_last"]).dt.days / 30.44
     ).round().astype(int).clip(lower=0)
 
-    # Inter-purchase gaps (months) for regularity
+    # Inter-purchase gaps
     def _gaps(periods: list) -> tuple[float, float]:
         if not periods or len(periods) < 2:
             return np.nan, np.nan
@@ -149,9 +95,9 @@ def main() -> None:
             return np.nan, np.nan
         return float(np.mean(gaps)), float(np.std(gaps)) if len(gaps) > 1 else 0.0
 
-    candidates["_gap_mean"], candidates["_gap_std"] = zip(
-        *candidates["orderdates"].map(_gaps)
-    )
+    gap_results = list(zip(*candidates["orderdates"].map(_gaps)))
+    candidates["_gap_mean"] = gap_results[0]
+    candidates["_gap_std"] = gap_results[1]
     candidates["sigma_gap"] = candidates["_gap_std"]
     candidates["mu_gap"] = candidates["_gap_mean"]
     candidates["CV_gap"] = np.where(
@@ -160,10 +106,19 @@ def main() -> None:
         np.nan,
     )
 
-    # Economic: s_total already; sqrt; median per line from plis
+    # Economic
     candidates["s_total_sqrt"] = np.sqrt(candidates["s_total"])
+
+    plis = _read_plis(plis_path)
+    plis["orderdate"] = pd.to_datetime(plis["orderdate"], format="%Y-%m-%d")
+    plis["legal_entity_id"] = plis["legal_entity_id"].astype(str)
+    plis["eclass"] = plis["eclass"].astype(str).str.strip().replace("nan", "")
+    q = pd.to_numeric(plis["quantityvalue"], errors="coerce").fillna(0)
+    v = pd.to_numeric(plis["vk_per_item"], errors="coerce").fillna(0)
+    plis["_spend"] = q * v
+
     line_median = (
-        plis_train.groupby(["legal_entity_id", "eclass"])["_spend"]
+        plis.groupby(["legal_entity_id", "eclass"])["_spend"]
         .median()
         .reset_index()
         .rename(columns={"_spend": "s_median_line"})
@@ -173,7 +128,7 @@ def main() -> None:
     )
 
     buyer_total = (
-        plis_train.groupby("legal_entity_id")["_spend"]
+        plis.groupby("legal_entity_id")["_spend"]
         .sum()
         .reset_index()
         .rename(columns={"_spend": "s_total_buyer"})
@@ -185,7 +140,7 @@ def main() -> None:
         0.0,
     )
 
-    # Trend: m_active last 3mo vs prior 6mo/2
+    # Trend
     def _month_diff(end: pd.Period, p: pd.Period) -> int:
         return (end.year - p.year) * 12 + (end.month - p.month)
 
@@ -201,14 +156,17 @@ def main() -> None:
         lambda x: _trend(x, train_end)
     )
 
-    # Buyer context: merge customer
-    cust_sub = customer[["legal_entity_id", "estimated_number_employees", "nace_code"]].drop_duplicates(subset="legal_entity_id")
+    # Buyer context
+    customer = _read_customer(customer_path)
+    customer["legal_entity_id"] = customer["legal_entity_id"].astype(str)
+    cust_sub = customer[["legal_entity_id", "estimated_number_employees", "nace_code"]].drop_duplicates(
+        subset="legal_entity_id"
+    )
     candidates = candidates.merge(cust_sub, on="legal_entity_id", how="left")
     emp = pd.to_numeric(candidates["estimated_number_employees"], errors="coerce").fillna(0)
     candidates["log_employees"] = np.log1p(emp)
     candidates["nace_2"] = candidates["nace_code"].astype(str).str[:2].replace("nan", "")
 
-    # Drop temporary columns and orderdates (not serialized nicely)
     out_cols = [
         "legal_entity_id",
         "eclass",
@@ -232,7 +190,7 @@ def main() -> None:
     candidates = candidates[[c for c in out_cols if c in candidates.columns]]
     out_path.parent.mkdir(parents=True, exist_ok=True)
     candidates.to_parquet(out_path, index=False)
-    print(f"Wrote {len(candidates)} candidate rows to {out_path}")
+    print(f"Wrote {len(candidates)} feature rows to {out_path}")
 
 
 if __name__ == "__main__":

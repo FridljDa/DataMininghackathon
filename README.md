@@ -13,8 +13,8 @@ uv run snakemake --cores 1
 
 That command runs the default `all` target in `Snakefile` and produces:
 
-- `data/02_meta/customer.csv`
-- `data/04_plots/` (EDA: seasonal volume, violin by task, task distribution, cs/task heatmap, NACE by task)
+- `data/03_meta/customer.csv`
+- `data/06_plots/` (EDA: seasonal volume, violin by task, task distribution, cs/task heatmap, NACE by task)
 - `data/10_submission/submission.csv`
 
 ## Notes
@@ -31,3 +31,6 @@ Create a file `.env` at the root of the project with credentials:
 TEAM=...
 PASSWORD=...
 ```
+  - `data/02_raw/plis_training.csv`
+  - `data/02_raw/customer_test.csv`
+  - `data/02_raw/les_cs.csv`

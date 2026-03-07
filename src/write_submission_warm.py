@@ -44,7 +44,7 @@ def main() -> None:
     parser.add_argument(
         "--customer-split",
         dest="customer_split",
-        help="Path to split customer CSV (e.g. data/03_customer/customer.csv). Required when --buyer-source=customer-split.",
+        help="Path to split customer CSV (e.g. data/04_customer/customer.csv). Required when --buyer-source=customer-split.",
     )
     parser.add_argument(
         "--plis-training",

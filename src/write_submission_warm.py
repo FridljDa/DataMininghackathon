@@ -140,7 +140,7 @@ def main() -> None:
                 if e:
                     rows.append({"legal_entity_id": lid, "cluster": e})
 
-    submission = pd.DataFrame(rows)
+    submission = pd.DataFrame(rows).drop_duplicates(subset=["legal_entity_id", "cluster"])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(out_path, index=False)
     print(f"Wrote {len(submission)} submission rows to {out_path}")

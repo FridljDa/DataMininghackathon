@@ -23,3 +23,6 @@ dev = [
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-p no:launch_pytest"
+markers = [
+    "integration: marks tests as integration (live portal, run with pytest tests/integration)",
+]

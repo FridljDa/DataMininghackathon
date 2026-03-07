@@ -11,12 +11,29 @@ uv sync
 uv run snakemake --cores 1
 ```
 
-That command runs the default `all` target in `Snakefile` and produces:
+That command runs the default `all` target in `Snakefile`.
 
-- `data/03_meta/customer.csv`
-- `data/06_plots/` (EDA: seasonal volume, violin by task, task distribution, cs/task heatmap, NACE by task)
-- `data/07_feature_analysis/` (feature summary CSVs and distribution/correlation plots)
-- `data/10_submission/submission.csv`
+To force generate everything, run 
+```bash
+uv run snakemake --cores 1
+```
+
+## Score run history
+
+Each scoring run is archived so you never lose prior results and can see which commit produced which score.
+
+- **Where:** Online runs under `data/11_scores/online/runs/`, offline under `data/11_scores/offline/runs/`.
+- **Run folder format:** `runs/<run_id>/` with `run_id = <UTC timestamp>_<short git sha>` and an optional `_dirty` suffix when the working tree had uncommitted changes (e.g. `20250307_143022_abc1234_dirty`).
+- **Contents:** Each run folder contains `score_summary.csv`, `score_details.parquet`, and `metadata.json` (commit, branch, dirty, created_at).
+- **Index:** `data/11_scores/online/run_index.csv` and `data/11_scores/offline/run_index.csv` list every run with columns `run_id`, `commit_sha`, `branch`, `dirty`, `created_at`, `run_dir` for quick commit→score lookup.
+
+The default pipeline archives the **online** score after scoring. To score and archive the **offline** pipeline:
+
+```bash
+uv run snakemake score_submission_offline archive_score_run_offline --cores 1
+```
+
+To see which commit achieved a given score, open the run folder’s `metadata.json` or look up the run in the corresponding `run_index.csv`.
 
 ## Notes
 
@@ -38,17 +55,17 @@ PASSWORD=...
 
 ## Submit Predictions
 
-Use `submit.py` to upload predictions and see scores:
+Use `src/submit.py` to upload predictions and see scores:
 
 ```bash
 # Challenge 1 (parquet)
-uv run python submit.py --challenge 1 --file data/10_submission/submission.parquet
+uv run src/submit.py --challenge 1 --file data/10_submission/online/submission.parquet
 
 # Challenge 2 (csv, default level 2)
-uv run python submit.py --challenge 2 --file data/10_submission/submission.csv
+uv run src/submit.py --challenge 2 --file data/10_submission/online/submission.csv
 
 # Challenge 2 with explicit level
-uv run python submit.py --challenge 2 --file data/10_submission/submission.csv --level 1
+uv run src/submit.py --challenge 2 --file data/10_submission/online/submission.csv --level 1
 ```
 
 The script reads `TEAM` and `PASSWORD` from the `.env` file above, logs in to the evaluator portal, uploads the file, and waits for the scoring result.

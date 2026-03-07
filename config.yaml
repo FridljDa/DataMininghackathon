@@ -7,7 +7,7 @@ inputs:
 plis_training_csv: "data/02_raw/plis_training.csv"
 customer_meta_csv: "data/03_meta/customer.csv"
 output_dir: "outputs"
-submission_csv: "data/10_submission/submission.csv"
+submission_csv: "data/10_submission/online/submission.csv"
 
 training_validation_split:
   cutoff_date: "2025-07-01"
@@ -24,16 +24,21 @@ scoring_parameters:
 
 scores_dir: "data/11_scores"
 score_outputs:
-  summary: "data/11_scores/score_summary.csv"
-  details: "data/11_scores/score_details.parquet"
-  summary_offline: "data/11_scores/score_summary_offline.csv"
-  details_offline: "data/11_scores/score_details_offline.parquet"
+  summary: "data/11_scores/online/score_summary.csv"
+  details: "data/11_scores/online/score_details.parquet"
+  summary_offline: "data/11_scores/offline/score_summary.csv"
+  details_offline: "data/11_scores/offline/score_details.parquet"
+score_run_archive:
+  online_runs_dir: "data/11_scores/online/runs"
+  offline_runs_dir: "data/11_scores/offline/runs"
+  run_index_online: "data/11_scores/online/run_index.csv"
+  run_index_offline: "data/11_scores/offline/run_index.csv"
 
 modelling:
   train_end: "2024-12-31"
   val_start: "2025-01-01"
   val_end: "2025-06-30"
-  n_min_label: 2
+  n_min_label: 1
   lookback_months: 18
   min_spend_singleton: 50.0
   alpha: 1.0
@@ -45,18 +50,18 @@ modelling:
   high_spend_guardrail: 500.0
   top_k_per_buyer: 15
   val_months: 6.0
-  candidates_raw_parquet: "data/07_features/candidates_raw.parquet"
-  features_all_parquet: "data/07_features/features_all.parquet"
-  features_selected_parquet: "data/07_features/features_selected.parquet"
-  scores_parquet: "data/08_predictions/scores.parquet"
-  scores_lgbm_parquet: "data/08_predictions/scores_lgbm.parquet"
-  portfolio_parquet: "data/09_portfolio/portfolio.parquet"
-  candidates_raw_offline_parquet: "data/07_features/candidates_raw_offline.parquet"
-  features_all_offline_parquet: "data/07_features/features_all_offline.parquet"
-  features_selected_offline_parquet: "data/07_features/features_selected_offline.parquet"
-  scores_offline_parquet: "data/08_predictions/scores_offline.parquet"
-  portfolio_offline_parquet: "data/09_portfolio/portfolio_offline.parquet"
-  submission_offline_csv: "data/10_submission/submission_offline.csv"
+  candidates_raw_parquet: "data/07_features/online/candidates_raw.parquet"
+  features_all_parquet: "data/07_features/online/features_all.parquet"
+  features_selected_parquet: "data/07_features/online/features_selected.parquet"
+  scores_parquet: "data/08_predictions/online/scores.parquet"
+  scores_lgbm_parquet: "data/08_predictions/online/scores_lgbm.parquet"
+  portfolio_parquet: "data/09_portfolio/online/portfolio.parquet"
+  candidates_raw_offline_parquet: "data/07_features/offline/candidates_raw.parquet"
+  features_all_offline_parquet: "data/07_features/offline/features_all.parquet"
+  features_selected_offline_parquet: "data/07_features/offline/features_selected.parquet"
+  scores_offline_parquet: "data/08_predictions/offline/scores.parquet"
+  portfolio_offline_parquet: "data/09_portfolio/offline/portfolio.parquet"
+  submission_offline_csv: "data/10_submission/offline/submission.csv"
   selected_features:
     - n_orders
     - m_active
@@ -77,14 +82,14 @@ modelling:
 
 feature_analysis:
   dir: "data/07_feature_analysis"
-  summary_csv: "data/07_feature_analysis/feature_summary.csv"
-  summary_offline_csv: "data/07_feature_analysis/feature_summary_offline.csv"
+  summary_csv: "data/07_feature_analysis/online/feature_summary.csv"
+  summary_offline_csv: "data/07_feature_analysis/offline/feature_summary.csv"
   plot_files:
-    - feature_distributions.png
-    - feature_correlations.png
+    - online/feature_distributions.png
+    - online/feature_correlations.png
   plot_files_offline:
-    - feature_distributions_offline.png
-    - feature_correlations_offline.png
+    - offline/feature_distributions.png
+    - offline/feature_correlations.png
 
 plots:
   dir: "data/06_plots"

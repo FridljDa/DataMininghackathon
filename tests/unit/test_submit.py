@@ -1,11 +1,22 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from submit import login, submit, main, PORTAL_URL, LOGIN_URL
+from src.submit import (
+    PORTAL_URL,
+    LOGIN_URL,
+    login,
+    main,
+    submit,
+    _parse_euro,
+    _parse_portal_result_text,
+    _parse_percent,
+    _write_summary_csv,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +256,73 @@ class TestSubmit:
 
 
 # ---------------------------------------------------------------------------
+# Parser and live summary CSV
+# ---------------------------------------------------------------------------
+
+class TestParsePortalResult:
+    def test_parse_euro_strips_currency_and_commas(self) -> None:
+        assert _parse_euro("€26,822.37") == 26822.37
+        assert _parse_euro("€1,000.00") == 1000.0
+        assert _parse_euro("€0.00") == 0.0
+        assert _parse_euro("") is None
+        assert _parse_euro("nope") is None
+
+    def test_parse_percent_accepts_proportion_or_percent(self) -> None:
+        assert _parse_percent("12.34%") == pytest.approx(0.1234)
+        assert _parse_percent("0.1234") == pytest.approx(0.1234)
+        assert _parse_percent("0%") == 0.0
+        assert _parse_percent("") is None
+
+    def test_parse_portal_result_extracts_score_fields(self) -> None:
+        text = """
+        Your Submissions
+        #12
+        €26,822.37
+        L1 E-Class
+        Mar 7, 2026, 7:21 AM
+        Total Score:
+        €26,822.37
+        Savings:
+        €27,822.37
+        Fees:
+        €1,000.00
+        Hits:
+        100
+        Spend Captured:
+        0.05
+        """
+        row = _parse_portal_result_text(text)
+        assert row["total_score"] == 26822.37
+        assert row["total_savings"] == 27822.37
+        assert row["total_fees"] == 1000.0
+        assert row["num_hits"] == 100
+        assert row["spend_capture_rate"] == pytest.approx(0.05)
+
+    def test_parse_portal_result_handles_missing_fields(self) -> None:
+        row = _parse_portal_result_text("Your Submissions\nOther stuff")
+        assert row["total_score"] is None
+        assert row["num_hits"] is None
+
+    def test_write_summary_csv_creates_file_with_header_and_row(self, tmp_path: Path) -> None:
+        out = tmp_path / "summary.csv"
+        row = {
+            "total_score": 100.5,
+            "total_savings": 200.0,
+            "total_fees": 99.5,
+            "num_hits": 10,
+            "num_predictions": None,
+            "spend_capture_rate": 0.12,
+            "total_ground_spend": None,
+        }
+        _write_summary_csv(out, row, "sub-123")
+        assert out.exists()
+        content = out.read_text()
+        assert "total_score" in content
+        assert "100.5" in content
+        assert "sub-123" in content
+
+
+# ---------------------------------------------------------------------------
 # main() — CLI argument handling
 # ---------------------------------------------------------------------------
 
@@ -263,7 +341,7 @@ class TestMain:
         with pytest.raises(SystemExit) as exc:
             with patch("sys.argv", ["submit", "--challenge", "2", "--file", str(csv)]):
                 with patch.dict("os.environ", {}, clear=True):
-                    with patch("submit.load_dotenv"):
+                    with patch("src.submit.load_dotenv"):
                         main()
         assert exc.value.code == 1
         assert "TEAM" in capsys.readouterr().err
@@ -281,9 +359,9 @@ class TestMain:
         csv = tmp_path / "s.csv"
         csv.write_text("a,b\n")
         with patch("sys.argv", ["submit", "--challenge", "2", "--file", str(csv), "--level", "3"]):
-            with patch("submit.load_dotenv"):
+            with patch("src.submit.load_dotenv"):
                 with patch.dict("os.environ", {"TEAM": "t", "PASSWORD": "p"}):
-                    with patch("submit.sync_playwright") as mock_pw:
+                    with patch("src.submit.sync_playwright") as mock_pw:
                         side_effect, cache = _make_locator_side_effect()
                         mock_page = MagicMock()
                         mock_page.locator = MagicMock(side_effect=side_effect)

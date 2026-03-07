@@ -4,8 +4,8 @@ suggested_features:
 - avg_monthly_orders_pair_tenure
 - avg_monthly_spend_pair_tenure
 - avg_spend_per_order
-- buyer_tenure_months
 - delta_vs_expected_gap
+- effective_lookback_months
 - first_order_year
 - history_cohort
 - is_overdue
@@ -67,6 +67,20 @@ meta:
     reason: redundant with avg_monthly_orders_pair_tenure
   - feature: has_gap_history
     reason: redundant with avg_monthly_orders_pair_tenure
+  - feature: avg_monthly_spend_buyer_tenure
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: avg_monthly_spend_in_lookback
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: historical_purchase_value_total
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: lookback_spend
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: historical_purchase_value_sqrt
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: w_e_b
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: s_median_line
+    reason: redundant with avg_spend_per_order
   - feature: last_order_year
     reason: redundant with active_month_share_12m
   - feature: years_since_last_order
@@ -77,27 +91,13 @@ meta:
     reason: redundant with active_month_share_12m
   - feature: delta_trend
     reason: redundant with active_month_share_12m
-  - feature: avg_monthly_spend_buyer_tenure
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: avg_monthly_spend_in_lookback
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: lookback_spend
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: historical_purchase_value_total
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: historical_purchase_value_sqrt
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: w_e_b
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: sigma_gap
-    reason: redundant with CV_gap
-  - feature: effective_lookback_months
-    reason: redundant with buyer_tenure_months
+  - feature: buyer_tenure_months
+    reason: redundant with effective_lookback_months
   - feature: rho_freq
     reason: redundant with recency_to_gap_ratio
   - feature: mu_gap
     reason: redundant with recency_to_gap_ratio
+  - feature: sigma_gap
+    reason: redundant with CV_gap
   - feature: pair_tenure_months
     reason: redundant with first_order_year
-  - feature: s_median_line
-    reason: redundant with avg_spend_per_order

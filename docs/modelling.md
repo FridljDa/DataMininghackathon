@@ -225,7 +225,7 @@ $$
 
 The **pass_through** approach is an explicit “model” that performs no scoring: every candidate is assigned a constant positive score so that, when the selection policy is configured for pass-through (see below), no further filtering is applied. Use it to submit exactly the candidate set $ \mathcal{C}_b $ for each warm buyer — e.g. for diagnostics or as an upper-bound on recall.
 
-- Set `modelling.active_approach: "pass_through"` and use the pass-through selection configuration; then $ \hat{S}_b = \mathcal{C}_b $ for every $ b $.
+- Enable the `pass_through` approach in `modelling.enabled_approaches` and use the pass-through selection configuration; then $ \hat{S}_b = \mathcal{C}_b $ for every $ b $.
 
 ---
 

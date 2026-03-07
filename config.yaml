@@ -16,9 +16,7 @@ scoring_parameters:
   scoring_months: 1
 
 modelling:
-  # Which approach drives portfolio and submission (single source of truth)
-  active_approach: "lgbm_two_stage"
-  # Approaches to run for comparison/diagnostics (all produce scores under data/11_predictions/{mode}/{approach}/)
+  # All enabled approaches run through selection and produce portfolio/submission per approach (data/11_predictions, 12_portfolio, 13_submission, 14_scores by {mode}/{approach}/).
   enabled_approaches:
     - baseline
     - lgbm_two_stage
@@ -37,7 +35,7 @@ modelling:
     min_order_frequency: 1
     min_lookback_spend: 0
 
-  # For active_approach: pass_through, use score_threshold <= 0, min_orders/min_months 1, high_spend 0, top_k_per_buyer large (e.g. 9999) so portfolio = candidates.
+  # For pass_through approach, use score_threshold <= 0, min_orders/min_months 1, high_spend 0, top_k_per_buyer large (e.g. 9999) so portfolio = candidates.
   selection:
     score_threshold: 0.0
     top_k_per_buyer: 15

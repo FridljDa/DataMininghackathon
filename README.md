@@ -11,7 +11,7 @@ uv sync
 uv run snakemake --cores 1
 ```
 
-That command runs the default `all` target in `Snakefile`. The default modelling path uses the two-stage EU model (recurrence classifier + value regressor) and candidate set/selection policy described in `docs/modelling.md`.
+That command runs the default `all` target in `Snakefile`. The pipeline runs every approach listed in `modelling.enabled_approaches` (e.g. baseline, lgbm_two_stage, pass_through), producing scores, portfolio, submission, and scores per approach; see `docs/modelling.md` for the candidate set and selection policy.
 
 To force generate everything, run 
 ```bash
@@ -20,20 +20,20 @@ uv run snakemake --cores 1
 
 ## Score run history
 
-Each scoring run is archived so you never lose prior results and can see which commit produced which score.
+Each scoring run is archived per approach so you never lose prior results and can see which commit produced which score.
 
-- **Where:** Online runs under `data/14_scores/online/runs/`, offline under `data/14_scores/offline/runs/`.
-- **Run folder format:** `runs/<run_id>/` with `run_id = <UTC timestamp>_<short git sha>` and an optional `_dirty` suffix when the working tree had uncommitted changes (e.g. `20250307_143022_abc1234_dirty`).
+- **Where:** Online runs under `data/14_scores/online/runs/<approach>/`, offline under `data/14_scores/offline/runs/<approach>/`.
+- **Run folder format:** `runs/<approach>/<run_id>/` with `run_id = <UTC timestamp>_<short git sha>` and an optional `_dirty` suffix when the working tree had uncommitted changes (e.g. `20250307_143022_abc1234_dirty`).
 - **Contents:** Each run folder contains `score_summary.csv`, `score_details.parquet`, and `metadata.json` (commit, branch, dirty, created_at).
-- **Index:** `data/14_scores/online/run_index.csv` and `data/14_scores/offline/run_index.csv` list every run with columns `run_id`, `commit_sha`, `branch`, `dirty`, `created_at`, `run_dir` for quick commit→score lookup.
+- **Index:** `data/14_scores/online/run_index_<approach>.csv` and `data/14_scores/offline/run_index_<approach>.csv` list every run for that approach with columns `run_id`, `commit_sha`, `branch`, `dirty`, `created_at`, `run_dir` for quick commit→score lookup.
 
-The default pipeline archives the **online** score after scoring. To score and archive the **offline** pipeline, request the offline outputs:
+The default pipeline builds and archives scores for all enabled approaches (online and offline). To request a single offline output for one approach:
 
 ```bash
-uv run snakemake data/14_scores/offline/score_summary.csv data/14_scores/offline/runs/.last_archived --cores 1
+uv run snakemake data/14_scores/offline/baseline/score_summary.csv data/14_scores/offline/baseline/runs/.last_archived --cores 1
 ```
 
-To see which commit achieved a given score, open the run folder’s `metadata.json` or look up the run in the corresponding `run_index.csv`.
+To see which commit achieved a given score, open the run folder’s `metadata.json` or look up the run in the corresponding `run_index_<approach>.csv`.
 
 ## Notes
 
@@ -49,17 +49,17 @@ To see which commit achieved a given score, open the run folder’s `metadata.js
 
 ## Submit Predictions
 
-Use `src/submit.py` to upload predictions and see scores:
+The pipeline produces one submission per enabled approach under `data/13_submission/online/<approach>/submission.csv`. The default `snakemake` target uploads each of these to the Unite evaluator (challenge 2). To upload a specific approach manually:
 
 ```bash
-# Challenge 1 (parquet)
-uv run src/submit.py --challenge 1 --file data/13_submission/online/submission.parquet
+# Challenge 1 (parquet) — if your pipeline produces parquet
+uv run src/submit.py --challenge 1 --file data/13_submission/online/lgbm_two_stage/submission.parquet
 
 # Challenge 2 (csv, default level 2)
-uv run src/submit.py --challenge 2 --file data/13_submission/online/submission.csv
+uv run src/submit.py --challenge 2 --file data/13_submission/online/lgbm_two_stage/submission.csv
 
 # Challenge 2 with explicit level
-uv run src/submit.py --challenge 2 --file data/13_submission/online/submission.csv --level 1
+uv run src/submit.py --challenge 2 --file data/13_submission/online/lgbm_two_stage/submission.csv --level 1
 ```
 
 Set `portal_credentials.team` and `portal_credentials.password` in `config.yaml`; the script logs in to the evaluator portal, uploads the file, and waits for the scoring result.

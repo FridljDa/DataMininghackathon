@@ -2,8 +2,8 @@
 Snakemake workflow for Core Demand Challenge.
 
 All input/output paths are defined here. Python scripts receive paths only via
-CLI arguments. Final deliverable: data/13_submission/online/submission.csv with header
-legal_entity_id,cluster.
+CLI arguments. Deliverables: one portfolio and submission per enabled approach
+under data/12_portfolio/{mode}/{approach}/ and data/13_submission/{mode}/{approach}/.
 """
 
 configfile: "config.yaml"
@@ -17,25 +17,20 @@ DAG_SVG = f"{DATA_DIR}/01_dag/dag.svg"
 INPUTS = config["inputs"]
 PLIS_TRAINING_CSV = config["plis_training_csv"]
 CUSTOMER_META_CSV = config["customer_meta_csv"]
-SUBMISSION_CSV = f"{DATA_DIR}/13_submission/online/submission.csv"
-
 # Training/validation split (params from config; paths derived here)
 SPLIT = config["training_validation_split"]
 SPLIT_CUSTOMER_CSV = f"{DATA_DIR}/04_customer/customer.csv"
 PLIS_TRAINING_SPLIT = f"{DATA_DIR}/05_training_validation/plis_training.csv"
 PLIS_TESTING_SPLIT = f"{DATA_DIR}/05_training_validation/plis_testing.csv"
 
-# Score outputs and archive
+# Score outputs and archive (per mode and approach)
 SCORES_DIR = f"{DATA_DIR}/14_scores"
-SCORE_SUMMARY = f"{SCORES_DIR}/online/score_summary.csv"
-SCORE_DETAILS = f"{SCORES_DIR}/online/score_details.parquet"
 SCORE_RUN_ARCHIVE = {
     "online_runs_dir": f"{SCORES_DIR}/online/runs",
     "offline_runs_dir": f"{SCORES_DIR}/offline/runs",
     "run_index_online": f"{SCORES_DIR}/online/run_index.csv",
     "run_index_offline": f"{SCORES_DIR}/offline/run_index.csv",
 }
-ARCHIVE_SENTINEL_ONLINE = SCORE_RUN_ARCHIVE["online_runs_dir"] + "/.last_archived"
 SCORING_PARAMS = config["scoring_parameters"]
 
 # Exploration plots
@@ -96,22 +91,22 @@ MODE_CFG = {
 CANDIDATES_RAW_PATTERN = f"{DATA_DIR}/07_candidates/{{mode}}/candidates_raw.parquet"
 FEATURES_ALL_PATTERN = f"{DATA_DIR}/08_features/{{mode}}/features_all.parquet"
 FEATURES_SELECTED_PATTERN = f"{DATA_DIR}/10_features_selected/{{mode}}/features_selected.parquet"
-# Per-approach scores: data/11_predictions/{mode}/{approach}/scores.parquet
+# Per-approach: scores, portfolio, submission, and scores (data/11–14 by {mode}/{approach}/)
 ENABLED_APPROACHES = MODELLING["enabled_approaches"]
-ACTIVE_APPROACH = MODELLING["active_approach"]
+APPROACH_RE = "|".join(ENABLED_APPROACHES)
 SCORES_APPROACH_PATTERN = f"{DATA_DIR}/11_predictions/{{mode}}/{{approach}}/scores.parquet"
-SCORES_ACTIVE_PATTERN = f"{DATA_DIR}/11_predictions/{{mode}}/" + ACTIVE_APPROACH + "/scores.parquet"
-PORTFOLIO_PATTERN = f"{DATA_DIR}/12_portfolio/{{mode}}/portfolio.parquet"
-SUBMISSION_PATTERN = f"{DATA_DIR}/13_submission/{{mode}}/submission.csv"
-SCORE_SUMMARY_PATTERN = f"{SCORES_DIR}/{{mode}}/score_summary.csv"
-SCORE_DETAILS_PATTERN = f"{SCORES_DIR}/{{mode}}/score_details.parquet"
-ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/{{mode}}/runs/.last_archived"
+PORTFOLIO_PATTERN = f"{DATA_DIR}/12_portfolio/{{mode}}/{{approach}}/portfolio.parquet"
+SUBMISSION_PATTERN = f"{DATA_DIR}/13_submission/{{mode}}/{{approach}}/submission.csv"
+SCORE_SUMMARY_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/score_summary.csv"
+SCORE_DETAILS_PATTERN = f"{SCORES_DIR}/{{mode}}/{{approach}}/score_details.parquet"
+ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/{{mode}}/runs/{{approach}}/.last_archived"
+SUBMITTED_SENTINEL_PATTERN = f"{DATA_DIR}/13_submission/.submitted_challenge2_{{approach}}"
+SCORE_SUMMARY_LIVE_PATTERN = f"{SCORES_DIR}/online/{{approach}}/score_summary_live.csv"
 FEATURE_ANALYSIS_SUMMARY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_summary.csv"
 
 rule all:
     input:
         DAG_SVG,
-        SUBMISSION_CSV,
         CUSTOMER_META_CSV,
         PLOT_OUTPUTS,
         FEATURE_ANALYSIS_SUMMARY_CSV,
@@ -121,11 +116,13 @@ rule all:
         FEATURE_ANALYSIS_SUGGESTION_ONLINE,
         FEATURE_ANALYSIS_SUGGESTION_OFFLINE,
         expand(SCORES_APPROACH_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
-        SCORE_SUMMARY,
-        SCORE_DETAILS,
-        ARCHIVE_SENTINEL_ONLINE,
-        f"{SCORES_DIR}/online/score_summary_live.csv",
-        f"{DATA_DIR}/13_submission/.submitted_challenge2",
+        expand(PORTFOLIO_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
+        expand(SUBMISSION_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
+        expand(SCORE_SUMMARY_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
+        expand(SCORE_DETAILS_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
+        expand(ARCHIVE_SENTINEL_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
+        expand(SCORE_SUMMARY_LIVE_PATTERN, approach=ENABLED_APPROACHES),
+        expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES),
 
 rule generate_dag_graph:
     """Write workflow DAG as SVG (no input dependencies; run first)."""
@@ -305,9 +302,9 @@ rule train_approach:
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
 
 rule select_portfolio:
-    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet (uses modelling.active_approach scores)."""
+    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach."""
     input:
-        scores = SCORES_ACTIVE_PATTERN,
+        scores = SCORES_APPROACH_PATTERN,
     output:
         portfolio = PORTFOLIO_PATTERN,
     params:
@@ -318,6 +315,7 @@ rule select_portfolio:
         top_k_per_buyer = SEL["top_k_per_buyer"],
     wildcard_constraints:
         mode = MODE_RE,
+        approach = APPROACH_RE,
     shell:
         "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
@@ -336,6 +334,7 @@ rule write_submission_warm:
         buyer_source = lambda w: MODE_CFG[w.mode]["buyer_source"],
     wildcard_constraints:
         mode = MODE_RE,
+        approach = APPROACH_RE,
     run:
         arg = "--customer-test" if wildcards.mode == "online" else "--customer-split"
         shell(
@@ -343,24 +342,6 @@ rule write_submission_warm:
             "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} --output {output.submission}"
         )
 
-
-rule select_portfolio_baseline:
-    """Optional: apply threshold/guardrails to baseline scores. Use for diagnostic comparison."""
-    input:
-        scores = f"{DATA_DIR}/11_predictions/online/baseline/scores.parquet",
-    output:
-        portfolio = f"{DATA_DIR}/12_portfolio/online/portfolio_baseline.parquet",
-    params:
-        score_threshold = SEL["score_threshold"],
-        min_orders_guardrail = GRD["min_orders"],
-        min_months_guardrail = GRD["min_months"],
-        high_spend_guardrail = GRD["high_spend"],
-        top_k_per_buyer = SEL["top_k_per_buyer"],
-    shell:
-        "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
-        "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
-        "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
-        "--top-k-per-buyer {params.top_k_per_buyer}"
 
 rule write_submission:
     """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/13_submission/submission_baseline.csv' to run."""
@@ -374,7 +355,7 @@ rule write_submission:
         "--customer-test {input.customer_test} --plis-training {input.plis}"
 
 rule score_submission:
-    """Score submission against plis_testing holdout; write summary and details to data/14_scores."""
+    """Score submission against plis_testing holdout; write summary and details per approach to data/14_scores/{mode}/{approach}/."""
     input:
         submission = SUBMISSION_PATTERN,
         plis_testing = PLIS_TESTING_SPLIT,
@@ -388,35 +369,39 @@ rule score_submission:
         level_opt = lambda w: (" --level " + MODE_CFG[w.mode]["score_level"]) if MODE_CFG[w.mode]["score_level"] else "",
     wildcard_constraints:
         mode = MODE_RE,
+        approach = APPROACH_RE,
     shell:
         "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
-        "--summary {output.summary} --details {output.details}"
+        "--summary {output.summary} --details {output.details} "
         "{params.level_opt} --savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
         "--scoring-months {params.scoring_months}"
 
 rule archive_score_run:
-    """Copy current score outputs into a timestamp+commit run folder and write metadata + run index."""
+    """Copy current score outputs into a timestamp+commit run folder and write metadata + run index (per mode and approach)."""
     input:
         summary = SCORE_SUMMARY_PATTERN,
         details = SCORE_DETAILS_PATTERN,
     output:
         sentinel = ARCHIVE_SENTINEL_PATTERN,
     params:
-        runs_dir = lambda w: MODE_CFG[w.mode]["runs_dir"],
-        index_csv = lambda w: MODE_CFG[w.mode]["run_index_csv"],
+        runs_dir = lambda w: f"{SCORES_DIR}/{w.mode}/runs/{w.approach}",
+        index_csv = lambda w: f"{SCORES_DIR}/{w.mode}/run_index_{w.approach}.csv",
     wildcard_constraints:
         mode = MODE_RE,
+        approach = APPROACH_RE,
     shell:
         "uv run src/archive_score_run.py --summary {input.summary} --details {input.details} "
         "--runs-dir {params.runs_dir} --index-csv {params.index_csv} && touch {output.sentinel}"
 
 rule submit_to_portal:
-    """Upload submission to Unite evaluator (challenge 2). Requires portal_credentials in config.yaml."""
+    """Upload online submission to Unite evaluator (challenge 2) per approach. Requires portal_credentials in config.yaml."""
     input:
-        submission = SUBMISSION_CSV,
+        submission = f"{DATA_DIR}/13_submission/online/{{approach}}/submission.csv",
     output:
-        summary = f"{SCORES_DIR}/online/score_summary_live.csv",
-        sentinel = f"{DATA_DIR}/13_submission/.submitted_challenge2",
+        summary = SCORE_SUMMARY_LIVE_PATTERN,
+        sentinel = SUBMITTED_SENTINEL_PATTERN,
+    wildcard_constraints:
+        approach = APPROACH_RE,
     shell:
         "uv run src/submit.py --challenge 2 --file {input.submission} --summary-csv {output.summary} && touch {output.sentinel}"
 

@@ -188,6 +188,12 @@ def main() -> None:
         n_6 = sum(1 for p in periods if _month_diff(end, p) <= 5)
         return float(n_3), float(n_6)
 
+    def _active_month_share_12m(periods: list, end: pd.Period) -> float:
+        if not periods:
+            return 0.0
+        n_12 = sum(1 for p in periods if _month_diff(end, p) <= 11)
+        return float(n_12) / 12.0
+
     last_month_results = list(zip(*candidates["orderdates"].map(_last_order_month_cos_sin)))
     candidates["last_order_month_cos"] = last_month_results[0]
     candidates["last_order_month_sin"] = last_month_results[1]
@@ -206,6 +212,9 @@ def main() -> None:
         candidates["recent_3m_count"] / candidates["recent_6m_count"],
         np.nan,
     )
+    candidates["active_month_share_12m"] = candidates["orderdates"].map(
+        lambda x: _active_month_share_12m(x, end_period)
+    )
 
     candidates["recency_to_gap_ratio"] = np.where(
         (candidates["mu_gap"] > 0) & candidates["mu_gap"].notna(),
@@ -216,6 +225,46 @@ def main() -> None:
         candidates["mu_gap"].notna(),
         candidates["delta_recency"] - candidates["mu_gap"],
         np.nan,
+    )
+    candidates["is_overdue"] = np.where(
+        (candidates["mu_gap"] > 0) & candidates["mu_gap"].notna(),
+        (candidates["delta_recency"] > candidates["mu_gap"]).astype(float),
+        np.nan,
+    )
+
+    plis["order_month"] = plis["orderdate"].dt.to_period("M")
+    plis["month_diff"] = (
+        (end_period.year - plis["order_month"].dt.year) * 12
+        + (end_period.month - plis["order_month"].dt.month)
+    )
+    plis["_spend_recent_3m"] = np.where(plis["month_diff"] <= 2, plis["_spend"], 0.0)
+    plis["_spend_recent_6m"] = np.where(plis["month_diff"] <= 5, plis["_spend"], 0.0)
+    spend_recent = (
+        plis.groupby(["legal_entity_id", "eclass"], as_index=False)
+        .agg(
+            spend_recent_3m=("_spend_recent_3m", "sum"),
+            spend_recent_6m=("_spend_recent_6m", "sum"),
+            _order_value_mean=("_spend", "mean"),
+            _order_value_std=("_spend", lambda x: x.std(ddof=0)),
+        )
+    )
+    spend_recent["order_value_cv"] = np.where(
+        spend_recent["_order_value_mean"] > 0,
+        spend_recent["_order_value_std"] / spend_recent["_order_value_mean"],
+        np.nan,
+    )
+    spend_recent = spend_recent.drop(
+        columns=["_order_value_mean", "_order_value_std"], errors="ignore"
+    )
+    spend_recent["spend_recent_ratio"] = np.where(
+        spend_recent["spend_recent_6m"] > 0,
+        spend_recent["spend_recent_3m"] / spend_recent["spend_recent_6m"],
+        np.nan,
+    )
+    candidates = candidates.merge(
+        spend_recent,
+        on=["legal_entity_id", "eclass"],
+        how="left",
     )
 
     # Buyer context
@@ -253,8 +302,14 @@ def main() -> None:
         "recent_3m_count",
         "recent_6m_count",
         "recent_3_over_6",
+        "active_month_share_12m",
         "recency_to_gap_ratio",
         "delta_vs_expected_gap",
+        "is_overdue",
+        "spend_recent_3m",
+        "spend_recent_6m",
+        "spend_recent_ratio",
+        "order_value_cv",
         "log_employees",
         "nace_2",
         "nace_code",

@@ -91,7 +91,15 @@ s_{\text{future}}(b,e)
 \text{quantityvalue}\times \text{vk\_per\_item}
 $$
 
-Default learning target is binary recurrence ($ y_{b,e} $), with spend used for value-aware ranking.
+Future order count target (used by the v3 Stage A count model):
+
+$$
+n_{\text{future}}(b,e)
+:=
+n_{\text{orders}}\!\left(b,e, I_{\text{future}}(T,H)\right)
+$$
+
+Default learning target is binary recurrence ($ y_{b,e} $), with spend used for value-aware ranking. The count target $ n_{\text{future}} $ is used only by the v3 factorized model's Stage A.
 
 > **Evaluator behavior note:** Predictions are set-based per buyer and cluster. Duplicate rows for the same $ (b,e) $ are sanitized and counted once by the organizer scorer.
 
@@ -128,6 +136,8 @@ Interpretation:
 ---
 
 ## 5. Feature Engineering
+
+**Pipeline data contract:** Candidate outputs (`data/07_candidates/{mode}/level{level}/candidates_raw.parquet`) contain only key columns: Level 1 = `legal_entity_id`, `eclass`; Level 2 = `legal_entity_id`, `eclass`, `manufacturer`. Raw features (`data/08_features_raw/.../features_raw.parquet`) are assembled from `data/02_raw` (and split PLIs): keys plus pair-level aggregates (e.g. `n_orders`, `historical_purchase_value_total`, orderdate min/max, `orderdates_str`), buyer context (`estimated_number_employees`, `nace_code`, `secondary_nace_code`), and top-K SKU attribute columns. Derived feature engineering then adds computed features from this raw matrix.
 
 For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{scored}} $ and $ e \in \mathcal{C}_b $, derive a flexible feature set from pre-cutoff history (primarily $ I_{\text{lookback}}(T,L) $):
 
@@ -256,6 +266,73 @@ So:
 - Stage A answers: "How likely is recurrence?"
 - Stage B answers: "If it recurs, how much value?"
 - Their product gives expected spend before fee.
+
+### Three-stage factorized model (v3)
+
+Another reasonable decomposition is to model the score drivers more explicitly instead of jumping directly from recurrence to future spend.
+
+Let:
+
+$$
+\hat{n}_{b,e}
+:=
+E\!\left[n_{\text{orders}}(b,e, I_{\text{future}}(T,H)) \mid \mathbf{x}_{b,e}\right]
+$$
+
+be the predicted future order count for buyer-eclass pair $ (b,e) $, and let:
+
+$$
+\bar{v}_{b,e}
+:=
+\frac{
+\sum_{\substack{\text{rows for }(b,e)\\ \text{with } \text{orderdate}\in I_{\text{lookback}}(T,L)}}
+\text{quantityvalue}\times \text{vk\_per\_item}
+}{
+\max\!\left(1,\;\sum_{\substack{\text{rows for }(b,e)\\ \text{with } \text{orderdate}\in I_{\text{lookback}}(T,L)}}
+\text{quantityvalue}\right)
+}
+$$
+
+be the **historical quantity-weighted average price** for that pair computed entirely from lookback data. This is a well-defined, leakage-free quantity available at inference time. It equals `avg_spend_per_order / avg_order_quantity` and is closely related to the existing `avg_spend_per_order` feature already computed by the pipeline.
+
+**VK price stability context:** Analysis in `src/check_vk_price_stability.py` shows that `vk_per_item` is lookup-like (one dominant price ≥ 95% of spend) for ~30% of spend at the `(buyer, eclass, manufacturer)` key level and ~14% at `(buyer, eclass)`. Early-vs-late median drift ≥ 20% affects only ~1–3% of spend at the buyer-eclass level, confirming that $ \bar{v}_{b,e} $ is a reasonable forward proxy for most pairs. For the minority of pairs with material drift, the model can additionally condition on a **price stability flag**: $ \text{stable}_{b,e} := \mathbf{1}[\text{CoV}(\text{vk\_per\_item}) \leq \delta_v] $ where $ \delta_v $ is a configured threshold (e.g. 0.2).
+
+Conceptually:
+
+1. **Stage A — demand frequency:** estimate $ \hat{n}_{b,e} $, the expected number of future orders. Training target: $ n_{\text{orders}}(b,e, I_{\text{future}}(T,H)) $ as a count regression (requires adding this to Section 3).
+2. **Stage B — unit value proxy:** use $ \bar{v}_{b,e} $ (historical quantity-weighted average price from lookback) directly, without fitting a separate model. Optionally weight by $ \text{stable}_{b,e} $ to down-weight pairs with high price volatility.
+3. **Stage C — score construction:** combine the two into a value proxy aligned with the evaluator, then subtract the fixed prediction fee.
+
+One simple proxy is:
+
+$$
+\hat{z}_{b,e}^{\text{factorized}}
+:=
+\hat{n}_{b,e}\cdot \bar{v}_{b,e}
+$$
+
+and then:
+
+$$
+\widehat{EU}(b,e)
+:=
+g(\hat{z}_{b,e}^{\text{factorized}}) - F
+$$
+
+where $ g(\cdot) $ is a scorer-aligned transformation or calibrated proxy (e.g. $ \sqrt{\cdot} $ to match the approximate savings scaling noted in Section 9).
+
+Why this can make sense:
+
+- It separates **how often** the buyer is expected to order from **how valuable** each order is.
+- Stage B requires no learned model: $ \bar{v}_{b,e} $ is a direct lookup from lookback aggregates, already computed in the feature pipeline (`avg_spend_per_order`). The inference path is unambiguous and leakage-free.
+- It may be easier to calibrate than a full spend regressor because per-item prices are empirically stable for the majority of buyer-eclass pairs.
+
+Important caveats:
+
+- The factorization $ \hat{n}_{b,e} \cdot \bar{v}_{b,e} $ is an approximation to $ s_{\text{future}}(b,e) $ because it ignores correlation between order frequency and order size, and assumes quantity per order is constant.
+- Stage A requires a count regression target ($ n_{\text{orders}} $ in $ I_{\text{future}} $) which is not yet defined in Section 3 — add it there before implementing.
+- For pairs with high price volatility (flagged by $ \text{stable}_{b,e} = 0 $), consider falling back to v2's direct spend regression.
+- Because the evaluator is fee-sensitive and set-based, the final decision rule should still be thresholded and top-$ K $ capped as in Section 7.
 
 ### Pass-through (candidate-only)
 

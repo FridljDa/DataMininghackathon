@@ -17,6 +17,14 @@ import pandas as pd
 SPARSE_HISTORY_COHORT = "sparse_history"
 
 
+def _get_series(df: pd.DataFrame, candidates: tuple[str, ...], default: float = 0.0) -> pd.Series:
+    """Return first available numeric column as float series, else constant default."""
+    for col in candidates:
+        if col in df.columns:
+            return pd.to_numeric(df[col], errors="coerce").fillna(default)
+    return pd.Series(default, index=df.index, dtype="float64")
+
+
 def run(
     df: pd.DataFrame,
     *,
@@ -29,30 +37,39 @@ def run(
     **_: object,
 ) -> pd.DataFrame:
     """
-    Compute Phase 3 score_base from exact lookback features.
-    Requires: n_orders_in_lookback, lookback_spend, avg_spend_per_order, days_since_last, history_cohort.
-    When use_monthly_lookback_rates is True and avg_monthly_orders_in_lookback/avg_monthly_spend_in_lookback
-    exist, score uses those so late joiners are comparable.
+    Compute Phase 3 score_base from lookback-style activity signals.
+    Prefers exact lookback columns when present, but falls back to compatible
+    derived columns for reduced feature sets.
     """
     df = df.copy()
-    days_since = df["days_since_last"].fillna(0)
+    days_since = _get_series(df, ("days_since_last", "delta_recency"), default=0.0)
     recurrence_decay = np.exp(-days_since / 365.0)
 
     if use_monthly_lookback_rates and "avg_monthly_orders_in_lookback" in df.columns and "avg_monthly_spend_in_lookback" in df.columns:
-        orders_rate = df["avg_monthly_orders_in_lookback"].fillna(0)
-        spend_rate = df["avg_monthly_spend_in_lookback"].fillna(0)
+        orders_rate = _get_series(df, ("avg_monthly_orders_in_lookback",), default=0.0)
+        spend_rate = _get_series(df, ("avg_monthly_spend_in_lookback",), default=0.0)
         df["score_base"] = orders_rate * recurrence_decay * spend_rate * savings_rate
     else:
-        n_orders_lb = df["n_orders_in_lookback"].fillna(0)
-        avg_spend = df["avg_spend_per_order"].fillna(0)
+        n_orders_lb = _get_series(
+            df,
+            ("n_orders_in_lookback", "n_orders"),
+            default=0.0,
+        )
+        avg_spend = _get_series(
+            df,
+            ("avg_spend_per_order",),
+            default=0.0,
+        )
         recurrence = n_orders_lb * recurrence_decay
         df["score_base"] = recurrence * avg_spend * savings_rate
 
-    # Sparse-history emission gate: zero out if cohort is sparse and fails stricter gate
-    is_sparse = df["history_cohort"] == SPARSE_HISTORY_COHORT
-    sparse_fails = is_sparse & ~(
-        (df["n_orders_in_lookback"] >= eta * sparse_eta_multiplier)
-        & (df["lookback_spend"] >= tau * sparse_tau_multiplier)
-    )
-    df.loc[sparse_fails, "score_base"] = 0.0
+    # Sparse-history emission gate only when required fields are available.
+    required_for_sparse_gate = {"history_cohort", "n_orders_in_lookback", "lookback_spend"}
+    if required_for_sparse_gate.issubset(df.columns):
+        is_sparse = df["history_cohort"] == SPARSE_HISTORY_COHORT
+        sparse_fails = is_sparse & ~(
+            (df["n_orders_in_lookback"] >= eta * sparse_eta_multiplier)
+            & (df["lookback_spend"] >= tau * sparse_tau_multiplier)
+        )
+        df.loc[sparse_fails, "score_base"] = 0.0
     return df

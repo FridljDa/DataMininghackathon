@@ -296,6 +296,7 @@ rule train_approach:
         tau = APP["phase3_repro"]["tau"],
         sparse_eta_multiplier = APP["phase3_repro"]["sparse_eta_multiplier"],
         sparse_tau_multiplier = APP["phase3_repro"]["sparse_tau_multiplier"],
+        use_monthly_lookback_rates = 1 if APP.get("phase3_repro", {}).get("use_monthly_lookback_rates", False) else 0,
     wildcard_constraints:
         mode = MODE_RE,
         approach = "|".join(ENABLED_APPROACHES),
@@ -306,7 +307,8 @@ rule train_approach:
         "--alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months} "
         "--eta {params.eta} --tau {params.tau} "
-        "--sparse-eta-multiplier {params.sparse_eta_multiplier} --sparse-tau-multiplier {params.sparse_tau_multiplier}"
+        "--sparse-eta-multiplier {params.sparse_eta_multiplier} --sparse-tau-multiplier {params.sparse_tau_multiplier} "
+        "--use-monthly-lookback-rates {params.use_monthly_lookback_rates}"
 
 rule select_portfolio:
     """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach."""
@@ -319,6 +321,7 @@ rule select_portfolio:
         min_orders_guardrail = GRD["min_orders"],
         min_months_guardrail = GRD["min_months"],
         high_spend_guardrail = GRD["high_spend"],
+        min_avg_monthly_spend = GRD.get("min_avg_monthly_spend", 0),
         top_k_per_buyer = SEL["top_k_per_buyer"],
     wildcard_constraints:
         mode = MODE_RE,
@@ -327,7 +330,7 @@ rule select_portfolio:
         "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
         "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
-        "--top-k-per-buyer {params.top_k_per_buyer}"
+        "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer}"
 
 rule write_submission_warm:
     """Format portfolio into submission CSV (Level 1: cluster=eclass); cold-start fallback to global default."""

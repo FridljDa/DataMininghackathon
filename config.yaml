@@ -44,6 +44,7 @@ modelling:
       min_orders: 1
       min_months: 1
       high_spend: 0
+      min_avg_monthly_spend: 0  # 0 = disabled; when > 0, pass if avg_monthly_spend_buyer_tenure >= this (late joiners)
 
   features:
     selected:
@@ -83,6 +84,15 @@ modelling:
       - avg_spend_per_order
       - days_since_last
       - history_cohort
+      - buyer_tenure_months
+      - pair_tenure_months
+      - effective_lookback_months
+      - avg_monthly_orders_buyer_tenure
+      - avg_monthly_orders_pair_tenure
+      - avg_monthly_spend_buyer_tenure
+      - avg_monthly_spend_pair_tenure
+      - avg_monthly_orders_in_lookback
+      - avg_monthly_spend_in_lookback
 
   # Per-approach config (output paths are data/11_predictions/{mode}/{approach}/scores.parquet)
   approaches:
@@ -97,6 +107,7 @@ modelling:
       tau: 100.0
       sparse_eta_multiplier: 3
       sparse_tau_multiplier: 2.0
+      use_monthly_lookback_rates: false  # if true, score uses avg_monthly_*_in_lookback for tenure fairness
 
 portal_credentials:
   team: 'AAD'

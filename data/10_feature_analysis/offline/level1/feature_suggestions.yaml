@@ -17,7 +17,7 @@ meta:
   source: data/10_feature_analysis/offline/level1/feature_summary.csv
   redundancy_source: data/10_feature_analysis/offline/level1/feature_redundancy.csv
   n_suggested: 14
-  n_dropped: 49
+  n_dropped: 50
   dropped:
   - feature: sigma_gap
     reason: null_rate 0.89 > 0.5
@@ -87,6 +87,16 @@ meta:
     reason: null_rate 0.83 > 0.5
   - feature: avg_monthly_spend_pair_tenure
     reason: null_rate 0.83 > 0.5
+  - feature: m_observed
+    reason: redundant with has_multi_year_history
+  - feature: has_gap_history
+    reason: redundant with has_multi_year_history
+  - feature: n_distinct_manufacturers
+    reason: redundant with has_multi_year_history
+  - feature: top_manufacturer_share
+    reason: redundant with has_multi_year_history
+  - feature: effective_lookback_months
+    reason: redundant with buyer_tenure_months
   - feature: avg_monthly_orders_in_lookback
     reason: redundant with avg_monthly_orders_buyer_tenure
   - feature: m_active
@@ -103,17 +113,9 @@ meta:
     reason: redundant with avg_monthly_orders_buyer_tenure
   - feature: historical_purchase_value_sqrt
     reason: redundant with avg_monthly_orders_buyer_tenure
+  - feature: avg_price_per_unit
+    reason: redundant with avg_monthly_orders_buyer_tenure
   - feature: rho_freq
     reason: redundant with avg_monthly_orders_buyer_tenure
   - feature: delta_recency
     reason: redundant with avg_monthly_orders_buyer_tenure
-  - feature: m_observed
-    reason: redundant with has_multi_year_history
-  - feature: has_gap_history
-    reason: redundant with has_multi_year_history
-  - feature: n_distinct_manufacturers
-    reason: redundant with has_multi_year_history
-  - feature: top_manufacturer_share
-    reason: redundant with has_multi_year_history
-  - feature: effective_lookback_months
-    reason: redundant with buyer_tenure_months

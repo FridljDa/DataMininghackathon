@@ -7,6 +7,7 @@ n_orders,historical_purchase_value_sqrt,0.9964
 n_orders,w_e_b,0.9959
 n_orders,order_value_cv,0.878
 n_orders,n_orders_in_lookback,1.0
+n_orders,avg_price_per_unit,0.9868
 n_orders,avg_monthly_orders_buyer_tenure,0.9998
 n_orders,avg_monthly_orders_pair_tenure,0.8993
 n_orders,avg_monthly_spend_buyer_tenure,0.9962
@@ -20,6 +21,7 @@ m_active,w_e_b,0.9959
 m_active,active_year_span,0.8706
 m_active,order_value_cv,0.8557
 m_active,n_orders_in_lookback,0.9644
+m_active,avg_price_per_unit,0.9872
 m_active,avg_monthly_orders_buyer_tenure,0.9994
 m_active,avg_monthly_spend_buyer_tenure,0.9963
 m_active,avg_monthly_orders_in_lookback,0.9994
@@ -36,6 +38,7 @@ rho_freq,historical_purchase_value_total,0.9848
 rho_freq,historical_purchase_value_sqrt,0.9848
 rho_freq,w_e_b,0.9853
 rho_freq,recency_to_gap_ratio,0.8882
+rho_freq,avg_price_per_unit,0.9892
 rho_freq,avg_monthly_orders_buyer_tenure,0.9821
 rho_freq,avg_monthly_spend_buyer_tenure,0.9842
 rho_freq,avg_monthly_orders_in_lookback,0.9829
@@ -45,6 +48,7 @@ delta_recency,historical_purchase_value_sqrt,0.983
 delta_recency,w_e_b,0.9829
 delta_recency,last_order_year,0.914
 delta_recency,years_since_last_order,0.914
+delta_recency,avg_price_per_unit,0.9891
 delta_recency,days_since_last,0.998
 delta_recency,avg_monthly_orders_buyer_tenure,0.9803
 delta_recency,avg_monthly_spend_buyer_tenure,0.9821
@@ -54,6 +58,7 @@ sigma_gap,CV_gap,0.8665
 historical_purchase_value_total,historical_purchase_value_sqrt,1.0
 historical_purchase_value_total,w_e_b,0.9993
 historical_purchase_value_total,lookback_spend,1.0
+historical_purchase_value_total,avg_price_per_unit,0.9928
 historical_purchase_value_total,avg_monthly_orders_buyer_tenure,0.9961
 historical_purchase_value_total,avg_monthly_spend_buyer_tenure,1.0
 historical_purchase_value_total,avg_monthly_spend_pair_tenure,0.9672
@@ -61,6 +66,7 @@ historical_purchase_value_total,avg_monthly_orders_in_lookback,0.9963
 historical_purchase_value_total,avg_monthly_spend_in_lookback,1.0
 historical_purchase_value_sqrt,w_e_b,0.9993
 historical_purchase_value_sqrt,lookback_spend,1.0
+historical_purchase_value_sqrt,avg_price_per_unit,0.9928
 historical_purchase_value_sqrt,avg_monthly_orders_buyer_tenure,0.9961
 historical_purchase_value_sqrt,avg_monthly_spend_buyer_tenure,1.0
 historical_purchase_value_sqrt,avg_monthly_spend_pair_tenure,0.9672
@@ -68,6 +74,7 @@ historical_purchase_value_sqrt,avg_monthly_orders_in_lookback,0.9963
 historical_purchase_value_sqrt,avg_monthly_spend_in_lookback,1.0
 s_median_line,avg_spend_per_order,0.9519
 w_e_b,lookback_spend,0.9368
+w_e_b,avg_price_per_unit,0.9926
 w_e_b,avg_monthly_orders_buyer_tenure,0.9958
 w_e_b,avg_monthly_spend_buyer_tenure,0.9993
 w_e_b,avg_monthly_spend_pair_tenure,0.9224
@@ -98,6 +105,10 @@ n_orders_in_lookback,n_distinct_manufacturers,0.8907
 lookback_spend,avg_monthly_spend_buyer_tenure,0.9973
 lookback_spend,avg_monthly_spend_pair_tenure,0.9672
 lookback_spend,avg_monthly_spend_in_lookback,0.9973
+avg_price_per_unit,avg_monthly_orders_buyer_tenure,0.986
+avg_price_per_unit,avg_monthly_spend_buyer_tenure,0.9925
+avg_price_per_unit,avg_monthly_orders_in_lookback,0.9866
+avg_price_per_unit,avg_monthly_spend_in_lookback,0.9928
 buyer_tenure_months,effective_lookback_months,1.0
 avg_monthly_orders_buyer_tenure,avg_monthly_orders_pair_tenure,0.9069
 avg_monthly_orders_buyer_tenure,avg_monthly_spend_buyer_tenure,0.9962

@@ -1,5 +1,5 @@
 What AutoML actually buys you here
-Your features in build_features.py are: m_active, rho_freq, delta_recency, sigma_gap, CV_gap, s_total_sqrt, w_e_b, delta_trend, log_employees, nace_2. That's ~10 mostly numeric, well-motivated features.
+Your features in build_features.py are: m_active, rho_freq, delta_recency, sigma_gap, CV_gap, historical_purchase_value_sqrt, w_e_b, delta_trend, log_employees, nace_2. That's ~10 mostly numeric, well-motivated features.
 
 The signal structure is extremely strong and obvious: a buyer ordering something 12 times over 2 years with low CV_gap is core demand. A buyer with 1 order 17 months ago is not. LightGBM vs the linear baseline will likely find the same rank order — the features already encode the problem well.
 

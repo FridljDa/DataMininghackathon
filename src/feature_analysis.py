@@ -2,8 +2,8 @@
 Feature analysis: summary statistics and informativeness plots.
 
 Reads full features parquet, computes per-feature stats (null rate, cardinality,
-variance, std) and writes a summary CSV. Generates distribution and correlation
-plots for downstream feature selection decisions.
+variance, std) and writes a summary CSV. Generates distribution and per-feature
+vs historical_purchase_value_total correlation plots for downstream feature selection.
 """
 
 from __future__ import annotations
@@ -24,62 +24,67 @@ try:
 except ImportError:
     _HAS_PLOTTING = False
 
+# Target column for correlation panels (historical train-period purchase value)
+TARGET_COL = "historical_purchase_value_total"
+# Columns to exclude from predictor list (keys + target and its direct transform)
+EXCLUDE_FROM_PREDICTORS = {"legal_entity_id", "eclass", TARGET_COL, "historical_purchase_value_sqrt"}
 
-def _plot_temporal_series(plis: pd.DataFrame, value_col: str, ylabel: str, title: str, out_path: Path) -> None:
-    """Plot sums by month, quarter, and year in one figure."""
-    if plis.empty:
+# Heuristic: use hexbin when row count above this to avoid overplotting
+HEXBIN_MIN_ROWS = 1500
+
+
+def _binned_median(x: pd.Series, y: pd.Series, n_bins: int = 10) -> tuple[np.ndarray, np.ndarray]:
+    """Compute bin centers (x) and median y per bin. Drops duplicate quantile edges."""
+    valid = x.notna() & y.notna()
+    xv, yv = x.loc[valid].values, y.loc[valid].values
+    if len(xv) < 2 or n_bins < 2:
+        return np.array([]), np.array([])
+    edges = np.nanpercentile(xv, np.linspace(0, 100, n_bins + 1))
+    edges = np.unique(edges)
+    if len(edges) < 2:
+        return np.array([]), np.array([])
+    bin_idx = np.searchsorted(edges[1:], xv, side="right")
+    bin_idx = np.clip(bin_idx, 0, len(edges) - 2)
+    centers = (edges[:-1] + edges[1:]) / 2
+    medians = np.full(len(centers), np.nan)
+    for i in range(len(centers)):
+        mask = bin_idx == i
+        if mask.sum() > 0:
+            medians[i] = np.nanmedian(yv[mask])
+    valid_bins = np.isfinite(medians)
+    return centers[valid_bins], medians[valid_bins]
+
+
+def _plot_feature_vs_target(
+    ax: plt.Axes,
+    x: pd.Series,
+    y: pd.Series,
+    xlabel: str,
+    rho: float,
+    use_hexbin: bool,
+) -> None:
+    """Single panel: scatter or hexbin, binned median line, Spearman in title."""
+    valid = x.notna() & y.notna()
+    xv, yv = x.loc[valid], y.loc[valid]
+    if xv.empty or yv.empty:
+        ax.set_title(f"{xlabel} (rho=n/a)")
         return
-
-    tmp = plis.copy()
-    tmp["orderdate"] = pd.to_datetime(tmp["orderdate"], errors="coerce")
-    tmp = tmp.dropna(subset=["orderdate"])
-    if tmp.empty:
-        return
-
-    monthly = (
-        tmp.set_index("orderdate")[value_col]
-        .resample("ME")
-        .sum()
-    )
-    quarterly = (
-        tmp.set_index("orderdate")[value_col]
-        .resample("QE")
-        .sum()
-    )
-    yearly = (
-        tmp.set_index("orderdate")[value_col]
-        .resample("YE")
-        .sum()
-    )
-
-    fig, axes = plt.subplots(1, 3, figsize=(18, 4))
-    monthly.plot(ax=axes[0], color="#1f77b4")
-    axes[0].set_title("By month")
-    axes[0].set_xlabel("Month")
-    axes[0].set_ylabel(ylabel)
-
-    quarterly.plot(ax=axes[1], marker="o", color="#ff7f0e")
-    axes[1].set_title("By quarter")
-    axes[1].set_xlabel("Quarter")
-    axes[1].set_ylabel(ylabel)
-
-    yearly.plot(ax=axes[2], marker="o", color="#2ca02c")
-    axes[2].set_title("By year")
-    axes[2].set_xlabel("Year")
-    axes[2].set_ylabel(ylabel)
-
-    fig.suptitle(title)
-    fig.tight_layout()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=120, bbox_inches="tight")
-    plt.close(fig)
+    if use_hexbin:
+        ax.hexbin(xv, yv, gridsize=25, mincnt=1, cmap="Blues", edgecolors="none")
+    else:
+        ax.scatter(xv, yv, alpha=0.3, s=8, c="tab:blue", edgecolors="none")
+    cx, my = _binned_median(x, y, n_bins=10)
+    if len(cx) > 0:
+        ax.plot(cx, my, color="red", linewidth=2, label="Median (binned)")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(TARGET_COL)
+    ax.set_title(f"{xlabel} (Spearman ρ = {rho:.3f})")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--features", required=True, help="Path to features_all parquet.")
     parser.add_argument("--summary-csv", required=True, dest="summary_csv", help="Path to output feature summary CSV.")
-    parser.add_argument("--plis", required=True, help="Path to PLIs TSV for temporal purchase plots.")
     parser.add_argument(
         "--distributions-plot",
         default="",
@@ -90,19 +95,7 @@ def main() -> None:
         "--correlations-plot",
         default="",
         dest="correlations_plot",
-        help="Path to output correlations plot (optional).",
-    )
-    parser.add_argument(
-        "--value-by-period-plot",
-        required=True,
-        dest="value_by_period_plot",
-        help="Path to output purchase value-by-period plot.",
-    )
-    parser.add_argument(
-        "--quantity-by-period-plot",
-        required=True,
-        dest="quantity_by_period_plot",
-        help="Path to output purchase quantity-by-period plot.",
+        help="Path to output per-feature vs target correlation plot (optional).",
     )
     args = parser.parse_args()
 
@@ -173,42 +166,52 @@ def main() -> None:
     if args.correlations_plot:
         c_path = Path(args.correlations_plot)
         c_path.parent.mkdir(parents=True, exist_ok=True)
-        corr = numeric.corr()
-        _, ax = plt.subplots(figsize=(max(8, len(corr) * 0.4), max(6, len(corr) * 0.35)))
-        sns.heatmap(corr, annot=len(corr) <= 12, fmt=".2f", cmap="RdBu_r", center=0, ax=ax, square=True)
-        plt.tight_layout()
-        plt.savefig(c_path, dpi=100, bbox_inches="tight")
-        plt.close()
-        print(f"Wrote correlations plot to {c_path}")
-
-    plis = pd.read_csv(args.plis, sep="\t", low_memory=False)
-    required = {"orderdate", "quantityvalue", "vk_per_item"}
-    missing = required.difference(plis.columns)
-    if missing:
-        raise ValueError(
-            f"plis is missing required columns for temporal plots: {sorted(missing)}"
-        )
-    plis["quantityvalue"] = pd.to_numeric(plis["quantityvalue"], errors="coerce").fillna(0.0)
-    plis["vk_per_item"] = pd.to_numeric(plis["vk_per_item"], errors="coerce").fillna(0.0)
-    plis["purchase_value"] = plis["quantityvalue"] * plis["vk_per_item"]
-
-    _plot_temporal_series(
-        plis=plis,
-        value_col="purchase_value",
-        ylabel="Purchase value",
-        title="Purchase value over time (month / quarter / year)",
-        out_path=Path(args.value_by_period_plot),
-    )
-    print(f"Wrote value-by-period plot to {args.value_by_period_plot}")
-
-    _plot_temporal_series(
-        plis=plis,
-        value_col="quantityvalue",
-        ylabel="Quantity",
-        title="Purchase quantity over time (month / quarter / year)",
-        out_path=Path(args.quantity_by_period_plot),
-    )
-    print(f"Wrote quantity-by-period plot to {args.quantity_by_period_plot}")
+        if TARGET_COL not in df.columns:
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.text(0.5, 0.5, f"Target column '{TARGET_COL}' not in features.", ha="center", va="center", fontsize=12)
+            ax.axis("off")
+            plt.savefig(c_path, dpi=100, bbox_inches="tight")
+            plt.close()
+            print(f"Wrote placeholder correlations plot (missing target) to {c_path}")
+        else:
+            predictor_cols = [
+                c for c in numeric.columns
+                if c not in EXCLUDE_FROM_PREDICTORS
+            ]
+            if not predictor_cols:
+                fig, ax = plt.subplots(figsize=(6, 4))
+                ax.text(0.5, 0.5, "No predictor columns after exclusions.", ha="center", va="center", fontsize=12)
+                ax.axis("off")
+                plt.savefig(c_path, dpi=100, bbox_inches="tight")
+                plt.close()
+                print(f"Wrote placeholder correlations plot (no predictors) to {c_path}")
+            else:
+                n = len(df)
+                use_hexbin = n >= HEXBIN_MIN_ROWS
+                ncols = min(4, len(predictor_cols))
+                nrows = (len(predictor_cols) + ncols - 1) // ncols
+                fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3 * nrows))
+                if nrows == 1 and ncols == 1:
+                    axes = np.array([[axes]])
+                elif nrows == 1:
+                    axes = axes.reshape(1, -1)
+                elif ncols == 1:
+                    axes = axes.reshape(-1, 1)
+                y = df[TARGET_COL]
+                for ax, col in zip(axes.flat, predictor_cols):
+                    x = df[col]
+                    valid = x.notna() & y.notna()
+                    if valid.sum() < 2:
+                        rho = np.nan
+                    else:
+                        rho = x.loc[valid].corr(y.loc[valid], method="spearman")
+                    _plot_feature_vs_target(ax, x, y, col, float(rho) if not np.isnan(rho) else 0.0, use_hexbin)
+                for ax in axes.flat[len(predictor_cols) :]:
+                    ax.set_visible(False)
+                plt.tight_layout()
+                plt.savefig(c_path, dpi=100, bbox_inches="tight")
+                plt.close()
+                print(f"Wrote correlations plot to {c_path}")
 
 
 if __name__ == "__main__":

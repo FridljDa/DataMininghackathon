@@ -52,7 +52,7 @@ def main() -> None:
     train_end = pd.Timestamp(args.train_end)
 
     candidates = pd.read_parquet(raw_path)
-    for col in ("legal_entity_id", "eclass", "n_orders", "s_total", "orderdate_min", "orderdate_max", "orderdates_str"):
+    for col in ("legal_entity_id", "eclass", "n_orders", "historical_purchase_value_total", "orderdate_min", "orderdate_max", "orderdates_str"):
         if col not in candidates.columns:
             raise ValueError(f"candidates_raw must contain '{col}'. Got: {list(candidates.columns)}")
 
@@ -107,7 +107,7 @@ def main() -> None:
     )
 
     # Economic
-    candidates["s_total_sqrt"] = np.sqrt(candidates["s_total"])
+    candidates["historical_purchase_value_sqrt"] = np.sqrt(candidates["historical_purchase_value_total"])
 
     plis = _read_plis(plis_path)
     plis["orderdate"] = pd.to_datetime(plis["orderdate"], format="%Y-%m-%d")
@@ -136,7 +136,7 @@ def main() -> None:
     candidates = candidates.merge(buyer_total, on="legal_entity_id", how="left")
     candidates["w_e_b"] = np.where(
         candidates["s_total_buyer"] > 0,
-        candidates["s_total"] / candidates["s_total_buyer"],
+        candidates["historical_purchase_value_total"] / candidates["s_total_buyer"],
         0.0,
     )
 
@@ -312,8 +312,8 @@ def main() -> None:
         "sigma_gap",
         "mu_gap",
         "CV_gap",
-        "s_total",
-        "s_total_sqrt",
+        "historical_purchase_value_total",
+        "historical_purchase_value_sqrt",
         "s_median_line",
         "w_e_b",
         "delta_trend",

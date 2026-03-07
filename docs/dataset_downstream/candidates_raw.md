@@ -13,7 +13,7 @@ Practical definition from `src/generate_candidates.py`:
 - In lookback window `L` months:
   - keep pair when `n_orders_in_L >= eta`
   - and `s_lookback >= tau`
-- For kept pairs, store full-train aggregates (`n_orders`, `s_total`, min/max order date, order months).
+- For kept pairs, store full-train aggregates (`n_orders`, `historical_purchase_value_total`, min/max order date, order months).
 
 ## File Format
 
@@ -28,7 +28,7 @@ Practical definition from `src/generate_candidates.py`:
 
 Sample from `data/07_candidates/online/candidates_raw.parquet`:
 
-| legal_entity_id | eclass | n_orders | s_total | orderdate_min | orderdate_max | t_last | orderdates_str |
+| legal_entity_id | eclass | n_orders | historical_purchase_value_total | orderdate_min | orderdate_max | t_last | orderdates_str |
 |---:|---:|---:|---:|---|---|---|---|
 | 41165867 | 19010107 | 1 | 551.31 | 2024-10-30 00:00:00 | 2024-10-30 00:00:00 | 2024-10-30 00:00:00 | ['2024-10'] |
 | 41165867 | 19010108 | 1 | 391.67 | 2024-12-12 00:00:00 | 2024-12-12 00:00:00 | 2024-12-12 00:00:00 | ['2024-12'] |
@@ -39,7 +39,7 @@ Sample from `data/07_candidates/online/candidates_raw.parquet`:
 - `legal_entity_id`: buyer/customer identifier.
 - `eclass`: Level 1 product category candidate for the buyer.
 - `n_orders`: number of line-level purchase records for this (`legal_entity_id`, `eclass`) in train period (`orderdate <= train_end`).
-- `s_total`: total spend proxy in train period, computed as `sum(quantityvalue * vk_per_item)`.
+- `historical_purchase_value_total`: total spend proxy in train period, computed as `sum(quantityvalue * vk_per_item)`.
 - `orderdate_min`: earliest observed purchase date for this buyer-eclass in train period.
 - `orderdate_max`: latest observed purchase date for this buyer-eclass in train period.
 - `t_last`: last observed purchase date (currently equal to `orderdate_max`; kept as explicit recency anchor for downstream features).
@@ -53,7 +53,7 @@ Sample from `data/07_candidates/online/candidates_raw.parquet`:
   - `lookback_months` (`L`): `18`
   - `min_order_frequency` (`eta`): `1`
   - `min_lookback_spend` (`tau`): `100.0`
-- `s_total >= 100` appears in outputs because `tau = 100` and eligibility is spend-filtered in lookback.
+- `historical_purchase_value_total >= 100` appears in outputs because `tau = 100` and eligibility is spend-filtered in lookback.
 - Date coverage in current files:
   - global `orderdate_min`: `2023-01-01`
   - global `orderdate_max`: `2024-12-31`

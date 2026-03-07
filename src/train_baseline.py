@@ -1,5 +1,5 @@
 """
-Baseline scorer for Level 1: score_base(b,e) = α·m_active + β·√s_total − γ·δ_recency.
+Baseline scorer for Level 1: score_base(b,e) = α·m_active + β·√historical_purchase_value − γ·δ_recency.
 
 Reads candidates.parquet and plis (split) to attach validation labels and validation
 spend. Outputs scores.parquet with score_base, label, s_val. Prints per-month
@@ -33,7 +33,7 @@ def main() -> None:
         help="Min orders in val period for positive label (default: 2).",
     )
     parser.add_argument("--alpha", type=float, default=1.0, help="Coefficient for m_active.")
-    parser.add_argument("--beta", type=float, default=1.0, help="Coefficient for sqrt(s_total).")
+    parser.add_argument("--beta", type=float, default=1.0, help="Coefficient for sqrt(historical_purchase_value_total).")
     parser.add_argument("--gamma", type=float, default=0.5, help="Coefficient for delta_recency.")
     parser.add_argument(
         "--savings-rate",
@@ -65,14 +65,14 @@ def main() -> None:
     val_end = pd.Timestamp(args.val_end)
 
     df = pd.read_parquet(candidates_path)
-    for col in ("legal_entity_id", "eclass", "m_active", "s_total_sqrt", "delta_recency"):
+    for col in ("legal_entity_id", "eclass", "m_active", "historical_purchase_value_sqrt", "delta_recency"):
         if col not in df.columns:
             raise ValueError(f"candidates must contain '{col}'. Got: {list(df.columns)}")
 
     # Baseline score
     df["score_base"] = (
         args.alpha * df["m_active"].fillna(0)
-        + args.beta * df["s_total_sqrt"].fillna(0)
+        + args.beta * df["historical_purchase_value_sqrt"].fillna(0)
         - args.gamma * df["delta_recency"].fillna(0)
     )
 

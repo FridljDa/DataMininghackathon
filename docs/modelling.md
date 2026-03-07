@@ -163,7 +163,7 @@ $$
 \text{score}_{\text{base}}(b, e) = \alpha \cdot m_{\text{active}} + \beta \cdot \sqrt{s_{\text{total}}} - \gamma \cdot \delta_{\text{recency}}
 $$
 
-Tune $ \alpha, \beta, \gamma $ on the validation euro score. Select pairs where $ \text{score}_{\text{base}} > \theta $ and cap at top $ K $ per buyer.
+where $ s_{\text{total}} $ is train-period purchase value (pipeline column: `historical_purchase_value_total`; square-root transform: `historical_purchase_value_sqrt`). Tune $ \alpha, \beta, \gamma $ on the validation euro score. Select pairs where $ \text{score}_{\text{base}} > \theta $ and cap at top $ K $ per buyer.
 
 ### Two-stage model (v2)
 
@@ -205,7 +205,7 @@ $$
 3. Apply minimum evidence guardrail — require at least one of:
    - $ n_{\text{orders}} \geq X $ (e.g. 3), or
    - $ m_{\text{active}} \geq Y $ (e.g. 2), or
-   - $ s_{\text{total}} \geq \tau_{\text{high}} $ (high-value exception)
+   - `historical_purchase_value_total` $ \geq \tau_{\text{high}} $ (high-value exception)
 
 4. Cap at top $ K $ by $ \widehat{EU} $ (tune $ K $ on validation; start $ K = 15 $).
 

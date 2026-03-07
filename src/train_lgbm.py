@@ -27,7 +27,7 @@ FEATURE_COLS = [
     "delta_recency",
     "sigma_gap",
     "CV_gap",
-    "s_total_sqrt",
+    "historical_purchase_value_sqrt",
     "s_median_line",
     "w_e_b",
     "delta_trend",

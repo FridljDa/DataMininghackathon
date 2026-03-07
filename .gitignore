@@ -1,7 +1,7 @@
 /.venv/
 /data/*
-!/data/04_plots/
-!/data/04_plots/**
+!/data/06_plots/
+!/data/06_plots/**
 .idea
 /.snakemake/
 .env

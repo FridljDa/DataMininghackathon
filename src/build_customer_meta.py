@@ -1,5 +1,5 @@
 """
-Build data/02_meta/customer.csv from plis_training.csv and customer_test.csv.
+Build data/03_meta/customer.csv from plis_training.csv and customer_test.csv.
 
 Starts with one row per unique legal_entity_id in plis_training. Metadata
 columns (estimated_number_employees, nace_code, secondary_nace_code) use the

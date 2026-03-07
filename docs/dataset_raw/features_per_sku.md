@@ -1,4 +1,4 @@
-# `data/01_raw/features_per_sku.csv`
+# `data/02_raw/features_per_sku.csv`
 
 ## Purpose
 Product-attribute table for SKU enrichment. This file maps each SKU to one or more normalized feature key/value pairs.

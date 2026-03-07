@@ -20,7 +20,7 @@ SUBMISSION_CSV = config["submission_csv"]
 SPLIT = config["training_validation_split"]
 PLIS_TRAINING_SPLIT = SPLIT["plis_training"]
 PLIS_TESTING_SPLIT = SPLIT["plis_testing"]
-SPLIT_CUSTOMER_CSV = f"{DATA_DIR}/03_customer/customer.csv"
+SPLIT_CUSTOMER_CSV = SPLIT["customer_csv"]
 
 SCORE_OUTPUTS = config["score_outputs"]
 SCORE_SUMMARY = SCORE_OUTPUTS["summary"]
@@ -86,7 +86,7 @@ rule build_customer_meta:
         "uv run src/build_customer_meta.py --plis {input.plis} --customer-test {input.customer_test} --output {output.customer}"
 
 rule generate_exploration_plots:
-    """Generate EDA plots from raw CSVs and customer metadata into data/04_plots."""
+    """Generate EDA plots from raw CSVs and customer metadata into data/06_plots."""
     input:
         plis = PLIS_TRAINING_CSV,
         customer_test = INPUTS["customer_test"],

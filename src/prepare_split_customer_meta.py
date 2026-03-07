@@ -1,12 +1,12 @@
 """
-Prepare split-specific customer metadata: copy data/02_meta/customer.csv and relabel
+Prepare split-specific customer metadata: copy data/03_meta/customer.csv and relabel
 task=none customers to task=testing so their purchase-value distribution matches warm.
 
 Total purchase value per customer is computed from plis_training using only rows with
 orderdate < cutoff_date (pre-cutoff only), to avoid future-information leakage in
 holdout selection. Selection uses log-scale stratified bins from the warm (predict future)
 distribution; customers are sampled from task=none to fill each bin proportionally.
-Output is written to data/03_customer/customer.csv for use by split_plis_training_validation.
+Output is written to data/04_customer/customer.csv for use by split_plis_training_validation.
 """
 
 import argparse
@@ -118,9 +118,9 @@ def select_testing_match_warm(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--customer-meta", required=True, dest="customer_meta", help="Path to data/02_meta/customer.csv")
+    parser.add_argument("--customer-meta", required=True, dest="customer_meta", help="Path to data/03_meta/customer.csv")
     parser.add_argument("--plis", required=True, help="Path to plis_training.csv")
-    parser.add_argument("--output", required=True, help="Path to output customer.csv (e.g. data/03_customer/customer.csv)")
+    parser.add_argument("--output", required=True, help="Path to output customer.csv (e.g. data/04_customer/customer.csv)")
     parser.add_argument("--cutoff-date", required=True, dest="cutoff_date", help="Cutoff date (YYYY-MM-DD); only plis rows with orderdate < cutoff are used for value aggregation.")
     parser.add_argument("--n-testing", type=int, default=50, dest="n_testing", help="Number of customers to relabel to task=testing (warm-matched)")
     parser.add_argument("--random-seed", type=int, default=42, dest="random_seed", help="Random seed for reproducible within-bin selection")

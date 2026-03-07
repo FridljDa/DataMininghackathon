@@ -7,10 +7,10 @@ import numpy as np
 
 # %%
 
-customers = pd.read_csv("data/01_raw/customer_test.csv", delimiter="\t")
-features = pd.read_csv("data/01_raw/features_per_sku.csv", delimiter="\t")
-nace_codes = pd.read_csv("data/01_raw/nace_codes.csv", delimiter="\t")
-product_line_items = pd.read_csv("data/01_raw/plis_training.csv", delimiter="\t")
+customers = pd.read_csv("data/02_raw/customer_test.csv", delimiter="\t")
+features = pd.read_csv("data/02_raw/features_per_sku.csv", delimiter="\t")
+nace_codes = pd.read_csv("data/02_raw/nace_codes.csv", delimiter="\t")
+product_line_items = pd.read_csv("data/02_raw/plis_training.csv", delimiter="\t")
 
 
 features.head()
@@ -113,15 +113,15 @@ del base_line_submission
 # %%
 # 1. - Number one the validaiton set of 50 legal_entities:
 
-val_set_cust = pd.read_csv("data/03_customer/customer.csv", delimiter="\t")
+val_set_cust = pd.read_csv("data/04_customer/customer.csv", delimiter="\t")
 val_set_cust = val_set_cust[val_set_cust["task"] == "testing"].reset_index(drop=True)
 
 # %%
     
 # 2. - The product line items for the training and validation set
 
-product_line_items_train = pd.read_csv("data/03_training_validation/plis_training.csv", delimiter="\t")
-product_line_items_val = pd.read_csv("data/03_training_validation/plis_testing.csv", delimiter="\t")
+product_line_items_train = pd.read_csv("data/05_training_validation/plis_training.csv", delimiter="\t")
+product_line_items_val = pd.read_csv("data/05_training_validation/plis_testing.csv", delimiter="\t")
 
 # 3. - The evaluation function
 # %%
@@ -212,3 +212,99 @@ print(res)
 # result look like we can somewhat accurately approximate the testing with our validation
 # -> ! what doesn't work correctly is the spend captured metric 
 # -> Also the Total Fee and number of lines don't totally match for the VAl -> little research suggests that the plies_val set is not complete or right 
+
+
+
+# %%
+# Just Further Pipeline Componets inspection
+
+preds_lgbm = pd.read_parquet("data/11_predictions/online/scores_lgbm.parquet")
+# preds_lgbm_off = pd.read_parquet("data/11_predictions/offline/scores_lgbm.parquet")
+# %%
+# level 1
+sub_base = pd.read_csv("data/14_submission/offline/baseline/level1/submission.csv")
+sub_lgbm = pd.read_csv("data/14_submission/offline/lgbm_two_stage/level1/submission.csv")
+sub_pass = pd.read_csv("data/14_submission/offline/pass_through/level1/submission.csv")
+sub_phase3 = pd.read_csv("data/14_submission/offline/phase3_repro/level1/submission.csv")
+# %%
+sub_line = pd.read_csv("data/15_sample_solutions/all_buyers_simple_class_threshold.csv")
+# %%
+
+print("Baseline: ", len(sub_base))
+print("lgbm: ", len(sub_lgbm))
+print("passthrough: ", len(sub_pass))
+print("phase3: ", len(sub_phase3))
+print("line: ", len(sub_line))
+# %%
+
+base_preds = pd.read_parquet("data/12_predictions/online/baseline/scores.parquet")
+passtrough_preds = pd.read_parquet("data/12_predictions/online/pass_through/scores.parquet")
+phase3_preds = pd.read_parquet("data/12_predictions/online/phase3_repro/scores.parquet")
+# %%
+
+hots = customers[customers["task"] == "predict future"]['legal_entity_id'].unique()
+
+# Sanity check on the feature space  ==>
+# Possible canditates for reoccurence - combs seen in plies
+candidates_off = product_line_items_train.groupby(
+    ["legal_entity_id", "eclass"]).size().reset_index(name="n_orders")
+
+candidates_off = candidates_off[candidates_off["legal_entity_id"].isin(hots)]
+
+candidates_on = product_line_items.groupby(
+    ["legal_entity_id", "eclass"]).size().reset_index(name="n_orders")
+
+print("Original lineitems canditates: ", candidates_on.shape[0])
+
+candidates_on = candidates_on[candidates_on["legal_entity_id"].isin(hots)]
+
+print("Original lineitems canditates for hots: ", candidates_on.shape[0])
+
+# -> use this as it automatically drops nan
+
+#%%
+# Check for the need of previously unseen tuples:
+
+
+cutoff = "2025-07-01"
+
+past = product_line_items[product_line_items["orderdate"] <= cutoff]
+recent = product_line_items[product_line_items["orderdate"] > cutoff]
+
+past_pairs = set(zip(past["legal_entity_id"], past["eclass"]))
+recent_pairs = set(zip(recent["legal_entity_id"], recent["eclass"]))
+
+new_pairs = recent_pairs - past_pairs
+
+len(new_pairs)
+
+print("recent plies:, ", len(recent_pairs))
+print("past_pairs: ", len(past_pairs))
+print("recent pairs not seen in the past: ", len(new_pairs))
+
+# Extract unique eclass ids from new_pairs
+new_eclasses = set(eclass for _, eclass in new_pairs)
+print("unique eclasses in new pairs: ", len(new_eclasses))
+
+# Check how often new eclasses were bought for the first time
+new_eclass_counts = recent[recent["eclass"].isin(new_eclasses)].groupby("eclass").size().reset_index(name="first_purchase_count")
+new_eclass_counts = new_eclass_counts.sort_values("first_purchase_count", ascending=False).reset_index(drop=True)
+print("\nNew eclass purchase frequency:")
+print(new_eclass_counts["first_purchase_count"].describe())
+
+trending_eclasses = new_eclass_counts[new_eclass_counts["first_purchase_count"] > 100]
+
+
+
+# %%
+# Check the feature space of the raw features and the sanitized features
+
+raw_off = pd.read_parquet("data/08_features_raw/offline/features_raw.parquet")
+raw_on = pd.read_parquet("data/08_features_raw/online/features_raw.parquet")
+
+san_feat_off = pd.read_parquet("data/08_features_sanitized/offline/features_sanitized.parquet")
+san_feat_on = pd.read_parquet("data/08_features_sanitized/online/features_sanitized.parquet")
+# %%
+used_candidates_off = pd.read_parquet("data/07_candidates/offline/candidates_raw.parquet")
+used_candidates_on = pd.read_parquet("data/07_candidates/online/candidates_raw.parquet")
+# %%

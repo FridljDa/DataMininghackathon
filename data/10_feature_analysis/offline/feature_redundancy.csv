@@ -6,6 +6,7 @@ n_orders,n_orders_in_lookback,1.0
 n_orders,avg_monthly_orders_buyer_tenure,0.9868
 n_orders,avg_monthly_orders_pair_tenure,0.9033
 n_orders,avg_monthly_orders_in_lookback,0.9868
+n_orders,n_distinct_manufacturers,0.8869
 m_active,m_observed,0.929
 m_active,active_year_span,0.8637
 m_active,order_value_cv,0.8563
@@ -14,6 +15,7 @@ m_active,n_orders_in_lookback,0.9641
 m_active,avg_monthly_orders_buyer_tenure,0.9504
 m_active,avg_monthly_orders_pair_tenure,0.8541
 m_active,avg_monthly_orders_in_lookback,0.9504
+m_active,n_distinct_manufacturers,0.8907
 m_observed,active_year_span,0.9371
 m_observed,has_multi_year_history,0.8782
 m_observed,n_orders_in_lookback,0.891
@@ -57,13 +59,17 @@ order_value_cv,avg_monthly_orders_in_lookback,0.866
 n_orders_in_lookback,avg_monthly_orders_buyer_tenure,0.9868
 n_orders_in_lookback,avg_monthly_orders_pair_tenure,0.9033
 n_orders_in_lookback,avg_monthly_orders_in_lookback,0.9868
+n_orders_in_lookback,n_distinct_manufacturers,0.8869
 lookback_spend,avg_monthly_spend_buyer_tenure,0.9985
 lookback_spend,avg_monthly_spend_pair_tenure,0.9694
 lookback_spend,avg_monthly_spend_in_lookback,0.9985
 buyer_tenure_months,effective_lookback_months,1.0
 avg_monthly_orders_buyer_tenure,avg_monthly_orders_pair_tenure,0.9072
 avg_monthly_orders_buyer_tenure,avg_monthly_orders_in_lookback,1.0
+avg_monthly_orders_buyer_tenure,n_distinct_manufacturers,0.8752
 avg_monthly_orders_pair_tenure,avg_monthly_orders_in_lookback,0.9072
 avg_monthly_spend_buyer_tenure,avg_monthly_spend_pair_tenure,0.9714
 avg_monthly_spend_buyer_tenure,avg_monthly_spend_in_lookback,1.0
 avg_monthly_spend_pair_tenure,avg_monthly_spend_in_lookback,0.9714
+avg_monthly_orders_in_lookback,n_distinct_manufacturers,0.8752
+top_manufacturer_share,n_distinct_manufacturers,0.9326

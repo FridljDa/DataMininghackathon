@@ -167,3 +167,7 @@ def main() -> None:
 
     print(f"Candidate set sizes: seen (hot x history) = {n_seen}, trending (hot x trending eclasses) = {n_trending_cross}")
     print(f"Wrote {len(candidates)} candidate rows to {out_path}")
+
+
+if __name__ == "__main__":
+    main()

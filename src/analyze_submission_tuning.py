@@ -162,6 +162,8 @@ def _submission_shape(
         "n_unknown_task_buyers_submitted": None,
         "warm_buyer_share": None,
         "cold_buyer_share": None,
+        "avg_predictions_per__warm_buyer": None,
+        "avg_predictions_per__cold_buyer": None,
     }
     out = {"approach": approach, "submission_path": str(submission_path)}
     if not submission_path.is_file():
@@ -219,6 +221,12 @@ def _submission_shape(
         out["n_unknown_task_buyers_submitted"] = int(n_unknown)
         out["warm_buyer_share"] = n_warm / n_buyers
         out["cold_buyer_share"] = n_cold / n_buyers
+        warm_ids = [lid for lid in unique_buyers if task_map.get(lid) == "warm"]
+        cold_ids = [lid for lid in unique_buyers if task_map.get(lid) == "cold"]
+        warm_counts = per_buyer.reindex(warm_ids).dropna()
+        cold_counts = per_buyer.reindex(cold_ids).dropna()
+        out["avg_predictions_per__warm_buyer"] = float(warm_counts.mean()) if len(warm_counts) else None
+        out["avg_predictions_per__cold_buyer"] = float(cold_counts.mean()) if len(cold_counts) else None
     else:
         out.update(_warm_cold_none)
     return out

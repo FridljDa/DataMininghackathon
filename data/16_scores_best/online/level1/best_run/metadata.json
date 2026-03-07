@@ -1,22 +1,22 @@
 {
-  "commit": "45fd98aaef5a484ea44ee491a057e204cee7b6fe",
+  "commit": "cb8698e85927ed19d04cac69a2598ffa2db5b790",
   "branch": "main",
-  "dirty": false,
-  "created_at": "2026-03-07T22:49:25Z",
+  "dirty": true,
+  "created_at": "2026-03-07T23:07:00Z",
   "approach": "phase3_repro",
   "level": 1,
   "config": {
     "train_end": "2025-12-31",
     "lookback_months": 60,
     "score_threshold": 0.0,
-    "top_k_per_buyer": 60,
+    "top_k_per_buyer": 150,
     "guardrails": {
       "min_orders": 2,
       "min_months": 2,
       "high_spend": 200.0,
       "min_avg_monthly_spend": 0.0
     },
-    "cold_start_top_k": 30,
+    "cold_start_top_k": 50,
     "selected_features": [
       "CV_gap",
       "avg_price_per_unit",

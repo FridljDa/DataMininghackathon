@@ -224,7 +224,7 @@ def test_submission_shape_missing_columns(tmp_path: Path) -> None:
 
 
 def test_submission_shape_warm_cold_counts(tmp_path: Path) -> None:
-    """With task_map, shape reports n_warm_buyers_submitted, n_cold_buyers_submitted, shares."""
+    """With task_map, shape reports n_warm_buyers_submitted, n_cold_buyers_submitted, shares, and warm/cold avg predictions."""
     csv_path = tmp_path / "submission.csv"
     csv_path.write_text(
         "legal_entity_id,cluster\n"
@@ -241,10 +241,12 @@ def test_submission_shape_warm_cold_counts(tmp_path: Path) -> None:
     assert shape["n_unknown_task_buyers_submitted"] == 0
     assert shape["warm_buyer_share"] == pytest.approx(0.5)
     assert shape["cold_buyer_share"] == pytest.approx(0.5)
+    assert shape["avg_predictions_per__warm_buyer"] == pytest.approx(2.0)
+    assert shape["avg_predictions_per__cold_buyer"] == pytest.approx(1.0)
 
 
 def test_submission_shape_unknown_task_buyers(tmp_path: Path) -> None:
-    """Buyers not in task_map or with other task are counted as unknown."""
+    """Buyers not in task_map or with other task are counted as unknown. No cold buyers => cold avg is None."""
     csv_path = tmp_path / "submission.csv"
     csv_path.write_text(
         "legal_entity_id,cluster\n"
@@ -260,6 +262,8 @@ def test_submission_shape_unknown_task_buyers(tmp_path: Path) -> None:
     assert shape["n_unknown_task_buyers_submitted"] == 1
     assert shape["warm_buyer_share"] == pytest.approx(0.5)
     assert shape["cold_buyer_share"] == pytest.approx(0.0)
+    assert shape["avg_predictions_per__warm_buyer"] == pytest.approx(1.0)
+    assert shape["avg_predictions_per__cold_buyer"] is None
 
 
 def test_load_customer_task_map(tmp_path: Path) -> None:

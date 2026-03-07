@@ -28,12 +28,13 @@ def _read_customer(path: Path) -> pd.DataFrame:
     for col in ("legal_entity_id", "nace_code", "estimated_number_employees"):
         if col not in df.columns:
             raise ValueError(f"customer must contain '{col}'. Got: {list(df.columns)}")
+    df["nace_code"] = df["nace_code"].astype(str).str.strip().str.replace(r"\.0+$", "", regex=True)
     return df
 
 
 def _read_nace_codes(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, sep="\t", dtype=str)
-    df["nace_code"] = df["nace_code"].astype(str).str.strip()
+    df["nace_code"] = df["nace_code"].astype(str).str.strip().str.replace(r"\.0+$", "", regex=True)
     return df
 
 
@@ -288,6 +289,7 @@ def main() -> None:
     recent_results = list(zip(*df["orderdates"].map(lambda x: _recent_counts(x, end_period))))
     df["recent_3m_count"] = recent_results[0]
     df["recent_6m_count"] = recent_results[1]
+    # Ratio undefined when no 6m activity (e.g. online when orderdate_max < train_end so last 6m empty); leave null.
     df["recent_3_over_6"] = np.where(
         df["recent_6m_count"] >= 1,
         df["recent_3m_count"] / df["recent_6m_count"],
@@ -359,6 +361,7 @@ def main() -> None:
     spend_recent = spend_recent.drop(
         columns=["_order_value_mean", "_order_value_std"], errors="ignore"
     )
+    # Same as recent_3_over_6: null when spend_recent_6m is 0 (no 6m activity).
     spend_recent["spend_recent_ratio"] = np.where(
         spend_recent["spend_recent_6m"] > 0,
         spend_recent["spend_recent_3m"] / spend_recent["spend_recent_6m"],

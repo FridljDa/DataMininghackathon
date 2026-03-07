@@ -450,12 +450,14 @@ rule archive_score_run:
     input:
         summary = SCORE_SUMMARY_PATTERN,
         details = SCORE_DETAILS_PATTERN,
+        submit_done = lambda w: f"{DATA_DIR}/14_submission/.submitted_challenge2_{w.approach}_level{w.level}" if w.mode == "online" else [],
     output:
         sentinel = ARCHIVE_SENTINEL_PATTERN,
     params:
         runs_dir = lambda w: f"{SCORES_DIR}/{w.mode}/runs/{w.approach}/level{w.level}",
         index_csv = lambda w: f"{SCORES_DIR}/{w.mode}/run_index_{w.approach}_level{w.level}.csv",
         history_csv = lambda w: f"{SCORES_DIR}/online/history/level{w.level}/runs_history.csv" if w.mode == "online" else "",
+        live_summary = lambda w: f"{SCORES_DIR}/online/{w.approach}/level{w.level}/score_summary_live.csv" if w.mode == "online" else "",
     wildcard_constraints:
         mode = MODE_RE,
         approach = APPROACH_RE,
@@ -468,6 +470,8 @@ rule archive_score_run:
             summary=input.summary, details=input.details,
             runs_dir=params.runs_dir, index_csv=params.index_csv,
         )
+        if params.live_summary:
+            cmd += " --live-summary {live_summary}".format(live_summary=params.live_summary)
         if params.history_csv:
             cmd += " --history-csv {history_csv} --approach {approach} --level {level}".format(
                 history_csv=params.history_csv, approach=wildcards.approach, level=wildcards.level,

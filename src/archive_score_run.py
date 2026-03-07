@@ -32,6 +32,12 @@ def main() -> None:
         description="Archive score outputs into a timestamp+commit run folder with metadata and index."
     )
     parser.add_argument("--summary", required=True, help="Path to score_summary.csv.")
+    parser.add_argument(
+        "--live-summary",
+        default=None,
+        dest="live_summary",
+        help="Optional path to score_summary_live.csv (online mode). If provided and present, copied into the archived run.",
+    )
     parser.add_argument("--details", required=True, help="Path to score_details.parquet.")
     parser.add_argument("--runs-dir", required=True, dest="runs_dir", help="Base directory for run folders (e.g. data/15_scores/offline/runs).")
     parser.add_argument("--index-csv", required=True, dest="index_csv", help="Path to run_index.csv (created/appended).")
@@ -42,6 +48,7 @@ def main() -> None:
 
     root = Path.cwd()
     summary_path = Path(args.summary)
+    live_summary_path = Path(args.live_summary) if args.live_summary else None
     details_path = Path(args.details)
     runs_dir = Path(args.runs_dir)
     index_path = Path(args.index_csv)
@@ -71,6 +78,8 @@ def main() -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     shutil.copy2(summary_path, run_dir / "score_summary.csv")
+    if live_summary_path is not None and live_summary_path.is_file():
+        shutil.copy2(live_summary_path, run_dir / "score_summary_live.csv")
     shutil.copy2(details_path, run_dir / "score_details.parquet")
 
     try:

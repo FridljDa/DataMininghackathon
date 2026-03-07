@@ -160,9 +160,15 @@ def main() -> None:
     }
     metadata_out.write_text(json.dumps(best_metadata, indent=2), encoding="utf-8")
 
-    # Copy best run artifacts into 16_scores_best for reproducibility
+    # Copy artifacts into 16_scores_best.
+    # Keep score_summary.csv aligned with the source used for ranking (prefer live for online).
     run_dir = best["run_dir"]
-    for name in ("score_summary.csv", "score_summary_live.csv", "score_details.parquet"):
+    live_src = run_dir / "score_summary_live.csv"
+    summary_src = live_src if live_src.is_file() else (run_dir / "score_summary.csv")
+    if summary_src.is_file():
+        shutil.copy2(summary_src, best_dir / "score_summary.csv")
+
+    for name in ("score_summary_live.csv", "score_details.parquet"):
         src = run_dir / name
         if src.is_file():
             shutil.copy2(src, best_dir / name)

@@ -106,6 +106,8 @@ feature_analysis:
   dir: "data/09_feature_analysis"
   summary_csv: "data/09_feature_analysis/online/feature_summary.csv"
   summary_offline_csv: "data/09_feature_analysis/offline/feature_summary.csv"
+  suggestion_online: "data/09_feature_analysis/online/feature_suggestions.yaml"
+  suggestion_offline: "data/09_feature_analysis/offline/feature_suggestions.yaml"
   plot_files:
     - online/feature_distributions.png
     - online/feature_correlations.png

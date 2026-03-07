@@ -42,6 +42,9 @@ FEATURE_ANALYSIS_SUMMARY_CSV = FEATURE_ANALYSIS["summary_csv"]
 FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV = FEATURE_ANALYSIS["summary_offline_csv"]
 FEATURE_ANALYSIS_PLOTS = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS["plot_files"])
 FEATURE_ANALYSIS_PLOTS_OFFLINE = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS["plot_files_offline"])
+FEATURE_ANALYSIS_SUGGESTION_ONLINE = FEATURE_ANALYSIS["suggestion_online"]
+FEATURE_ANALYSIS_SUGGESTION_OFFLINE = FEATURE_ANALYSIS["suggestion_offline"]
+FEATURE_ANALYSIS_SUGGESTIONS_PATTERN = "data/09_feature_analysis/{mode}/feature_suggestions.yaml"
 
 # Mode (online|offline) configuration: paths and behaviour for modelling/scoring pipeline
 MODES = ["online", "offline"]
@@ -87,6 +90,8 @@ rule all:
         FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV,
         FEATURE_ANALYSIS_PLOTS,
         FEATURE_ANALYSIS_PLOTS_OFFLINE,
+        FEATURE_ANALYSIS_SUGGESTION_ONLINE,
+        FEATURE_ANALYSIS_SUGGESTION_OFFLINE,
         SCORE_SUMMARY,
         SCORE_DETAILS,
         ARCHIVE_SENTINEL_ONLINE,
@@ -204,6 +209,17 @@ rule feature_analysis:
     shell:
         "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
         "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot}"
+
+rule suggest_features:
+    """Suggest feature list from feature_summary.csv for manual use in config.yaml selected_features."""
+    input:
+        summary_csv = FEATURE_ANALYSIS_SUMMARY_PATTERN,
+    output:
+        suggestions_yaml = FEATURE_ANALYSIS_SUGGESTIONS_PATTERN,
+    wildcard_constraints:
+        mode = MODE_RE,
+    shell:
+        "uv run src/suggest_features.py --summary-csv {input.summary_csv} --output {output.suggestions_yaml}"
 
 rule feature_selection:
     """Keep keys + config-driven selected features for downstream modelling (post feature_analysis)."""

@@ -242,14 +242,20 @@ passtrough_preds = pd.read_parquet("data/12_predictions/online/pass_through/scor
 phase3_preds = pd.read_parquet("data/12_predictions/online/phase3_repro/scores.parquet")
 # %%
 
+product_line_items["eclass_l2"] = (
+    product_line_items["eclass"].astype(str)
+    + "|"
+    + product_line_items["manufacturer"].astype(str)
+)
+
 hots = customers[customers["task"] == "predict future"]['legal_entity_id'].unique()
 
 # Sanity check on the feature space  ==>
 # Possible canditates for reoccurence - combs seen in plies
-candidates_off = product_line_items_train.groupby(
-    ["legal_entity_id", "eclass"]).size().reset_index(name="n_orders")
+#candidates_off = product_line_items_train.groupby(
+#    ["legal_entity_id", "eclass"]).size().reset_index(name="n_orders")
 
-candidates_off = candidates_off[candidates_off["legal_entity_id"].isin(hots)]
+#candidates_off = candidates_off[candidates_off["legal_entity_id"].isin(hots)]
 
 candidates_on = product_line_items.groupby(
     ["legal_entity_id", "eclass"]).size().reset_index(name="n_orders")
@@ -293,7 +299,36 @@ print("\nNew eclass purchase frequency:")
 print(new_eclass_counts["first_purchase_count"].describe())
 
 trending_eclasses = new_eclass_counts[new_eclass_counts["first_purchase_count"] > 100]
+trending_eclasses.to_csv("data/07_candidates/trending_classes.csv")
 
+# %%
+# Same for level2
+
+
+past_pairs_l2 = set(zip(past["legal_entity_id"], past["eclass_l2"]))
+recent_pairs_l2 = set(zip(recent["legal_entity_id"], recent["eclass_l2"]))
+new_pairs_l2 = recent_pairs_l2 - past_pairs_l2
+
+len(new_pairs_l2)
+
+print("recent plies L2:, ", len(recent_pairs_l2))
+print("past_pairs:  L2", len(past_pairs_l2))
+print("recent pairs not seen in the past: ", len(new_pairs_l2))
+
+# Extract unique eclass ids from new_pairs
+new_eclasses_l2 = set(eclass2 for _, eclass2 in new_pairs_l2)
+print("unique eclasses in new pairs: ", len(new_eclasses_l2))
+
+# Check how often new eclasses were bought for the first time
+new_eclass_counts_l2 = recent[recent["eclass_l2"].isin(new_eclasses_l2)].groupby("eclass_l2").size().reset_index(name="first_purchase_count")
+new_eclass_counts_l2 = new_eclass_counts_l2.sort_values("first_purchase_count", ascending=False).reset_index(drop=True)
+print("\nNew eclass purchase frequency:")
+print(new_eclass_counts_l2["first_purchase_count"].describe())
+
+#%% threshold and save
+
+trending_eclasses_l2 = new_eclass_counts_l2[new_eclass_counts_l2["first_purchase_count"] > 100]
+trending_eclasses_l2.to_csv("data/07_candidates/trending_classes_l2.csv")
 
 
 # %%
@@ -305,6 +340,6 @@ raw_on = pd.read_parquet("data/08_features_raw/online/features_raw.parquet")
 san_feat_off = pd.read_parquet("data/08_features_sanitized/offline/features_sanitized.parquet")
 san_feat_on = pd.read_parquet("data/08_features_sanitized/online/features_sanitized.parquet")
 # %%
-used_candidates_off = pd.read_parquet("data/07_candidates/offline/candidates_raw.parquet")
-used_candidates_on = pd.read_parquet("data/07_candidates/online/candidates_raw.parquet")
+used_candidates_l1 = pd.read_parquet("data/07_candidates/online/level1/candidates_raw.parquet")
+used_candidates_l2 = pd.read_parquet("data/07_candidates/online/level2/candidates_raw.parquet")
 # %%

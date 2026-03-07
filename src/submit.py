@@ -213,7 +213,7 @@ def submit(
     page,
     challenge_id: int,
     file_path: Path,
-    level: int = 2,
+    level: int = 1,
 ) -> tuple[str | None, str | None]:
     """Navigate to a challenge page, set granularity, upload file, and submit.
     Returns (result_text, submission_id) for the submissions section and API id, or (None, None) on early failure.
@@ -226,7 +226,7 @@ def submit(
     # Select matching granularity (only relevant for challenge 2 which has Level buttons).
     if challenge_id == 2:
         level_labels = {1: "Level 1", 2: "Level 2", 3: "Level 3"}
-        target_label = level_labels.get(level, "Level 2")
+        target_label = level_labels.get(level, "Level 1")
         matched = False
         for btn in page.locator("button[type=button]").all():
             if target_label in btn.inner_text():
@@ -335,9 +335,9 @@ def main() -> None:
     parser.add_argument(
         "--level",
         type=int,
-        default=2,
+        default=1,
         choices=[1, 2, 3],
-        help="Matching granularity level for challenge 2 (default: 2; level 3 may not be available yet)",
+        help="Matching granularity level for challenge 2 (default: 1; level 3 may not be available yet)",
     )
     parser.add_argument("--headed", action="store_true", help="Run browser in headed (visible) mode")
     parser.add_argument(

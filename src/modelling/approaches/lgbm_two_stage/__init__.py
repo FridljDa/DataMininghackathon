@@ -17,6 +17,7 @@ except ImportError as exc:
 EXCLUDE_COLS = {
     "legal_entity_id",
     "eclass",
+    "manufacturer",
     "label",
     "s_val",
     "n_orders_val",

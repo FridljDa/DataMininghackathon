@@ -58,6 +58,7 @@ def main() -> None:
     parser.add_argument("--output", required=True, help="Path to output sanitized parquet.")
     parser.add_argument("--config", required=True, help="Path to config YAML.")
     parser.add_argument("--config-key", required=True, dest="config_key", help="Dot path to sanitation block (e.g. modelling.missing_value_sanitation).")
+    parser.add_argument("--level", default="1", help="Level (1 or 2); used for logging only, policies come from config.")
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -70,14 +71,8 @@ def main() -> None:
     df = pd.read_parquet(raw_path)
     n_in = len(df)
 
-    # Config must not reference columns that are not in the dataframe
+    # Apply policies only for columns present in the dataframe (e.g. manufacturer only in level2)
     features_cfg = config.get("features") or {}
-    unknown = [c for c in features_cfg if c not in df.columns]
-    if unknown:
-        raise ValueError(
-            f"missing_value_sanitation.features references columns not in features_raw: {unknown}. "
-            f"Available: {list(df.columns)}"
-        )
 
     default_action = config.get("default_action", "ignore")
     if default_action not in VALID_ACTIONS:

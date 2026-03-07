@@ -103,6 +103,7 @@ def run_main() -> None:
         dest="use_monthly_lookback_rates",
         help="If 1, phase3_repro uses avg_monthly_orders_in_lookback and avg_monthly_spend_in_lookback (default: 0).",
     )
+    parser.add_argument("--level", type=int, default=1, choices=(1, 2), help="Level 1 or 2; level 2 keys include manufacturer.")
     args = parser.parse_args()
 
     candidates_path = Path(args.candidates)
@@ -110,10 +111,11 @@ def run_main() -> None:
     out_path = Path(args.output)
     val_start = pd.Timestamp(args.val_start)
     val_end = pd.Timestamp(args.val_end)
+    level = args.level
 
     df = pd.read_parquet(candidates_path)
     df = attach_validation_labels(
-        df, plis_path, val_start, val_end, args.n_min_label
+        df, plis_path, val_start, val_end, args.n_min_label, level=level
     )
     df = _ensure_required_base_columns(df)
 
@@ -136,7 +138,10 @@ def run_main() -> None:
     df = approach.run(df, **params)
     df = _ensure_required_base_columns(df)
 
-    for col in ("legal_entity_id", "eclass", "score_base", "n_orders", "m_active", "historical_purchase_value_total"):
+    required = ["legal_entity_id", "eclass", "score_base", "n_orders", "m_active", "historical_purchase_value_total"]
+    if level == 2:
+        required.append("manufacturer")
+    for col in required:
         if col not in df.columns:
             raise ValueError(f"Output must contain '{col}'. Got: {list(df.columns)}")
 

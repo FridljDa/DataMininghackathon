@@ -55,17 +55,14 @@ GRD = SEL["guardrails"]
 FEAT = MODELLING["features"]
 APP = MODELLING["approaches"]
 
-# Feature analysis
+# Feature analysis (per mode and level)
 FEATURE_ANALYSIS_DIR = f"{DATA_DIR}/10_feature_analysis"
-FEATURE_ANALYSIS_SUMMARY_CSV = f"{FEATURE_ANALYSIS_DIR}/online/feature_summary.csv"
-FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV = f"{FEATURE_ANALYSIS_DIR}/offline/feature_summary.csv"
-FEATURE_ANALYSIS_PLOT_FILES = ["online/feature_distributions.png", "online/feature_correlations.png"]
-FEATURE_ANALYSIS_PLOT_FILES_OFFLINE = ["offline/feature_distributions.png", "offline/feature_correlations.png"]
-FEATURE_ANALYSIS_PLOTS = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS_PLOT_FILES)
-FEATURE_ANALYSIS_PLOTS_OFFLINE = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS_PLOT_FILES_OFFLINE)
-FEATURE_ANALYSIS_SUGGESTION_ONLINE = f"{FEATURE_ANALYSIS_DIR}/online/feature_suggestions.yaml"
-FEATURE_ANALYSIS_SUGGESTION_OFFLINE = f"{FEATURE_ANALYSIS_DIR}/offline/feature_suggestions.yaml"
-FEATURE_ANALYSIS_SUGGESTIONS_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_suggestions.yaml"
+FEATURE_ANALYSIS_SUMMARY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/level{{level}}/feature_summary.csv"
+FEATURE_ANALYSIS_PLOTS_PATTERN = [
+    f"{FEATURE_ANALYSIS_DIR}/{{mode}}/level{{level}}/feature_distributions.png",
+    f"{FEATURE_ANALYSIS_DIR}/{{mode}}/level{{level}}/feature_correlations.png",
+]
+FEATURE_ANALYSIS_SUGGESTIONS_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/level{{level}}/feature_suggestions.yaml"
 
 # Mode (online|offline) configuration: paths and behaviour for modelling/scoring pipeline
 MODES = ["online", "offline"]
@@ -83,26 +80,25 @@ MODE_CFG = {
         "customer_input": SPLIT_CUSTOMER_CSV,
     },
 }
-# Path patterns for mode-wildcarded rules
+# Path patterns for mode- and level-wildcarded rules (stages 07–11 and 12–13 per level)
 CANDIDATES_DIR = f"{DATA_DIR}/07_candidates"
 TRENDING_CLASSES_CSV = f"{CANDIDATES_DIR}/trending_classes.csv"
-CANDIDATES_RAW_PATTERN = f"{CANDIDATES_DIR}/{{mode}}/candidates_raw.parquet"
-FEATURES_RAW_PATTERN = f"{DATA_DIR}/08_features_raw/{{mode}}/features_raw.parquet"
-FEATURES_SANITIZED_PATTERN = f"{DATA_DIR}/08_features_sanitized/{{mode}}/features_sanitized.parquet"
-FEATURES_ALL_PATTERN = f"{DATA_DIR}/09_features_derived/{{mode}}/features_all.parquet"
-FEATURES_SELECTED_PATTERN = f"{DATA_DIR}/11_features_selected/{{mode}}/features_selected.parquet"
-# Per-approach: scores, portfolio (no level); submission and scores per level (data/12–15 by {mode}/{approach}/level{level}/)
+CANDIDATES_RAW_PATTERN = f"{CANDIDATES_DIR}/{{mode}}/level{{level}}/candidates_raw.parquet"
+FEATURES_RAW_PATTERN = f"{DATA_DIR}/08_features_raw/{{mode}}/level{{level}}/features_raw.parquet"
+FEATURES_SANITIZED_PATTERN = f"{DATA_DIR}/08_features_sanitized/{{mode}}/level{{level}}/features_sanitized.parquet"
+FEATURES_ALL_PATTERN = f"{DATA_DIR}/09_features_derived/{{mode}}/level{{level}}/features_all.parquet"
+FEATURES_SELECTED_PATTERN = f"{DATA_DIR}/11_features_selected/{{mode}}/level{{level}}/features_selected.parquet"
+# Per-approach and per-level: scores, portfolio, submission (data/12–14 by {mode}/{approach}/level{level}/)
 ENABLED_APPROACHES = MODELLING["enabled_approaches"]
 ENABLED_LEVELS = MODELLING["enabled_levels"]
 APPROACH_RE = "|".join(ENABLED_APPROACHES)
 LEVEL_RE = "|".join(str(l) for l in ENABLED_LEVELS)
-SCORES_APPROACH_PATTERN = f"{DATA_DIR}/12_predictions/{{mode}}/{{approach}}/scores.parquet"
-PORTFOLIO_PATTERN = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/portfolio.parquet"
+SCORES_APPROACH_PATTERN = f"{DATA_DIR}/12_predictions/{{mode}}/{{approach}}/level{{level}}/scores.parquet"
+PORTFOLIO_PATTERN = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/level{{level}}/portfolio.parquet"
 SUBMISSION_PATTERN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/submission.csv"
 ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/online/runs/level{{level}}/.last_archived_{{approach}}"
 SUBMITTED_SENTINEL_PATTERN = f"{DATA_DIR}/14_submission/.submitted_challenge2_{{approach}}_level{{level}}"
 LIVE_SUMMARY_TEMP_PATTERN = f"{DATA_DIR}/14_submission/.score_summary_live_{{approach}}_level{{level}}.csv"
-FEATURE_ANALYSIS_SUMMARY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_summary.csv"
 
 rule all:
     input:
@@ -110,14 +106,11 @@ rule all:
         PLIS_TRAINING_CSV,
         CUSTOMER_META_CSV,
         PLOT_OUTPUTS,
-        FEATURE_ANALYSIS_SUMMARY_CSV,
-        FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV,
-        FEATURE_ANALYSIS_PLOTS,
-        FEATURE_ANALYSIS_PLOTS_OFFLINE,
-        FEATURE_ANALYSIS_SUGGESTION_ONLINE,
-        FEATURE_ANALYSIS_SUGGESTION_OFFLINE,
-        expand(SCORES_APPROACH_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
-        expand(PORTFOLIO_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
+        expand(FEATURE_ANALYSIS_SUMMARY_PATTERN, mode=MODES, level=ENABLED_LEVELS),
+        expand(FEATURE_ANALYSIS_PLOTS_PATTERN, mode=MODES, level=ENABLED_LEVELS),
+        expand(FEATURE_ANALYSIS_SUGGESTIONS_PATTERN, mode=MODES, level=ENABLED_LEVELS),
+        expand(SCORES_APPROACH_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
+        expand(PORTFOLIO_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(SUBMISSION_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(ARCHIVE_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
@@ -199,7 +192,7 @@ rule split_plis_training_validation:
         "--train {output.train} --test {output.test} --cutoff-date {params.cutoff}"
 
 rule generate_candidates:
-    """Candidate generation for Level 1: hot entities x (seen eclasses + trending eclasses)."""
+    """Candidate generation per level: Level 1 = (legal_entity_id, eclass); Level 2 = (legal_entity_id, eclass, manufacturer)."""
     input:
         plis = PLIS_TRAINING_SPLIT,
         customer = lambda w: MODE_CFG[w.mode]["customer_csv"],
@@ -210,20 +203,22 @@ rule generate_candidates:
         train_end = WIN["train_end"],
     wildcard_constraints:
         mode = MODE_RE,
+        level = LEVEL_RE,
     shell:
         "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
-        "--trending-classes {input.trending_classes} --output {output.candidates_raw} --train-end {params.train_end}"
+        "--trending-classes {input.trending_classes} --output {output.candidates_raw} --train-end {params.train_end} --level {wildcards.level}"
 
 rule engineer_features_raw:
-    """Pass-through raw feature columns from candidates (no derivation)."""
+    """Pass-through raw feature columns from candidates (no derivation); level2 includes manufacturer."""
     input:
         candidates_raw = CANDIDATES_RAW_PATTERN,
     output:
         features_raw = FEATURES_RAW_PATTERN,
     wildcard_constraints:
         mode = MODE_RE,
+        level = LEVEL_RE,
     shell:
-        "uv run src/engineer_features_raw.py --candidates-raw {input.candidates_raw} --output {output.features_raw}"
+        "uv run src/engineer_features_raw.py --candidates-raw {input.candidates_raw} --output {output.features_raw} --level {wildcards.level}"
 
 rule sanitize_features_raw:
     """Apply per-feature missing-value policies (drop_row, ignore, fill) from config to features_raw."""
@@ -236,12 +231,13 @@ rule sanitize_features_raw:
         config_key = "modelling.missing_value_sanitation",
     wildcard_constraints:
         mode = MODE_RE,
+        level = LEVEL_RE,
     shell:
         "uv run src/sanitize_features_raw.py --features-raw {input.features_raw} --output {output.features_sanitized} "
-        "--config {params.config_file} --config-key {params.config_key}"
+        "--config {params.config_file} --config-key {params.config_key} --level {wildcards.level}"
 
 rule engineer_features_derived:
-    """Derived feature engineering: raw features + plis/customer/nace -> full feature matrix."""
+    """Derived feature engineering: raw features + plis/customer/nace -> full feature matrix; level2 keeps manufacturer in key."""
     input:
         features_sanitized = FEATURES_SANITIZED_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
@@ -254,28 +250,30 @@ rule engineer_features_derived:
         lookback_months = CAND["lookback_months"],
     wildcard_constraints:
         mode = MODE_RE,
+        level = LEVEL_RE,
     shell:
         "uv run src/engineer_features_derived.py --features-raw {input.features_sanitized} --plis {input.plis} "
-        "--customer {input.customer} --nace-codes {input.nace_codes} --output {output.features_all} --train-end {params.train_end} --lookback-months {params.lookback_months}"
+        "--customer {input.customer} --nace-codes {input.nace_codes} --output {output.features_all} --train-end {params.train_end} --lookback-months {params.lookback_months} --level {wildcards.level}"
 
-FEATURE_ANALYSIS_REDUNDANCY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_redundancy.csv"
+FEATURE_ANALYSIS_REDUNDANCY_PATTERN = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/level{{level}}/feature_redundancy.csv"
 
 rule feature_analysis:
-    """Summary statistics, target-aware signal, redundancy, and plots for all engineered features."""
+    """Summary statistics, target-aware signal, redundancy, and plots for all engineered features (per mode and level)."""
     input:
         features_all = FEATURES_ALL_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
     output:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_PATTERN,
         redundancy_csv = FEATURE_ANALYSIS_REDUNDANCY_PATTERN,
-        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_distributions.png",
-        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/feature_correlations.png",
+        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/level{{level}}/feature_distributions.png",
+        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/{{mode}}/level{{level}}/feature_correlations.png",
     params:
         val_start = VAL["start"],
         val_end = VAL["end"],
         n_min_label = VAL["n_min_label"],
     wildcard_constraints:
         mode = MODE_RE,
+        level = LEVEL_RE,
     shell:
         "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
         "--plis {input.plis} --val-start {params.val_start} --val-end {params.val_end} --n-min-label {params.n_min_label} "
@@ -291,11 +289,12 @@ rule suggest_features:
         suggestions_yaml = FEATURE_ANALYSIS_SUGGESTIONS_PATTERN,
     wildcard_constraints:
         mode = MODE_RE,
+        level = LEVEL_RE,
     shell:
         "uv run src/suggest_features.py --summary-csv {input.summary_csv} --redundancy-csv {input.redundancy_csv} --output {output.suggestions_yaml}"
 
 rule feature_selection:
-    """Keep keys + config-driven selected features for downstream modelling (post feature_analysis)."""
+    """Keep keys + config-driven selected features for downstream modelling (post feature_analysis); level2 keys include manufacturer."""
     input:
         features_all = FEATURES_ALL_PATTERN,
         feature_analysis_summary = FEATURE_ANALYSIS_SUMMARY_PATTERN,
@@ -305,12 +304,13 @@ rule feature_selection:
         selected_features = ",".join(FEAT["selected"]),
     wildcard_constraints:
         mode = MODE_RE,
+        level = LEVEL_RE,
     shell:
         "uv run src/feature_selection.py --features {input.features_all} --selected-features '{params.selected_features}' "
-        "--output {output.features_selected}"
+        "--output {output.features_selected} --level {wildcards.level}"
 
 rule train_approach:
-    """Run a modelling approach (baseline or lgbm_two_stage); outputs data/11_predictions/{mode}/{approach}/scores.parquet."""
+    """Run a modelling approach (baseline or lgbm_two_stage); outputs data/12_predictions/{mode}/{approach}/level{level}/scores.parquet."""
     input:
         candidates = FEATURES_SELECTED_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
@@ -336,8 +336,9 @@ rule train_approach:
     wildcard_constraints:
         mode = MODE_RE,
         approach = "|".join(ENABLED_APPROACHES),
+        level = LEVEL_RE,
     shell:
-        "uv run python src/modelling/run.py --approach {wildcards.approach} "
+        "uv run python src/modelling/run.py --approach {wildcards.approach} --level {wildcards.level} "
         "--candidates {input.candidates} --plis {input.plis} --output {output.scores} "
         "--val-start {params.val_start} --val-end {params.val_end} --n-min-label {params.n_min_label} "
         "--alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
@@ -348,7 +349,7 @@ rule train_approach:
         "--lgb-params-classifier '{params.lgb_params_classifier}' --lgb-params-regressor '{params.lgb_params_regressor}'"
 
 rule select_portfolio:
-    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach."""
+    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach and level; level2 portfolio includes manufacturer."""
     input:
         scores = SCORES_APPROACH_PATTERN,
     output:
@@ -363,8 +364,9 @@ rule select_portfolio:
     wildcard_constraints:
         mode = MODE_RE,
         approach = APPROACH_RE,
+        level = LEVEL_RE,
     shell:
-        "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
+        "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} --level {wildcards.level} "
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
         "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
         "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer}"

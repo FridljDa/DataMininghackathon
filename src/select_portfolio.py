@@ -2,9 +2,8 @@
 Selection policy: threshold, evidence guardrails, per-buyer cap K.
 
 Reads scores.parquet; keeps pairs with score_base > threshold that pass at least
-one guardrail (n_orders >= X or m_active >= Y or historical_purchase_value_total >= tau_high,
-or optionally avg_monthly_spend_buyer_tenure >= min_avg_monthly_spend for late joiners); caps at
-top K per buyer by score_base. Outputs portfolio.parquet (legal_entity_id, eclass).
+one guardrail; caps at top K per buyer by score_base.
+Outputs portfolio.parquet: Level 1 = (legal_entity_id, eclass); Level 2 = (legal_entity_id, eclass, manufacturer).
 """
 
 from __future__ import annotations
@@ -19,6 +18,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scores", required=True, help="Path to scores.parquet.")
     parser.add_argument("--output", required=True, help="Path to output portfolio.parquet.")
+    parser.add_argument(
+        "--level",
+        required=True,
+        choices=("1", "2"),
+        help="Level 1 or 2; level 2 portfolio includes manufacturer.",
+    )
     parser.add_argument(
         "--score-threshold",
         type=float,
@@ -67,7 +72,10 @@ def main() -> None:
     out_path = Path(args.output)
 
     df = pd.read_parquet(scores_path)
-    for col in ("legal_entity_id", "eclass", "score_base", "n_orders", "m_active", "historical_purchase_value_total"):
+    required = ["legal_entity_id", "eclass", "score_base", "n_orders", "m_active", "historical_purchase_value_total"]
+    if args.level == "2":
+        required.append("manufacturer")
+    for col in required:
         if col not in df.columns:
             raise ValueError(f"scores must contain '{col}'. Got: {list(df.columns)}")
 
@@ -92,7 +100,8 @@ def main() -> None:
         .head(args.top_k_per_buyer)
     )
 
-    portfolio = df[["legal_entity_id", "eclass"]].drop_duplicates()
+    portfolio_cols = ["legal_entity_id", "eclass", "manufacturer"] if args.level == "2" else ["legal_entity_id", "eclass"]
+    portfolio = df[[c for c in portfolio_cols if c in df.columns]].drop_duplicates()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     portfolio.to_parquet(out_path, index=False)
     print(f"Wrote {len(portfolio)} portfolio rows to {out_path}")

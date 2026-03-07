@@ -29,8 +29,8 @@ except ImportError:
 
 # Target column for correlation panels (historical train-period purchase value)
 TARGET_COL = "historical_purchase_value_total"
-# Columns to exclude from predictor list (keys + target and its direct transform)
-EXCLUDE_FROM_PREDICTORS = {"legal_entity_id", "eclass", TARGET_COL, "historical_purchase_value_sqrt"}
+# Base key columns; manufacturer added when present (level 2)
+EXCLUDE_FROM_PREDICTORS_BASE = {"legal_entity_id", "eclass", TARGET_COL, "historical_purchase_value_sqrt"}
 
 # Heuristic: use hexbin when row count above this to avoid overplotting
 HEXBIN_MIN_ROWS = 1500
@@ -126,6 +126,12 @@ def main() -> None:
 
     df = pd.read_parquet(args.features)
 
+    # Infer level from schema: level 2 has manufacturer in key
+    entity_key = ["legal_entity_id", "eclass", "manufacturer"] if "manufacturer" in df.columns else ["legal_entity_id", "eclass"]
+    exclude_from_predictors = set(EXCLUDE_FROM_PREDICTORS_BASE)
+    if "manufacturer" in df.columns:
+        exclude_from_predictors.add("manufacturer")
+
     # Attach validation label and s_val if plis and val window provided
     label_series: pd.Series | None = None
     s_val_series: pd.Series | None = None
@@ -141,12 +147,15 @@ def main() -> None:
         v = pd.to_numeric(plis["vk_per_item"], errors="coerce").fillna(0)
         plis["_spend"] = q * v
         plis = plis[plis["eclass"] != ""]
+        if "manufacturer" in plis.columns and "manufacturer" in df.columns:
+            plis["manufacturer"] = plis["manufacturer"].astype(str).str.strip().replace("nan", "")
+            plis = plis[plis["manufacturer"] != ""]
         val_agg = (
-            plis.groupby(["legal_entity_id", "eclass"])
+            plis.groupby(entity_key)
             .agg(n_orders_val=("_spend", "count"), s_val=("_spend", "sum"))
             .reset_index()
         )
-        df = df.merge(val_agg, on=["legal_entity_id", "eclass"], how="left")
+        df = df.merge(val_agg, on=entity_key, how="left")
         df["n_orders_val"] = df["n_orders_val"].fillna(0).astype(int)
         df["s_val"] = df["s_val"].fillna(0)
         df["label"] = (df["n_orders_val"] >= args.n_min_label).astype(int)
@@ -154,7 +163,7 @@ def main() -> None:
         s_val_series = df["s_val"]
 
     # Key columns always retained; exclude from numeric summary
-    key_cols = {"legal_entity_id", "eclass"}
+    key_cols = set(entity_key)
     feature_cols = [c for c in df.columns if c not in key_cols and c not in {"label", "s_val", "n_orders_val"}]
 
     rows = []
@@ -293,7 +302,7 @@ def main() -> None:
         else:
             predictor_cols = [
                 c for c in numeric.columns
-                if c not in EXCLUDE_FROM_PREDICTORS
+                if c not in exclude_from_predictors
             ]
             if not predictor_cols:
                 fig, ax = plt.subplots(figsize=(6, 4))

@@ -1,9 +1,9 @@
 """
 Derived feature engineering: raw features + plis/customer/nace -> full feature matrix.
 
-Reads data/08_features_raw/{mode}/features_raw.parquet and adds all derived
-features (m_active, rho_freq, delta_recency, gap stats, economic, trend,
-buyer context, etc.). Output: data/09_features_derived/{mode}/features_all.parquet.
+Reads data/08_features_raw/{mode}/level{level}/features_raw.parquet and adds all derived
+features. Level 2 keeps (legal_entity_id, eclass, manufacturer) as entity key throughout.
+Output: data/09_features_derived/{mode}/level{level}/features_all.parquet.
 """
 
 from __future__ import annotations
@@ -15,11 +15,13 @@ import numpy as np
 import pandas as pd
 
 
-def _read_plis(path: Path) -> pd.DataFrame:
+def _read_plis(path: Path, require_manufacturer: bool = False) -> pd.DataFrame:
     df = pd.read_csv(path, sep="\t", low_memory=False)
     for col in ("legal_entity_id", "orderdate", "eclass", "quantityvalue", "vk_per_item"):
         if col not in df.columns:
             raise ValueError(f"plis must contain '{col}'. Got: {list(df.columns)}")
+    if require_manufacturer and "manufacturer" not in df.columns:
+        raise ValueError("plis must contain 'manufacturer' for level 2.")
     return df
 
 
@@ -58,6 +60,12 @@ def main() -> None:
         dest="lookback_months",
         help="Lookback window in months for Phase 3 features (default: 18).",
     )
+    parser.add_argument(
+        "--level",
+        required=True,
+        choices=("1", "2"),
+        help="Level 1 = (legal_entity_id, eclass); Level 2 = (legal_entity_id, eclass, manufacturer).",
+    )
     args = parser.parse_args()
 
     raw_path = Path(args.features_raw)
@@ -66,9 +74,14 @@ def main() -> None:
     out_path = Path(args.output)
     train_end = pd.Timestamp(args.train_end)
     lookback_months = args.lookback_months
+    level = int(args.level)
+    entity_key = ["legal_entity_id", "eclass", "manufacturer"] if level == 2 else ["legal_entity_id", "eclass"]
 
     df = pd.read_parquet(raw_path)
-    for col in ("legal_entity_id", "eclass", "n_orders", "historical_purchase_value_total", "orderdate_min", "orderdate_max", "orderdates_str"):
+    required_raw = ["legal_entity_id", "eclass", "n_orders", "historical_purchase_value_total", "orderdate_min", "orderdate_max", "orderdates_str"]
+    if level == 2:
+        required_raw.insert(2, "manufacturer")
+    for col in required_raw:
         if col not in df.columns:
             raise ValueError(f"features_raw must contain '{col}'. Got: {list(df.columns)}")
 
@@ -124,10 +137,13 @@ def main() -> None:
     # Economic
     df["historical_purchase_value_sqrt"] = np.sqrt(df["historical_purchase_value_total"])
 
-    plis = _read_plis(plis_path)
+    plis = _read_plis(plis_path, require_manufacturer=(level == 2))
     plis["orderdate"] = pd.to_datetime(plis["orderdate"], format="%Y-%m-%d")
     plis["legal_entity_id"] = plis["legal_entity_id"].astype(str)
     plis["eclass"] = plis["eclass"].astype(str).str.strip().replace("nan", "")
+    if level == 2:
+        plis["manufacturer"] = plis["manufacturer"].astype(str).str.strip().replace("nan", "")
+        plis = plis[plis["manufacturer"] != ""]
     q = pd.to_numeric(plis["quantityvalue"], errors="coerce").fillna(0)
     v = pd.to_numeric(plis["vk_per_item"], errors="coerce").fillna(0)
     plis["_spend"] = q * v
@@ -137,14 +153,14 @@ def main() -> None:
         (plis["orderdate"] >= lookback_start) & (plis["orderdate"] <= train_end)
     ]
     lookback_agg = (
-        plis_lookback.groupby(["legal_entity_id", "eclass"])
+        plis_lookback.groupby(entity_key)
         .agg(
             n_orders_in_lookback=("_spend", "count"),
             lookback_spend=("_spend", "sum"),
         )
         .reset_index()
     )
-    df = df.merge(lookback_agg, on=["legal_entity_id", "eclass"], how="left")
+    df = df.merge(lookback_agg, on=entity_key, how="left")
     df["avg_spend_per_order"] = (
         df["lookback_spend"]
         / df["n_orders_in_lookback"].clip(lower=1)
@@ -215,15 +231,32 @@ def main() -> None:
     )
 
     line_median = (
-        plis.groupby(["legal_entity_id", "eclass"])["_spend"]
+        plis.groupby(entity_key)["_spend"]
         .median()
         .reset_index()
         .rename(columns={"_spend": "s_median_line"})
     )
-    df = df.merge(line_median, on=["legal_entity_id", "eclass"], how="left")
+    df = df.merge(line_median, on=entity_key, how="left")
 
-    # Manufacturer concentration per (buyer, eclass)
-    if "manufacturer" in plis.columns:
+    # Manufacturer concentration: level1 = per (buyer, eclass); level2 = per (buyer, eclass, manufacturer) row gets its share
+    if level == 2 and "manufacturer" in plis.columns:
+        manu = plis.copy()
+        manu_agg = (
+            manu.groupby(entity_key, as_index=False)
+            .agg(manu_count=("_spend", "count"))
+        )
+        pair_total = manu_agg.groupby(["legal_entity_id", "eclass"])["manu_count"].transform("sum")
+        manu_agg["top_manufacturer_share"] = manu_agg["manu_count"] / pair_total
+        n_manu = (
+            manu_agg.groupby(["legal_entity_id", "eclass"])["manufacturer"]
+            .nunique()
+            .reset_index(name="n_distinct_manufacturers")
+        )
+        df = df.merge(manu_agg[entity_key + ["top_manufacturer_share"]], on=entity_key, how="left")
+        df = df.merge(n_manu, on=["legal_entity_id", "eclass"], how="left")
+        df["n_distinct_manufacturers"] = df["n_distinct_manufacturers"].fillna(1)
+        df["top_manufacturer_share"] = df["top_manufacturer_share"].fillna(1.0)
+    elif "manufacturer" in plis.columns:
         manu = plis.copy()
         manu["manufacturer"] = manu["manufacturer"].astype(str).str.strip().replace("nan", "")
         manu = manu[manu["manufacturer"] != ""]
@@ -385,7 +418,7 @@ def main() -> None:
     plis["_spend_recent_3m"] = np.where(plis["month_diff"] <= 2, plis["_spend"], 0.0)
     plis["_spend_recent_6m"] = np.where(plis["month_diff"] <= 5, plis["_spend"], 0.0)
     spend_recent = (
-        plis.groupby(["legal_entity_id", "eclass"], as_index=False)
+        plis.groupby(entity_key, as_index=False)
         .agg(
             spend_recent_3m=("_spend_recent_3m", "sum"),
             spend_recent_6m=("_spend_recent_6m", "sum"),
@@ -401,13 +434,12 @@ def main() -> None:
     spend_recent = spend_recent.drop(
         columns=["_order_value_mean", "_order_value_std"], errors="ignore"
     )
-    # Same as recent_3_over_6: null when spend_recent_6m is 0 (no 6m activity).
     spend_recent["spend_recent_ratio"] = np.where(
         spend_recent["spend_recent_6m"] > 0,
         spend_recent["spend_recent_3m"] / spend_recent["spend_recent_6m"],
         np.nan,
     )
-    df = df.merge(spend_recent, on=["legal_entity_id", "eclass"], how="left")
+    df = df.merge(spend_recent, on=entity_key, how="left")
 
     customer = _read_customer(customer_path)
     customer["legal_entity_id"] = customer["legal_entity_id"].astype(str)
@@ -523,6 +555,8 @@ def main() -> None:
         "n_distinct_manufacturers",
         "eclass_n_buyers_global",
     ]
+    if level == 2:
+        out_cols.insert(2, "manufacturer")
 
     df = df[[c for c in out_cols if c in df.columns]]
     out_path.parent.mkdir(parents=True, exist_ok=True)

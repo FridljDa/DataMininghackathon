@@ -278,24 +278,27 @@ def main() -> None:
     if level == 1:
         portfolio["cluster"] = portfolio["eclass"]
     else:
-        # Level 2: look up most frequent manufacturer per (legal_entity_id, eclass) from plis
-        plis_full = pd.read_csv(plis_path, sep="\t", usecols=["legal_entity_id", "eclass", "manufacturer"], low_memory=False)
-        plis_full["legal_entity_id"] = plis_full["legal_entity_id"].astype(str)
-        plis_full["eclass"] = plis_full["eclass"].astype(str).str.strip().replace("nan", "")
-        plis_full["manufacturer"] = plis_full["manufacturer"].astype(str).str.strip().replace("nan", "")
-        plis_full = plis_full[(plis_full["eclass"] != "") & (plis_full["manufacturer"] != "")]
-        if len(plis_full) > 0:
-            top_manu = (
-                plis_full.groupby(["legal_entity_id", "eclass", "manufacturer"], as_index=False)
-                .size()
-                .sort_values("size", ascending=False)
-                .drop_duplicates(subset=["legal_entity_id", "eclass"], keep="first")
-                [["legal_entity_id", "eclass", "manufacturer"]]
-            )
-            portfolio = portfolio.merge(top_manu, on=["legal_entity_id", "eclass"], how="left")
+        # Level 2: use manufacturer from portfolio if present, else look up from plis
+        if "manufacturer" in portfolio.columns:
+            portfolio["manufacturer"] = portfolio["manufacturer"].astype(str).str.strip().replace("nan", "")
         else:
-            portfolio["manufacturer"] = ""
-        portfolio["manufacturer"] = portfolio["manufacturer"].fillna("").astype(str)
+            plis_full = pd.read_csv(plis_path, sep="\t", usecols=["legal_entity_id", "eclass", "manufacturer"], low_memory=False)
+            plis_full["legal_entity_id"] = plis_full["legal_entity_id"].astype(str)
+            plis_full["eclass"] = plis_full["eclass"].astype(str).str.strip().replace("nan", "")
+            plis_full["manufacturer"] = plis_full["manufacturer"].astype(str).str.strip().replace("nan", "")
+            plis_full = plis_full[(plis_full["eclass"] != "") & (plis_full["manufacturer"] != "")]
+            if len(plis_full) > 0:
+                top_manu = (
+                    plis_full.groupby(["legal_entity_id", "eclass", "manufacturer"], as_index=False)
+                    .size()
+                    .sort_values("size", ascending=False)
+                    .drop_duplicates(subset=["legal_entity_id", "eclass"], keep="first")
+                    [["legal_entity_id", "eclass", "manufacturer"]]
+                )
+                portfolio = portfolio.merge(top_manu, on=["legal_entity_id", "eclass"], how="left")
+            else:
+                portfolio["manufacturer"] = ""
+            portfolio["manufacturer"] = portfolio["manufacturer"].fillna("").astype(str)
         portfolio["cluster"] = portfolio["eclass"] + "|" + portfolio["manufacturer"]
         portfolio = portfolio[portfolio["cluster"].str.contains(r"\S+\|\S+", regex=True, na=False)]
 

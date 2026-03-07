@@ -69,49 +69,32 @@ modelling:
     selected:
       - CV_gap
       - active_month_share_12m
+      - active_year_span
+      - avg_spend_per_order
       - delta_recency
-      - delta_trend
-      - first_order_year
+      - delta_vs_expected_gap
       - has_gap_history
-      - has_recent_spend_6m
-      - historical_purchase_value_sqrt
+      - has_multi_year_history
       - historical_purchase_value_total
+      - is_overdue
       - last_order_month_cos
       - last_order_month_sin
       - last_order_quarter_cos
       - last_order_quarter_sin
       - last_order_year
       - log_employees
-      - m_active
-      - mu_gap
-      - n_orders
+      - m_observed
+      - n_orders_in_lookback
       - nace_2
       - nace_code
       - nace_mismatch
       - order_value_cv
       - q4_share
       - recency_to_gap_ratio
-      - recent_3m_count
-      - recent_6m_count
       - s_median_line
       - secondary_nace_2
       - secondary_nace_code
-      - spend_recent_3m
-      - spend_recent_ratio
-      - n_orders_in_lookback
-      - lookback_spend
-      - avg_spend_per_order
-      - days_since_last
-      - history_cohort
-      - buyer_tenure_months
-      - pair_tenure_months
-      - effective_lookback_months
-      - avg_monthly_orders_buyer_tenure
-      - avg_monthly_orders_pair_tenure
-      - avg_monthly_spend_buyer_tenure
-      - avg_monthly_spend_pair_tenure
-      - avg_monthly_orders_in_lookback
-      - avg_monthly_spend_in_lookback
+      - sigma_gap
 
   # Per-approach config (output paths are data/11_predictions/{mode}/{approach}/scores.parquet)
   approaches:

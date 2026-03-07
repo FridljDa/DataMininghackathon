@@ -183,6 +183,7 @@ modelling:
       - avg_spend_per_order
       - buyer_tenure_months
       - delta_vs_expected_gap
+      - effective_lookback_months
       - first_order_year
       - is_overdue
       - last_order_month_cos

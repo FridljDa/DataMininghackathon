@@ -43,7 +43,7 @@ def _print_offline_score(
 
 def run_main() -> None:
     parser = argparse.ArgumentParser(description="Run a modelling approach and write scores.parquet.")
-    parser.add_argument("--approach", required=True, help="Approach name: baseline | lgbm_two_stage")
+    parser.add_argument("--approach", required=True, help="Approach name: baseline | lgbm_two_stage | pass_through")
     parser.add_argument("--candidates", required=True, help="Path to features/candidates parquet.")
     parser.add_argument(
         "--plis",

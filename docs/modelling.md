@@ -221,6 +221,12 @@ $$
 \widehat{EU}(b, e) = \hat{p}(b, e) \cdot \hat{v}(b, e) \cdot r - F
 $$
 
+### Pass-through (candidate-only)
+
+The **pass_through** approach is an explicit “model” that performs no scoring: every candidate is assigned a constant positive score so that, when the selection policy is configured for pass-through (see below), no further filtering is applied. Use it to submit exactly the candidate set $ \mathcal{C}_b $ for each warm buyer — e.g. for diagnostics or as an upper-bound on recall.
+
+- Set `modelling.active_approach: "pass_through"` and use the pass-through selection configuration; then $ \hat{S}_b = \mathcal{C}_b $ for every $ b $.
+
 ---
 
 ## 7. Selection Policy
@@ -241,11 +247,11 @@ $$
 
 4. Cap at top $ K $ by $ \widehat{EU} $ (`modelling.selection.top_k_per_buyer`; tune on validation; start $ K = 15 $).
 
-Pass-through configuration (to force all candidates into submission):
-- Set $ \tau_{EU} \ll 0 $ (or any value below the minimum $ \widehat{EU}(b,e) $)
+**Pass-through configuration** (to force all candidates into submission, e.g. when using the *pass_through* approach or for recall upper-bound):
+- Set $ \tau_{EU} \leq 0 $ (e.g. `score_threshold: 0`; pass_through sets all scores $ > 0 $)
 - Set $ X = 1 $, $ Y = 1 $, and $ \tau_{\text{high}} = 0 $
-- Set $ K \geq \max_b |\mathcal{C}_b| $ (or effectively no cap)
-- Then $ \hat{S}_b = \mathcal{C}_b $ for every warm buyer $ b $
+- Set $ K \geq \max_b |\mathcal{C}_b| $ (e.g. `top_k_per_buyer: 9999`)
+- Then $ \hat{S}_b = \mathcal{C}_b $ for every warm buyer $ b $ (portfolio equals candidate set)
 
 ---
 

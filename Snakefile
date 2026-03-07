@@ -59,11 +59,12 @@ rule prepare_split_customer_meta:
     output:
         customer = SPLIT_CUSTOMER_CSV,
     params:
+        cutoff = SPLIT["cutoff_date"],
         n_testing = SPLIT["test_customers_count"],
         seed = SPLIT["random_seed"],
     shell:
         "uv run src/prepare_split_customer_meta.py --customer-meta {input.customer} --plis {input.plis} "
-        "--output {output.customer} --n-testing {params.n_testing} --random-seed {params.seed}"
+        "--output {output.customer} --cutoff-date {params.cutoff} --n-testing {params.n_testing} --random-seed {params.seed}"
 
 rule split_plis_training_validation:
     """Split plis_training into training and testing: customers with task=testing; their rows with orderdate >= cutoff go to test, rest to training."""

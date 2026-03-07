@@ -2518,7 +2518,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 41590658	5.0	4332.0		none
 41590742	99.0	2511.0		none
 41590852	95.0	2223.0	1920.0	none
-41590978	800.0	3511.0	3522.0	none
+41590978	800.0	3511.0	3522.0	testing
 41591004	9.0	9609.0		none
 41591017		8411.0		none
 41591105	480.0	2120.0		none
@@ -2744,7 +2744,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 41611583	35.0	4674.0	4674.0	none
 41611645	50.0	8610.0		none
 41611962	10.0	7219.0		none
-41611967	582724.0	2910.0	4511.0	none
+41611967	582724.0	2910.0	4511.0	testing
 41611972	86.0	1729.0	2221.0	none
 41612219	9.0	9319.0		none
 41612376	232.0	2343.0		none
@@ -2772,7 +2772,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 41614907	5.0	2829.0		none
 41615368	10103.0	8542.0		none
 41615444	124.0	2895.0	2899.0	none
-41615530	24.0	2223.0	4649.0	testing
+41615530	24.0	2223.0	4649.0	none
 41615687	27.0	2829.0	2896.0	none
 41615771	99.0	222.0		none
 41615984	5.0	4741.0		none
@@ -3449,7 +3449,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60135666		2591.0		none
 60135824	100.0	1330.0	1419.0	none
 60135937	22.0	4791.0	4759.0	none
-60135952	86.0	7010.0	4791.0	testing
+60135952	86.0	7010.0	4791.0	none
 60136065		712.0		none
 60136067	3800.0	9601.0		none
 60136220	35.0	4321.0		none
@@ -4462,7 +4462,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60201404		8621.0		none
 60201438	250.0	2611.0	4652.0	none
 60201442	28.0	4221.0		none
-60201497	10.0	4651.0	6209.0	testing
+60201497	10.0	4651.0	6209.0	none
 60201580	99.0	2651.0		none
 60201585	32.0	2599.0	3299.0	none
 60201590	3500.0	8810.0		none
@@ -6227,7 +6227,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60309001	30.0	2899.0	2829.0	none
 60309010		4673.0		none
 60309083	21.0	4511.0		none
-60309096	2700.0	4931.0		none
+60309096	2700.0	4931.0		testing
 60309139	1000.0	3299.0	3211.0	none
 60309228	49.0	2813.0		none
 60309232	40.0	2651.0		none
@@ -6342,7 +6342,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60315404	883.0	4759.0	4730.0	none
 60315426	239.0	7219.0		none
 60315440	120.0	4677.0		none
-60315463	412.0	6201.0	6203.0	testing
+60315463	412.0	6201.0	6203.0	none
 60315470	9.0	2651.0	7112.0	none
 60315488	5.0	4773.0		none
 60315720	21.0	7112.0	3320.0	none
@@ -6653,7 +6653,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60332689	86.0	2221.0	2223.0	none
 60332693	447.0	2630.0	2630.0	none
 60332714	43.0	7120.0	7112.0	none
-60332766	6001.0	2011.0		testing
+60332766	6001.0	2011.0		none
 60332842	70.0	6530.0		none
 60332851	30.0	8710.0		none
 60332871	19.0	284.0		none
@@ -7054,7 +7054,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60355566		2822.0		none
 60355629	19.0	2431.0		none
 60355695	399.0	1091.0		none
-60355932	2270.0	35.0	360.0	none
+60355932	2270.0	35.0	360.0	testing
 60356013	270.0	4719.0		none
 60356024	176.0	2651.0		none
 60356102	4970.0	7112.0		none
@@ -7361,7 +7361,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60373126		8411.0		none
 60373171		9411.0		none
 60373177		781.0		none
-60373356	1192.0	3511.0		testing
+60373356	1192.0	3511.0		none
 60373364	94.0	1723.0		none
 60373397	25.0	9499.0		none
 60373422		9499.0		none
@@ -7838,7 +7838,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60402890	830.0	841.0		none
 60403215		141.0		none
 60403259				none
-60403408	2668.0	6010.0	5920.0	testing
+60403408	2668.0	6010.0	5920.0	none
 60403591	254.0	2120.0	4646.0	none
 60403627	49.0	4334.0		none
 60403633	84.0	5229.0		none
@@ -8449,7 +8449,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60436241	47.0	7112.0	8559.0	none
 60436263		2825.0		none
 60436337	119.0	721.0	7219.0	none
-60436493	215.0	3511.0		none
+60436493	215.0	3511.0		testing
 60436539				none
 60436542	127.0	3811.0		none
 60436554	1194.0	2829.0		none
@@ -9338,7 +9338,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60481811	19.0	4642.0		none
 60481816	230.0	8423.0		none
 60481821	98.0	2561.0		none
-60481866	1115.0	2110.0	7120.0	testing
+60481866	1115.0	2110.0	7120.0	none
 60481898	1775.0	2221.0		none
 60482012	3700.0	4638.0	4641.0	none
 60482036	120.0	4661.0	4614.0	none
@@ -9487,7 +9487,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60489451	50.0	8542.0		none
 60489482	3.0	7010.0	4669.0	none
 60489502	89.0	8542.0		none
-60489511	1184.0	1013.0	4632.0	none
+60489511	1184.0	1013.0	4632.0	testing
 60489608	54.0	1020.0	4638.0	none
 60489614	5.0	7112.0	7112.0	none
 60489679	230.0	7112.0		none
@@ -10961,7 +10961,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60563934		4652.0		none
 60563951	140.0	2059.0		none
 60563976	110.0	9601.0		none
-60564018	5300.0	60.0		none
+60564018	5300.0	60.0		testing
 60564037	5.0	4791.0		none
 60564040	20.0	4741.0		none
 60564043	263.0	2511.0	3030.0	none
@@ -11434,7 +11434,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60585145	316.0	8411.0		none
 60585171	51.0	7022.0		none
 60585207	126.0	3513.0	9311.0	none
-60585300	198194.0	6209.0		none
+60585300	198194.0	6209.0		testing
 60585331	3.0	4614.0	4322.0	none
 60585356	3.0	9499.0		none
 60585694	5.0			none
@@ -12390,7 +12390,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60630367	99.0	476.0		none
 60630484	5.0	7112.0		none
 60630521	400.0	7219.0		none
-60630587	1500.0	2822.0		none
+60630587	1500.0	2822.0		testing
 60630600	10.0	4643.0	4669.0	none
 60630625	5.0	8690.0	8810.0	none
 60630690	3.0	433.0		none
@@ -13121,7 +13121,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60664438		8411.0		none
 60664490	170.0	9609.0		none
 60664510	1600.0	6530.0		none
-60664512	10375.0	2751.0	9522.0	none
+60664512	10375.0	2751.0	9522.0	testing
 60664515		2822.0		none
 60664539	150.0	8422.0		none
 60664559	2.0	6832.0		none
@@ -15772,7 +15772,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60789780	155.0	2849.0	2573.0	none
 60789847	5.0	4511.0		none
 60789858	43.0	8542.0		none
-60789948	3077.0	7112.0		testing
+60789948	3077.0	7112.0		none
 60789986	5.0	4321.0		none
 60790008	5.0	702.0		none
 60790076	514.0	7112.0		none
@@ -15857,7 +15857,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60793000		161.0		none
 60793048	114.0	1392.0	2790.0	none
 60793073		6202.0		none
-60793103	419.0	1310.0	4641.0	testing
+60793103	419.0	1310.0	4641.0	none
 60793151	5.0	7010.0	4778.0	none
 60793159	9.0	2899.0	2825.0	none
 60793290	104.0	4643.0	9522.0	none
@@ -16163,7 +16163,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60807671	114.0	2891.0	4669.0	none
 60807753	10.0	4614.0	4614.0	none
 60807866	5.0	6920.0		none
-60808054	5.0	4742.0	4741.0	testing
+60808054	5.0	4742.0	4741.0	none
 60808162	5.0	28.0		none
 60808192	193.0	2319.0		none
 60808208	360.0	2790.0		none
@@ -16271,7 +16271,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60813680	240.0	2229.0	2651.0	none
 60813688	240.0	9412.0		none
 60813859	29.0	2670.0	4669.0	none
-60814024	5.0	6202.0	4741.0	none
+60814024	5.0	6202.0	4741.0	testing
 60814027	25.0	1032.0	4634.0	none
 60814062	193.0	2222.0		none
 60814074	19.0	4321.0		none
@@ -16373,7 +16373,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60819582	94.0	2229.0		none
 60819587	222.0	2441.0	3250.0	none
 60819604	1200.0	841.0		none
-60819658	2927.0	6201.0		none
+60819658	2927.0	6201.0		testing
 60819744	687.0	2059.0	2041.0	none
 60819815	5.0	2511.0		none
 60819874		8710.0		none
@@ -16483,7 +16483,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60824998	870.0	2829.0	2823.0	none
 60825072	8.0	9609.0	4618.0	none
 60825085	17.0	6203.0	8299.0	none
-60825250	143.0	7120.0		none
+60825250	143.0	7120.0		testing
 60825280	3200.0	9609.0	8559.0	none
 60825293	670.0	2899.0	4674.0	none
 60825296	2.0	222.0		none
@@ -16540,7 +16540,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60828234		253.0		none
 60828255	76.0	2562.0	3299.0	none
 60828305		5590.0	9499.0	none
-60828355	2956.0	3513.0		none
+60828355	2956.0	3513.0		testing
 60828382	19.0	7410.0		none
 60828391	226.0	3250.0	4646.0	none
 60828624	11.0	6209.0		none
@@ -16841,7 +16841,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60842188	167.0	1072.0	4636.0	none
 60842218	198.0	2529.0	2592.0	none
 60842285		691.0		none
-60842297	3319.0	65.0		testing
+60842297	3319.0	65.0		none
 60842307	5.0			none
 60842328	124.0	2841.0		none
 60842352	20.0	1061.0		none
@@ -17324,7 +17324,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60871724	93.0	2651.0	2712.0	none
 60871802	5.0	620.0	6201.0	none
 60871873	470.0	1082.0		none
-60872018	806.0	2894.0		none
+60872018	806.0	2894.0		testing
 60872022	50.0	9411.0	9412.0	none
 60872039	60.0	841.0		none
 60872049	302816.0	4910.0		none
@@ -17846,7 +17846,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60902088	95.0	1101.0		none
 60902089				none
 60902122	70.0	2562.0	2451.0	none
-60902140	150.0	7010.0	8299.0	testing
+60902140	150.0	7010.0	8299.0	none
 60902154	9.0	5510.0		none
 60902262	60.0	4643.0	2670.0	none
 60902330	400.0	2630.0		none
@@ -18684,7 +18684,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60941929	774.0	4939.0		none
 60942001	49.0	2829.0		none
 60942089	199.0	2229.0		none
-60942093	10258.0	2550.0		testing
+60942093	10258.0	2550.0		none
 60942101	10.0	6110.0	7112.0	none
 60942112	5.0	329.0		none
 60942121	9.0	8690.0		none
@@ -19171,7 +19171,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 60964428	7.0	6209.0		none
 60964479	5.0	8622.0		none
 60964486	19.0	1399.0		none
-60964625	205.0	2892.0	2573.0	none
+60964625	205.0	2892.0	2573.0	testing
 60964631	36.0	2229.0		none
 60964661		274.0		none
 60964691	159.0	5811.0	4791.0	none
@@ -20014,7 +20014,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61002812	50.0	8411.0		none
 61002818	5.0	2221.0		none
 61002838	5.0	8690.0		none
-61002887	2200.0	3832.0	3811.0	testing
+61002887	2200.0	3832.0	3811.0	none
 61002900	100.0	9104.0		none
 61002958		4647.0		none
 61002969		8899.0		none
@@ -20180,7 +20180,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61009306	750.0	8710.0		none
 61009341	10.0	4618.0		none
 61009342	49.0	2591.0		none
-61009391	889.0	1712.0		none
+61009391	889.0	1712.0		testing
 61009493	5.0	8130.0		none
 61009548	49.0	2829.0		none
 61009550	600.0	8422.0		none
@@ -20821,7 +20821,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61038381	49.0	2829.0	2562.0	none
 61038387	99.0	2651.0		none
 61038445	841.0	8810.0		none
-61038453	1800.0	1082.0	1031.0	testing
+61038453	1800.0	1082.0	1031.0	none
 61038475	11.0	4646.0		none
 61038495	25.0	265.0		none
 61038516	256.0	2932.0	2529.0	none
@@ -20946,7 +20946,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61043545	40.0	8622.0		none
 61043586	250.0	2016.0	2573.0	none
 61043590	291.0	2640.0	4651.0	none
-61043597	5319.0	5229.0		none
+61043597	5319.0	5229.0		testing
 61043631	80.0	8411.0		none
 61043643	10.0	2651.0		none
 61043650	166.0	3320.0	4321.0	none
@@ -21737,7 +21737,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61080351	5.0	1629.0	4613.0	none
 61080353	279.0	2611.0		none
 61080506	859.0	3312.0	9529.0	none
-61080533	4015.0	2572.0	222.0	testing
+61080533	4015.0	2572.0	222.0	none
 61080561	1308.0	8411.0		none
 61080677	136.0	2849.0	4662.0	none
 61080760	35.0	25.0	2562.0	none
@@ -22190,7 +22190,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61100152		7311.0		none
 61100166	540.0	2899.0	4661.0	none
 61100237	49.0	2651.0		none
-61100251	1350.0	1013.0		none
+61100251	1350.0	1013.0		testing
 61100260		411.0		none
 61100265		3299.0		none
 61100266	800.0	841.0		none
@@ -22347,7 +22347,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61106340	56.0	241.0	2511.0	none
 61106359	19.0	2573.0		none
 61106368		191.0		none
-61106386	551.0	5229.0	7022.0	none
+61106386	551.0	5229.0	7022.0	testing
 61106427	100.0	3811.0	8130.0	none
 61106512		4646.0		none
 61106535	199.0	7711.0		none
@@ -22412,7 +22412,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61109535	20.0	8424.0		none
 61109588	933.0	6419.0		none
 61109599	630.0	6201.0	4778.0	none
-61109692	105.0	2899.0	2651.0	testing
+61109692	105.0	2899.0	2651.0	none
 61109715	5.0	4646.0		none
 61109797		161.0		none
 61109807	13.0	841.0		none
@@ -22458,7 +22458,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61111175	5.0	4613.0		none
 61111268	1800.0	3511.0	3511.0	none
 61111275	2000.0	8430.0		none
-61111309	5.0	4669.0	4619.0	none
+61111309	5.0	4669.0	4619.0	testing
 61111453		29.0		none
 61111472	38.0	4669.0	2812.0	none
 61111575	12.0	85.0		none
@@ -22717,7 +22717,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61124003		8411.0		none
 61124069		411.0		none
 61124155	20.0	6201.0		none
-61124174	1700.0	3522.0		testing
+61124174	1700.0	3522.0		none
 61124273	49.0	2651.0		none
 61124281	170.0	4531.0	4661.0	none
 61124326	5.0	960.0		none
@@ -22925,7 +22925,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61134592	21.0	4321.0	4651.0	none
 61134666	250.0	1721.0	1712.0	none
 61134787	20.0	2229.0		none
-61134809	1097.0	1812.0		testing
+61134809	1097.0	1812.0		none
 61134811	3.0	4644.0		none
 61134826	43.0	2830.0		none
 61134847	311.0	1920.0	2059.0	none
@@ -24735,7 +24735,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61207657		701.0		none
 61207658				none
 61207689	15.0	6920.0	4741.0	none
-61207727	147.0	2611.0	2611.0	none
+61207727	147.0	2611.0	2611.0	testing
 61207732	154.0	4675.0	4643.0	none
 61207806				none
 61207881	915.0	2829.0	2016.0	none
@@ -24913,7 +24913,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61213787		692.0		none
 61213818		3511.0		none
 61213875		551.0		none
-61213883	2800.0	1071.0	4636.0	none
+61213883	2800.0	1071.0	4636.0	testing
 61214067		2611.0		none
 61214112				none
 61214165		411.0		none
@@ -25058,7 +25058,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61220507	12.0	4321.0	4329.0	none
 61220519	4650.0	4791.0	4791.0	none
 61220541		2591.0		none
-61220581	10.0	2611.0	4669.0	testing
+61220581	10.0	2611.0	4669.0	none
 61220596	80.0	5510.0		none
 61220600		266.0		none
 61220649	6.0	6820.0	6810.0	none
@@ -25265,7 +25265,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61228323		1512.0		none
 61228343		91.0		none
 61228354		253.0		none
-61228366				none
+61228366				testing
 61228376		4643.0		none
 61228401	301.0	150.0	149.0	none
 61228484				none
@@ -25382,7 +25382,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61232546				none
 61232572	190.0	2229.0	2573.0	none
 61232607		211.0		none
-61232622	1191.0	2332.0	4613.0	testing
+61232622	1191.0	2332.0	4613.0	none
 61232689		162.0		none
 61232701	10.0	8299.0		none
 61232711	304.0	3101.0	4647.0	none
@@ -25992,7 +25992,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61256860				none
 61256920		1512.0		none
 61256958		4932.0		none
-61257018	850.0	7112.0	281.0	none
+61257018	850.0	7112.0	281.0	testing
 61257021		2812.0		none
 61257049	1141.0	3320.0	2651.0	none
 61257102	1165.0	2573.0		none
@@ -26035,7 +26035,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61258411	222.0	8299.0	2829.0	none
 61258415	4.0	4669.0		none
 61258445	280.0	6202.0		none
-61258490	870.0	2932.0	461.0	testing
+61258490	870.0	2932.0	461.0	none
 61258496		2811.0		none
 61258593				none
 61258771	867.0	1013.0		none
@@ -26519,7 +26519,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61275996	700.0	1610.0		none
 61276025	80.0	2670.0		none
 61276091		4643.0		none
-61276151	400.0	2059.0	2011.0	testing
+61276151	400.0	2059.0	2011.0	none
 61276169				none
 61276191	250.0	5229.0		none
 61276224	210.0	7219.0		none
@@ -26622,7 +26622,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61279243	339.0	381.0	3821.0	none
 61279292	16.0	7990.0		none
 61279351		4743.0		none
-61279381	368.0	4690.0		none
+61279381	368.0	4690.0		testing
 61279414		4631.0		none
 61279415		8411.0		none
 61279425		8411.0		none
@@ -27785,7 +27785,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61319515	1339.0	30.0		none
 61319552	3001.0	8411.0		none
 61319559		851.0		none
-61319560	2142.0	2059.0	721.0	none
+61319560	2142.0	2059.0	721.0	testing
 61319562				none
 61319564	66.0	3511.0		none
 61319587	725.0	8129.0		none
@@ -27942,7 +27942,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61325098		133.0		none
 61325104	1300.0	2829.0		none
 61325140		162.0		none
-61325145	170.0	5210.0	4941.0	testing
+61325145	170.0	5210.0	4941.0	none
 61325153	88.0	7112.0	28.0	none
 61325162	1500.0	8411.0		none
 61325205	85.0	5030.0	50.0	none
@@ -28085,7 +28085,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61329746	351.0	7219.0		none
 61329771		701.0		none
 61329775	364.0	8542.0		none
-61329891	1200.0	2825.0	2932.0	testing
+61329891	1200.0	2825.0	2932.0	none
 61329987	105.0	8299.0		none
 61329992	200.0	9499.0	4649.0	none
 61329997		84.0		none
@@ -29278,7 +29278,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61366600		161.0		none
 61366606		2811.0		none
 61366621		701.0		none
-61366622	9193.0	5223.0		testing
+61366622	9193.0	5223.0		none
 61366669		91.0		none
 61366679		8621.0		none
 61366770		131.0		none
@@ -29417,7 +29417,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61370793		191.0		none
 61370835	150.0	8424.0		none
 61370855	250.0	8899.0		none
-61370950	255.0	2790.0	4652.0	testing
+61370950	255.0	2790.0	4652.0	none
 61370973		551.0		none
 61371002		4721.0		none
 61371003		4751.0		none
@@ -29950,7 +29950,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61383766	3.0	94.0		none
 61383769		279.0		none
 61383810		4721.0		none
-61383821	10.0	58.0		none
+61383821	10.0	58.0		testing
 61383822	47.0	7022.0	6311.0	none
 61383832	116.0	4643.0	2651.0	none
 61383843	276.0	2829.0	28.0	none
@@ -31315,7 +31315,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61420614		4643.0		none
 61420695	42.0	2712.0	4321.0	none
 61420725	15.0	8531.0		none
-61420736	411.0	6209.0	6820.0	none
+61420736	411.0	6209.0	6820.0	testing
 61420743	34.0	2849.0	2573.0	none
 61420751		2821.0		none
 61420760	468.0	8424.0		none
@@ -31444,7 +31444,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61423265		4651.0		none
 61423279		561.0		none
 61423308		8411.0		none
-61423353	1983.0	8730.0	8710.0	testing
+61423353	1983.0	8730.0	8710.0	none
 61423382	163.0	4646.0		none
 61423390	8.0	683.0		none
 61423412	250.0	8899.0		none
@@ -31819,7 +31819,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61431624		211.0		none
 61431712		254.0		none
 61431715		91.0		none
-61431727	1403.0	4649.0	4764.0	testing
+61431727	1403.0	4649.0	4764.0	none
 61431730		8411.0		none
 61431755		5229.0		none
 61431793	20.0	6201.0	4651.0	none
@@ -32076,7 +32076,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61436569				none
 61436612	500.0	7112.0		none
 61436639	5.0	4762.0		none
-61436669	3835.0	642.0		none
+61436669	3835.0	642.0		testing
 61436678		5821.0		none
 61436728		872.0		none
 61436730		4641.0		none
@@ -32223,7 +32223,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61439821		37.0		none
 61439852				none
 61439860		91.0		none
-61439889	1284.0	9609.0	7022.0	testing
+61439889	1284.0	9609.0	7022.0	none
 61439900	2754.0	2229.0		none
 61439982				none
 61440056		2812.0		none
@@ -32295,7 +32295,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61441549	450.0	2815.0	2573.0	none
 61441579	2300.0	3299.0	279.0	none
 61441603		37.0		none
-61441615	3027.0	7112.0	7490.0	testing
+61441615	3027.0	7112.0	7490.0	none
 61441665				none
 61441672	10.0	4647.0		none
 61441692				none
@@ -32313,7 +32313,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61441900		4531.0		none
 61441935		4743.0		none
 61441941	332.0	2599.0		none
-61441954	4500.0	1812.0		testing
+61441954	4500.0	1812.0		none
 61441985				none
 61442105		4321.0		none
 61442106		411.0		none
@@ -32943,7 +32943,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61455292	265.0	8299.0	7022.0	none
 61455323				none
 61455333				none
-61455365	105.0	7010.0	8299.0	none
+61455365	105.0	7010.0	8299.0	testing
 61455486		851.0		none
 61455494		701.0		none
 61455499		279.0		none
@@ -33097,7 +33097,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61458468		2822.0		none
 61458471	404.0	2573.0	4674.0	none
 61458484	1252.0	210.0		none
-61458494	3065.0	2891.0		none
+61458494	3065.0	2891.0		testing
 61458507	2.0	4646.0		none
 61458509				none
 61458514				none
@@ -33441,7 +33441,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61465067	752.0	6419.0		none
 61465093		4673.0		none
 61465097				none
-61465101	315.0	8411.0		testing
+61465101	315.0	8411.0		none
 61465107	424.0	293.0	2841.0	none
 61465109				none
 61465141	989.0	2932.0		none
@@ -34357,7 +34357,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61483004	1743.0	7022.0	2014.0	none
 61483054		561.0		none
 61483056		411.0		none
-61483065	49000.0	2611.0	2630.0	none
+61483065	49000.0	2611.0	2630.0	testing
 61483066		4741.0		none
 61483073		712.0		none
 61483074		2441.0		none
@@ -34510,7 +34510,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61486077		561.0		none
 61486120				none
 61486128		4673.0		none
-61486140	2158.0	2829.0		none
+61486140	2158.0	2829.0		testing
 61486164		411.0		none
 61486173		1624.0		none
 61486177	5.0	4520.0	5610.0	none
@@ -34580,7 +34580,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61487790		2219.0		none
 61487801		8411.0		none
 61487816	92.0	1721.0	2222.0	none
-61487828	41097.0	4646.0	2120.0	none
+61487828	41097.0	4646.0	2120.0	testing
 61487907		4743.0		none
 61487918	116.0	4120.0	4391.0	none
 61487924	2114.0	8610.0		none
@@ -35367,7 +35367,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61502850		8541.0		none
 61502878	136.0	4511.0	4520.0	none
 61502895				none
-61502910	260.0	2591.0		none
+61502910	260.0	2591.0		testing
 61502933		701.0		none
 61502961				none
 61502965		1722.0		none
@@ -35421,7 +35421,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61503738		4643.0		none
 61503751		91.0		none
 61503804		701.0		none
-61503829	1902.0	2830.0	3312.0	testing
+61503829	1902.0	2830.0	3312.0	none
 61503831	92.0	7219.0	8690.0	none
 61503886	26.0	2511.0		none
 61503887		712.0		none
@@ -36763,7 +36763,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61808519		131.0		none
 61808524	120.0	4675.0	2060.0	none
 61808535		8411.0		none
-61808544	30.0	7211.0	7219.0	none
+61808544	30.0	7211.0	7219.0	testing
 61808545	38.0	2611.0	4652.0	none
 61808553	160.0	4669.0		none
 61808633		162.0		none
@@ -37425,7 +37425,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61818462		3011.0		none
 61818475	98.0	2899.0	4669.0	none
 61818486				none
-61818490	544.0	2651.0		testing
+61818490	544.0	2651.0		none
 61818492		91.0		none
 61818505				none
 61818515				none
@@ -39943,12 +39943,12 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61846566				none
 61846569		551.0		none
 61846573	250.0	293.0		none
-61846579	302816.0	4910.0		testing
+61846579	302816.0	4910.0		none
 61846595		5229.0		none
 61846596	302816.0	4910.0		none
 61846599	302816.0	4910.0		none
 61846606				none
-61846611	302816.0	4910.0		none
+61846611	302816.0	4910.0		testing
 61846612	302816.0	4910.0		none
 61846615	302816.0	4910.0		none
 61846616	302816.0	4910.0		predict future
@@ -40457,7 +40457,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61851761		91.0		none
 61851766		1512.0		none
 61851773	113.0	8690.0		none
-61851774	1731.0	5229.0	52.0	testing
+61851774	1731.0	5229.0	52.0	none
 61851776				none
 61851780	275.0	2651.0	4652.0	none
 61851785				none
@@ -41328,7 +41328,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61859873		2571.0		none
 61859881		191.0		none
 61859902		99.0		none
-61859916	939.0	5229.0	6201.0	testing
+61859916	939.0	5229.0	6201.0	none
 61859918	3.0	5229.0	7022.0	none
 61859939				none
 61859942				none
@@ -41663,7 +41663,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61862834		161.0		none
 61862845		162.0		none
 61862863		8411.0		none
-61862878	449.0	6311.0	35.0	none
+61862878	449.0	6311.0	35.0	testing
 61862906		279.0		none
 61862909		255.0		none
 61862915		4651.0		none
@@ -41731,7 +41731,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61863480	6000.0	8424.0		none
 61863494		253.0		none
 61863506		133.0		none
-61863507	50.0	8542.0		none
+61863507	50.0	8542.0		testing
 61863519		5821.0		none
 61863521		8411.0		none
 61863522				none
@@ -41915,7 +41915,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61865211		692.0		none
 61865223		211.0		none
 61865228		701.0		none
-61865238	2190.0	7010.0	2813.0	testing
+61865238	2190.0	7010.0	2813.0	none
 61865244		4643.0		none
 61865258				none
 61865264	373.0	2830.0		none
@@ -41999,7 +41999,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61865862		551.0		none
 61865863	300.0	2712.0	2611.0	none
 61865864		2591.0		none
-61865873	2754.0	2229.0		none
+61865873	2754.0	2229.0		testing
 61865879				none
 61865882		84.0		none
 61865885		3291.0		none
@@ -42180,7 +42180,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61867487		4643.0		none
 61867488	500.0	21.0	2120.0	none
 61867497	1905.0	5223.0		none
-61867503	1300.0	2410.0		none
+61867503	1300.0	2410.0		testing
 61867510		203.0		none
 61867523		162.0		none
 61867524	250.0	8899.0		none
@@ -42327,7 +42327,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61869707		2822.0		none
 61869711		2811.0		none
 61869712		4672.0		none
-61869718	1660.0	2611.0		none
+61869718	1660.0	2611.0		testing
 61869734		37.0		none
 61869751		7211.0		none
 61869753		279.0		none
@@ -44067,7 +44067,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61883461				none
 61883485		861.0		none
 61883499		253.0		none
-61883536	2528.0	1072.0	1071.0	testing
+61883536	2528.0	1072.0	1071.0	none
 61883539	120.0	2670.0		none
 61883540		691.0		none
 61883550		561.0		none
@@ -45421,7 +45421,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61888843		2821.0		none
 61888845		642.0		none
 61888847		2894.0		none
-61888848	4415.0	2445.0	4672.0	testing
+61888848	4415.0	2445.0	4672.0	none
 61888849		701.0		none
 61888850		8411.0		none
 61888852		4321.0		none
@@ -51443,7 +51443,7 @@ legal_entity_id	estimated_number_employees	nace_code	secondary_nace_code	task
 61904792				none
 61904796				none
 61904797				none
-61904800	1400.0	3511.0	3821.0	testing
+61904800	1400.0	3511.0	3821.0	none
 61904805				none
 61904807	144.0	7810.0		none
 61904808				none

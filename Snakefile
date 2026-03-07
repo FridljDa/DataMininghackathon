@@ -27,6 +27,9 @@ SCORE_SUMMARY = SCORE_OUTPUTS["summary"]
 SCORE_DETAILS = SCORE_OUTPUTS["details"]
 SCORE_SUMMARY_OFFLINE = SCORE_OUTPUTS["summary_offline"]
 SCORE_DETAILS_OFFLINE = SCORE_OUTPUTS["details_offline"]
+SCORE_RUN_ARCHIVE = config["score_run_archive"]
+ARCHIVE_SENTINEL_ONLINE = SCORE_RUN_ARCHIVE["online_runs_dir"] + "/.last_archived"
+ARCHIVE_SENTINEL_OFFLINE = SCORE_RUN_ARCHIVE["offline_runs_dir"] + "/.last_archived"
 SCORING_PARAMS = config["scoring_parameters"]
 
 PLOTS = config["plots"]
@@ -67,6 +70,7 @@ rule all:
         FEATURE_ANALYSIS_PLOTS_OFFLINE,
         SCORE_SUMMARY,
         SCORE_DETAILS,
+        ARCHIVE_SENTINEL_ONLINE,
 
 rule generate_dag_graph:
     """Write workflow DAG as SVG (no input dependencies; run first)."""
@@ -287,6 +291,20 @@ rule score_submission:
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
         "--scoring-months {params.scoring_months}"
 
+rule archive_score_run:
+    """Copy current online score outputs into a timestamp+commit run folder and write metadata + run index."""
+    input:
+        summary = SCORE_SUMMARY,
+        details = SCORE_DETAILS,
+    output:
+        sentinel = ARCHIVE_SENTINEL_ONLINE,
+    params:
+        runs_dir = SCORE_RUN_ARCHIVE["online_runs_dir"],
+        index_csv = SCORE_RUN_ARCHIVE["run_index_online"],
+    shell:
+        "uv run src/archive_score_run.py --summary {input.summary} --details {input.details} "
+        "--runs-dir {params.runs_dir} --index-csv {params.index_csv} && touch {output.sentinel}"
+
 rule submit_to_portal:
     """Upload submission to Unite evaluator (challenge 2). Requires TEAM and PASSWORD in .env."""
     input:
@@ -422,3 +440,17 @@ rule score_submission_offline:
         "--summary {output.summary} --details {output.details} --level 1 "
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
         "--scoring-months {params.scoring_months}"
+
+rule archive_score_run_offline:
+    """Copy current offline score outputs into a timestamp+commit run folder and write metadata + run index."""
+    input:
+        summary = SCORE_SUMMARY_OFFLINE,
+        details = SCORE_DETAILS_OFFLINE,
+    output:
+        sentinel = ARCHIVE_SENTINEL_OFFLINE,
+    params:
+        runs_dir = SCORE_RUN_ARCHIVE["offline_runs_dir"],
+        index_csv = SCORE_RUN_ARCHIVE["run_index_offline"],
+    shell:
+        "uv run src/archive_score_run.py --summary {input.summary} --details {input.details} "
+        "--runs-dir {params.runs_dir} --index-csv {params.index_csv} && touch {output.sentinel}"

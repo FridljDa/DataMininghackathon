@@ -28,6 +28,11 @@ score_outputs:
   details: "data/11_scores/online/score_details.parquet"
   summary_offline: "data/11_scores/offline/score_summary.csv"
   details_offline: "data/11_scores/offline/score_details.parquet"
+score_run_archive:
+  online_runs_dir: "data/11_scores/online/runs"
+  offline_runs_dir: "data/11_scores/offline/runs"
+  run_index_online: "data/11_scores/online/run_index.csv"
+  run_index_offline: "data/11_scores/offline/run_index.csv"
 
 modelling:
   train_end: "2024-12-31"

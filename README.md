@@ -18,6 +18,23 @@ To force generate everything, run
 uv run snakemake --cores 1
 ```
 
+## Score run history
+
+Each scoring run is archived so you never lose prior results and can see which commit produced which score.
+
+- **Where:** Online runs under `data/11_scores/online/runs/`, offline under `data/11_scores/offline/runs/`.
+- **Run folder format:** `runs/<run_id>/` with `run_id = <UTC timestamp>_<short git sha>` and an optional `_dirty` suffix when the working tree had uncommitted changes (e.g. `20250307_143022_abc1234_dirty`).
+- **Contents:** Each run folder contains `score_summary.csv`, `score_details.parquet`, and `metadata.json` (commit, branch, dirty, created_at).
+- **Index:** `data/11_scores/online/run_index.csv` and `data/11_scores/offline/run_index.csv` list every run with columns `run_id`, `commit_sha`, `branch`, `dirty`, `created_at`, `run_dir` for quick commit→score lookup.
+
+The default pipeline archives the **online** score after scoring. To score and archive the **offline** pipeline:
+
+```bash
+uv run snakemake score_submission_offline archive_score_run_offline --cores 1
+```
+
+To see which commit achieved a given score, open the run folder’s `metadata.json` or look up the run in the corresponding `run_index.csv`.
+
 ## Notes
 
 - Input/output paths are configured in `config.yaml`.

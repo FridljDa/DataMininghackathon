@@ -151,6 +151,8 @@ For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{warm}} $ and 
 
 The exact active columns for any run are controlled by pipeline configuration and may change over time.
 
+**Refreshing the feature list:** After running feature analysis, the workflow writes machine-readable suggestions to `data/09_feature_analysis/{online|offline}/feature_suggestions.yaml`. You can copy the `suggested_features` list from that file into `config.yaml` under `modelling.selected_features` to align the pipeline with heuristic recommendations (null rate, variance, and cardinality filters). The suggestion file is advisory only; the pipeline does not modify config automatically.
+
 ---
 
 ## 6. Modelling

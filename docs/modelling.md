@@ -1,11 +1,34 @@
 # Modelling Approach — Core Demand Prediction (Level 1)
 
+## 0. Global Sets & Notation
+
+Given from data/problem setup:
+
+- $ \mathcal{B} $: all buyers
+- $ \mathcal{B}_{\text{warm}} \subseteq \mathcal{B} $: warm buyers (`cs = 1`)
+- $ \mathcal{B}_{\text{cold}} = \mathcal{B} \setminus \mathcal{B}_{\text{warm}} $: cold buyers (`cs = 0`)
+- $ \mathcal{E} $: all E-Class identifiers (eclasses)
+- $ \text{history}(b) \subseteq \mathcal{E} $: eclasses buyer $ b $ purchased in observed history
+
+Defined by our modelling choices:
+
+- $ \mathcal{C}_b \subseteq \mathcal{E} $: candidate set we construct for buyer $ b $ (Section 4)
+- $ \hat{S}_b \subseteq \mathcal{C}_b $: final predicted set selected by the policy (Section 7)
+
+Core symbols:
+- $ T $: training cutoff timestamp
+- $ L $: lookback window
+- $ F $: fixed fee per predicted element (monthly)
+- $ b $ indexes buyers, $ e $ indexes eclasses
+
+---
+
 ## 1. Problem Framing
 
-For each scored buyer $ b $ we must select a portfolio $ \hat{S}_b \subseteq \mathcal{E} $ of E-Class identifiers that maximises **net economic benefit**:
+For each scored warm buyer $ b \in \mathcal{B}_{\text{warm}} $ we must select a portfolio $ \hat{S}_b \subseteq \mathcal{E} $ of E-Class identifiers that maximises **net economic benefit**:
 
 $$
-\text{Score} = \sum_{b} \left[ \sum_{e \in \hat{S}_b} \text{Savings}(b, e) - |\hat{S}_b| \cdot F \right]
+\text{Score} = \sum_{b \in \mathcal{B}_{\text{warm}}} \left[ \sum_{e \in \hat{S}_b} \text{Savings}(b, e) - |\hat{S}_b| \cdot F \right]
 $$
 
 where $ F = €10 $ is the fixed monthly fee per predicted element and savings are realised only when prediction $ e $ matches actual future purchases.
@@ -23,7 +46,7 @@ Selection is precision-first: every element that is not a true recurring need pa
 | Warm (`cs = 1`) | `plis_training.csv` rows up to `2025-06-30` | PLIs after `2025-07-01` (hidden) |
 | Cold (`cs = 0`) | No PLIs available | All PLIs (hidden) |
 
-Focus here: **warm buyers only**.
+Focus here: **warm buyers only** ($ b \in \mathcal{B}_{\text{warm}} $).
 
 Available columns used from `plis_training.csv`:
 
@@ -40,10 +63,10 @@ To simulate the hidden evaluation, create an internal temporal split within the 
 - **Train period:** `2023-01-01` — `2024-12-31`
 - **Validation period:** `2025-01-01` — `2025-06-30`
 
-Label a buyer–eclass pair $ (b, e) $ as **positive** in validation if it is bought again at least once:
+Label a buyer-eclass pair $ (b, e) $ as **positive** in validation if it is bought again at least once:
 
 $$
-\text{label}(b, e) = \mathbf{1}\left[\text{orders in val}(b, e) \geq 1\right]
+\text{label}(b, e) = \mathbf{1}\left[\text{orders in val}(b, e) \geq 1\right], \quad b \in \mathcal{B}_{\text{warm}},\ e \in \mathcal{E}
 $$
 
 Use binary recurrence target by default: bought again vs not bought again.
@@ -53,7 +76,7 @@ Use binary recurrence target by default: bought again vs not bought again.
 Evaluate using an approximation of the euro score on validation:
 
 $$
-\widehat{\text{Score}}_{\text{val}} = \sum_{b} \left[ \sum_{e \in \hat{S}_b} r \cdot s_{\text{val}}(b,e) \cdot \mathbf{1}[\text{label}=1] - |\hat{S}_b| \cdot F \right]
+\widehat{\text{Score}}_{\text{val}} = \sum_{b \in \mathcal{B}_{\text{warm}}} \left[ \sum_{e \in \hat{S}_b} r \cdot s_{\text{val}}(b,e) \cdot \mathbf{1}[\text{label}=1] - |\hat{S}_b| \cdot F \right]
 $$
 
 > **Important:** The validation window is 6 months but the hidden evaluation covers approximately 1 month. When using $ \widehat{\text{Score}}_{\text{val}} $ to tune thresholds (EU threshold, $ K $, etc.), divide spend by 6 to obtain a per-month estimate. Without this normalisation the local score will be ~6× the real evaluation score, causing the EU threshold to be set too low (too many elements included).
@@ -62,13 +85,21 @@ $$
 
 ## 4. Candidate Generation
 
-For each warm buyer, restrict the candidate set to reduce fee leakage:
+For each warm buyer, restrict the candidate set to reduce fee leakage.
+
+We construct $ \mathcal{C}_b $ as:
 
 $$
 \mathcal{C}_b = \left\{ e \;\middle|\; e \in \text{history}(b),\ t_{\text{last}}(b,e) \geq T - L \right\}
 $$
 
-where $ L $ is a lookback window (default: 18 months) and $ T $ is the training cutoff.
+Interpretation:
+- $ \text{history}(b) \subseteq \mathcal{E} $ is the set of eclasses buyer $ b $ has ever purchased
+- $ t_{\text{last}}(b,e) $ is the last purchase time of eclass $ e $ by buyer $ b $
+- $ T $ is the training cutoff timestamp
+- $ L $ is the lookback window (default: 18 months)
+- So $ \mathcal{C}_b $ keeps only "recently purchased" eclasses from $ b $'s own history
+- Therefore, by construction, $ \mathcal{C}_b \subseteq \text{history}(b) \subseteq \mathcal{E} $
 
 Optionally drop singleton eclasses with low spend:
 
@@ -76,11 +107,15 @@ $$
 e \notin \mathcal{C}_b \quad \text{if} \quad n_{\text{orders}}(b,e) = 1 \;\land\; s_{\text{total}}(b,e) < \tau_s
 $$
 
+Interpretation of the filter:
+- If a buyer-eclass pair appeared only once and total spend is below threshold $ \tau_s $, remove it from $ \mathcal{C}_b $
+- This is a pruning step on top of the recency rule above (it only removes elements; it does not add new ones)
+
 ---
 
 ## 5. Feature Engineering
 
-For each candidate pair $ (b, e) $ in the train period, compute:
+For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{warm}} $ and $ e \in \mathcal{C}_b $ in the train period, compute:
 
 ### Frequency features
 - $ n_{\text{orders}} $: total number of PLI rows
@@ -149,7 +184,7 @@ $$
 
 ## 7. Selection Policy
 
-For each buyer $ b $:
+For each buyer $ b \in \mathcal{B}_{\text{warm}} $:
 
 1. Compute $ \widehat{EU}(b, e) $ for all $ e \in \mathcal{C}_b $.
 2. Keep only pairs with positive expected utility:

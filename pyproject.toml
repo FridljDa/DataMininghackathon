@@ -10,6 +10,7 @@ dependencies = [
     "playwright",
     "pyarrow",
     "pyyaml",
+    "scikit-learn",
     "seaborn",
     "snakemake",
 ]

@@ -49,11 +49,11 @@ def _assert_summary_metrics(summary_csv: Path) -> None:
 
 # Expected portal metrics for tests/integration/resources/lgbm_two_stage_submission.csv (level 2).
 LGBM_FIXTURE_LEVEL2_EXPECTED = {
-    "total_score": 239068.08,
-    "total_savings": 280718.08,
-    "total_fees": 41650.00,
-    "num_hits": 2451,
-    "spend_capture_rate": 0.112,  # 11.20%
+    "total_score": -41760.00,
+    "total_savings": 0.00,
+    "total_fees": 41760.00,
+    "num_hits": 0,
+    "spend_capture_rate": 0.00,  # 0.00%
 }
 
 

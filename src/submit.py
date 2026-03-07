@@ -86,12 +86,52 @@ def _parse_percent(s: str) -> float | None:
         return None
 
 
-def _parse_portal_result_text(result_text: str) -> dict[str, float | int | None]:
+def _extract_new_submission_block(result_text: str) -> str:
     """
-    Parse the 'Your Submissions' section body text into a row compatible with score_summary CSV.
-    Labels are typically followed by the value on the next line (e.g. 'Total Score:' then '€26,822.37').
+    Extract the immediate result block shown after a new submission is scored.
+
+    The portal renders the fresh result inline (before the history list) in a format like:
+        €201,291.97
+        Not your best — your top score is still retained.
+        Savings: €366,721.97
+        Fees: €165,430.00
+        Hits: 6708
+        Spend Captured: 14.63%
+
+    We locate this block by finding the first line that contains an inline 'Savings:' label
+    (i.e. 'Savings: €...' on one line) and collect lines up through 'Spend Captured:'.
     """
     lines = [ln.strip() for ln in result_text.splitlines() if ln.strip()]
+    start = None
+    for idx, line in enumerate(lines):
+        if line.startswith("Savings:") and "€" in line:
+            # Walk back up to 3 lines to include the total-score headline (bare €... line)
+            start = max(0, idx - 3)
+            break
+    if start is None:
+        return result_text  # fall back to full text so caller can still try
+    end = len(lines)
+    for idx in range(start, len(lines)):
+        if lines[idx].startswith("Spend Captured:"):
+            end = idx + 1
+            break
+    return "\n".join(lines[start:end])
+
+
+def _parse_portal_result_text(result_text: str) -> dict[str, float | int | None]:
+    """
+    Parse the immediate result block shown after a new submission.
+
+    The portal renders results inline with label and value on the same line:
+        €201,291.97                       <- total score (bare euro value, first such line)
+        Not your best — ...               <- optional status message
+        Savings: €366,721.97
+        Fees: €165,430.00
+        Hits: 6708
+        Spend Captured: 14.63%
+    """
+    block = _extract_new_submission_block(result_text)
+    lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
     row: dict[str, float | int | None] = {
         "total_score": None,
         "total_savings": None,
@@ -101,39 +141,28 @@ def _parse_portal_result_text(result_text: str) -> dict[str, float | int | None]
         "spend_capture_rate": None,
         "total_ground_spend": None,
     }
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        # Value often follows label on next line
-        next_val = lines[i + 1] if i + 1 < len(lines) else ""
-        if line == "Total Score:":
-            row["total_score"] = _parse_euro(next_val)
-            i += 2
-            continue
-        if line == "Savings:":
-            row["total_savings"] = _parse_euro(next_val)
-            i += 2
-            continue
-        if line == "Fees:":
-            row["total_fees"] = _parse_euro(next_val)
-            i += 2
-            continue
-        if line == "Hits:":
+
+    for line in lines:
+        if line.startswith("Savings:"):
+            row["total_savings"] = _parse_euro(line.split(":", 1)[1].strip())
+        elif line.startswith("Fees:"):
+            row["total_fees"] = _parse_euro(line.split(":", 1)[1].strip())
+        elif line.startswith("Hits:"):
+            val = line.split(":", 1)[1].strip()
             try:
-                row["num_hits"] = int(next_val.replace(",", "").strip())
+                row["num_hits"] = int(val.replace(",", ""))
             except (ValueError, AttributeError):
                 row["num_hits"] = None
-            i += 2
-            continue
-        if line.startswith("Spend Captured:") or line == "Spend Captured":
-            # Value may be on same line after colon or on next line
-            part = line.split(":", 1)[-1].strip() if ":" in line else next_val
-            row["spend_capture_rate"] = _parse_percent(part)
-            if row["spend_capture_rate"] is None and next_val and next_val != part:
-                row["spend_capture_rate"] = _parse_percent(next_val)
-            i += 2
-            continue
-        i += 1
+        elif line.startswith("Spend Captured:"):
+            row["spend_capture_rate"] = _parse_percent(line.split(":", 1)[1].strip())
+        elif row["total_score"] is None and line.startswith("€"):
+            # First bare euro value is the total score headline.
+            row["total_score"] = _parse_euro(line)
+
+    # Derive total_score from savings - fees if not parsed from headline.
+    if row["total_score"] is None and row["total_savings"] is not None and row["total_fees"] is not None:
+        row["total_score"] = row["total_savings"] - row["total_fees"]
+
     return row
 
 
@@ -254,9 +283,11 @@ def submit(
 
     submission_result: dict = {}
 
-    # Count existing scored submissions before submitting so we can detect the new one.
+    # Count existing 'Spend Captured:' occurrences before submitting.
+    # The inline result block uses this label; the history list uses 'Total Score:', but
+    # the inline block does not — so we track 'Spend Captured:' to detect the new result.
     pre_submit_score_count: int = page.evaluate(
-        "() => (document.body.innerText.match(/Total Score:/g) || []).length"
+        "() => (document.body.innerText.match(/Spend Captured:/g) || []).length"
     )
 
     # Submit and wait for the API response using expect_response.
@@ -353,11 +384,11 @@ def submit(
         )
     print("⏳ Waiting for scoring results…")
 
-    # Wait for a NEW scored submission to appear (count must exceed pre-submit count).
+    # Wait for the new result block to appear (inline 'Spend Captured:' count must increase).
     try:
         page.wait_for_function(
             f"""() => {{
-                const count = (document.body.innerText.match(/Total Score:/g) || []).length;
+                const count = (document.body.innerText.match(/Spend Captured:/g) || []).length;
                 return count > {pre_submit_score_count};
             }}""",
             timeout=120_000,
@@ -367,21 +398,10 @@ def submit(
 
     page.wait_for_timeout(1000)
 
-    # Extract the submissions section from the page text.
     result_text = page.locator("body").inner_text()
+    block = _extract_new_submission_block(result_text)
     print("\n─── Submission Result ───")
-    in_submissions = False
-    for line in result_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if "Your Submissions" in line:
-            in_submissions = True
-        if in_submissions:
-            print(line)
-            # Stop after the first submission block.
-            if line.startswith("Spend Captured:") or line.startswith("0."):
-                break
+    print(block)
     return result_text, submission_id
 
 

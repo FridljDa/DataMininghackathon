@@ -17,6 +17,7 @@ from src.submit import (
     _load_credentials,
     _parse_euro,
     _parse_portal_result_text,
+    _extract_new_submission_block,
     _parse_percent,
     _write_summary_csv,
 )
@@ -161,7 +162,7 @@ class TestSubmit:
         self,
         buttons: list[MagicMock],
         response_body: dict | None = None,
-        body_text: str = "Your Submissions\nTotal Score:\n€0.00\nSpend Captured: 0.00%",
+        body_text: str = "€0.00\nNot your best\nSavings: €0.00\nFees: €0.00\nHits: 0\nSpend Captured: 0.00%",
     ) -> MagicMock:
         side_effect, cache = _make_locator_side_effect()
         page = MagicMock()
@@ -335,19 +336,19 @@ class TestSubmit:
 
         assert "timed out" in capsys.readouterr().out
 
-    def test_wait_uses_score_count_not_text_includes(self, tmp_path) -> None:
-        """wait_for_function must wait for a NEW Total Score: entry, not any existing one."""
+    def test_wait_uses_spend_captured_count_not_text_includes(self, tmp_path) -> None:
+        """wait_for_function must wait for a NEW Spend Captured: entry (inline result block)."""
         csv = tmp_path / "s.csv"
         csv.write_text("legal_entity_id,cluster\n")
         l2 = _make_button("Level 2 — E-Class + Manufacturer")
         page = self._page_with_buttons([l2])
-        page.evaluate.return_value = 3  # 3 prior scored submissions on page
+        page.evaluate.return_value = 3  # 3 prior Spend Captured: occurrences on page
 
         submit(page, challenge_id=2, file_path=csv, level=2)
 
         page.evaluate.assert_called_once()
         js_arg = page.wait_for_function.call_args[0][0]
-        assert "Total Score:" in js_arg
+        assert "Spend Captured:" in js_arg
         assert "count > 3" in js_arg
         assert "text.includes" not in js_arg
 
@@ -395,34 +396,52 @@ class TestParsePortalResult:
         assert _parse_percent("") is None
 
     def test_parse_portal_result_extracts_score_fields(self) -> None:
+        # Portal renders the fresh result block with inline labels.
         text = """
-        Your Submissions
-        #12
         €26,822.37
-        L1 E-Class
-        Mar 7, 2026, 7:21 AM
-        Total Score:
-        €26,822.37
-        Savings:
-        €27,822.37
-        Fees:
-        €1,000.00
-        Hits:
-        100
-        Spend Captured:
-        0.05
+        Not your best — your top score is still retained.
+        Savings: €27,822.37
+        Fees: €1,000.00
+        Hits: 100
+        Spend Captured: 5.00%
         """
         row = _parse_portal_result_text(text)
-        assert row["total_score"] == 26822.37
-        assert row["total_savings"] == 27822.37
-        assert row["total_fees"] == 1000.0
+        assert row["total_score"] == pytest.approx(26822.37)
+        assert row["total_savings"] == pytest.approx(27822.37)
+        assert row["total_fees"] == pytest.approx(1000.0)
         assert row["num_hits"] == 100
         assert row["spend_capture_rate"] == pytest.approx(0.05)
 
+    def test_parse_portal_result_derives_score_from_savings_minus_fees(self) -> None:
+        text = "Savings: €280,718.08\nFees: €41,650.00\nHits: 2451\nSpend Captured: 11.20%"
+        row = _parse_portal_result_text(text)
+        assert row["total_savings"] == pytest.approx(280718.08)
+        assert row["total_fees"] == pytest.approx(41650.00)
+        assert row["total_score"] == pytest.approx(239068.08)
+
     def test_parse_portal_result_handles_missing_fields(self) -> None:
-        row = _parse_portal_result_text("Your Submissions\nOther stuff")
+        row = _parse_portal_result_text("Some unrelated text\nOther stuff")
         assert row["total_score"] is None
         assert row["num_hits"] is None
+
+    def test_extract_new_submission_block_isolates_inline_result(self) -> None:
+        full_body = (
+            "Some header text\n"
+            "€201,291.97\n"
+            "Not your best — your top score is still retained.\n"
+            "Savings: €366,721.97\n"
+            "Fees: €165,430.00\n"
+            "Hits: 6708\n"
+            "Spend Captured: 14.63%\n"
+            "Your Submissions\n"
+            "Total Score:\n"
+            "€999,999.99\n"
+        )
+        block = _extract_new_submission_block(full_body)
+        assert "Savings: €366,721.97" in block
+        assert "Spend Captured: 14.63%" in block
+        # History section score must not leak into the extracted block
+        assert "€999,999.99" not in block
 
     def test_write_summary_csv_creates_file_with_header_and_row(self, tmp_path: Path) -> None:
         out = tmp_path / "summary.csv"

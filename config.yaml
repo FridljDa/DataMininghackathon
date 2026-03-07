@@ -22,56 +22,62 @@ modelling:
   enabled_approaches:
     - baseline
     - lgbm_two_stage
-  train_end: "2024-12-31"
-  val_start: "2025-01-01"
-  val_end: "2025-06-30"
-  n_min_label: 1
-  lookback_months: 36
-  min_order_frequency: 1
-  min_lookback_spend: 20
-  # Shared selection policy (used after any approach)
-  score_threshold: 0.0
-  # Legacy/compat: baseline params (also under approaches.baseline)
-  alpha: 1.0
-  beta: 1.0
-  gamma: 0.5
-  min_orders_guardrail: 3
-  min_months_guardrail: 2
-  high_spend_guardrail: 500.0
-  top_k_per_buyer: 15
-  val_months: 6.0
-  selected_features:
-    - CV_gap
-    - active_month_share_12m
-    - delta_recency
-    - delta_trend
-    - first_order_year
-    - has_gap_history
-    - has_recent_spend_6m
-    - historical_purchase_value_sqrt
-    - historical_purchase_value_total
-    - last_order_month_cos
-    - last_order_month_sin
-    - last_order_quarter_cos
-    - last_order_quarter_sin
-    - last_order_year
-    - log_employees
-    - m_active
-    - mu_gap
-    - n_orders
-    - nace_2
-    - nace_code
-    - nace_mismatch
-    - order_value_cv
-    - q4_share
-    - recency_to_gap_ratio
-    - recent_3m_count
-    - recent_6m_count
-    - s_median_line
-    - secondary_nace_2
-    - secondary_nace_code
-    - spend_recent_3m
-    - spend_recent_ratio
+
+  windows:
+    train_end: "2024-12-31"
+    validation:
+      start: "2025-01-01"
+      end: "2025-06-30"
+      n_min_label: 1
+      months: 6.0
+
+  candidates:
+    lookback_months: 36
+    min_order_frequency: 1
+    min_lookback_spend: 20
+
+  selection:
+    score_threshold: 0.0
+    top_k_per_buyer: 15
+    guardrails:
+      min_orders: 3
+      min_months: 2
+      high_spend: 500.0
+
+  features:
+    selected:
+      - CV_gap
+      - active_month_share_12m
+      - delta_recency
+      - delta_trend
+      - first_order_year
+      - has_gap_history
+      - has_recent_spend_6m
+      - historical_purchase_value_sqrt
+      - historical_purchase_value_total
+      - last_order_month_cos
+      - last_order_month_sin
+      - last_order_quarter_cos
+      - last_order_quarter_sin
+      - last_order_year
+      - log_employees
+      - m_active
+      - mu_gap
+      - n_orders
+      - nace_2
+      - nace_code
+      - nace_mismatch
+      - order_value_cv
+      - q4_share
+      - recency_to_gap_ratio
+      - recent_3m_count
+      - recent_6m_count
+      - s_median_line
+      - secondary_nace_2
+      - secondary_nace_code
+      - spend_recent_3m
+      - spend_recent_ratio
+
   # Per-approach config (output paths are data/11_predictions/{mode}/{approach}/scores.parquet)
   approaches:
     baseline:

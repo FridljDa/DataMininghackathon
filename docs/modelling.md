@@ -86,7 +86,7 @@ $$
 \text{label}(b, e) = \mathbf{1}\left[\text{orders in val}(b, e) \geq n_{\min}\right]
 $$
 
-with current default $ n_{\min} = 1 $ (`n_min_label`).
+with current default $ n_{\min} = 1 $ (`modelling.windows.validation.n_min_label`).
 
 Validation spend is aggregated as:
 
@@ -155,9 +155,9 @@ The exact active columns for any run are controlled by pipeline configuration an
 
 - `feature_summary.csv` — Per-feature descriptive stats (null/zero rate, quantiles, cardinality) and target-aware stats (univariate signal vs validation recurrence label and vs positive-case spend). Primary inspection artifact for deciding which features to keep.
 - `feature_redundancy.csv` — Pairs of numeric features with high Spearman correlation (e.g. |ρ| ≥ 0.85) for redundancy pruning.
-- `feature_suggestions.yaml` — Advisory list of suggested features: hard filters (null rate, variance, cardinality) are applied, then one representative per correlated group is kept (ranked by target signal). For manual copy into `config.yaml` under `modelling.selected_features`.
+- `feature_suggestions.yaml` — Advisory list of suggested features: hard filters (null rate, variance, cardinality) are applied, then one representative per correlated group is kept (ranked by target signal). For manual copy into `config.yaml` under `modelling.features.selected`.
 
-**Refreshing the feature list:** `feature_suggestions.yaml` answers “which features look best for modelling?”; `modelling.selected_features` and the resulting `data/10_features_selected` output are the explicit contract used by training and scoring. Copy from the suggestion file into config when you want to align the pipeline with the heuristic; the pipeline does not modify config automatically.
+**Refreshing the feature list:** `feature_suggestions.yaml` answers “which features look best for modelling?”; `modelling.features.selected` and the resulting `data/10_features_selected` output are the explicit contract used by training and scoring. Copy from the suggestion file into config when you want to align the pipeline with the heuristic; the pipeline does not modify config automatically.
 
 ---
 
@@ -183,7 +183,7 @@ Comments on each term:
 - $ \delta_{\text{recency}} $: time since the last purchase (a staleness signal).  
   Larger means "last purchase was long ago", so we subtract it.
 
-How to read the weights:
+How to read the weights (configured in `modelling.approaches.baseline`):
 
 - $ \alpha $ controls how much recurring purchase activity matters.
 - $ \beta $ controls how much monetary value matters.
@@ -235,11 +235,11 @@ $$
 $$
 
 3. Apply minimum evidence guardrail — require at least one of:
-   - $ n_{\text{orders}} \geq X $ (e.g. 3), or
-   - $ m_{\text{active}} \geq Y $ (e.g. 2), or
-   - `historical_purchase_value_total` $ \geq \tau_{\text{high}} $ (high-value exception)
+   - $ n_{\text{orders}} \geq X $ (`modelling.selection.guardrails.min_orders`, e.g. 3), or
+   - $ m_{\text{active}} \geq Y $ (`modelling.selection.guardrails.min_months`, e.g. 2), or
+   - `historical_purchase_value_total` $ \geq \tau_{\text{high}} $ (`modelling.selection.guardrails.high_spend`, high-value exception)
 
-4. Cap at top $ K $ by $ \widehat{EU} $ (tune $ K $ on validation; start $ K = 15 $).
+4. Cap at top $ K $ by $ \widehat{EU} $ (`modelling.selection.top_k_per_buyer`; tune on validation; start $ K = 15 $).
 
 Pass-through configuration (to force all candidates into submission):
 - Set $ \tau_{EU} \ll 0 $ (or any value below the minimum $ \widehat{EU}(b,e) $)

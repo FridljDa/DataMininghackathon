@@ -152,7 +152,7 @@ modelling:
     # Keep only pairs with EU score above this
     score_threshold: 0.0
     # Max predictions per buyer (hard cap)
-    top_k_per_buyer: 60
+    top_k_per_buyer: 150
     # At least one guardrail must pass for a pair to be included
     guardrails:
       # Pass if n_orders >= this
@@ -253,7 +253,7 @@ modelling:
 # Submission / cold-start behaviour
 submission:
   # Max eclasses/clusters per cold-start buyer (lift-based NACE ranking)
-  cold_start_top_k: 30
+  cold_start_top_k: 50
 
 # Credentials for uploading to competition portal
 portal_credentials:

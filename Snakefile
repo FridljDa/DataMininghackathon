@@ -117,8 +117,8 @@ rule all:
         expand(SCORES_APPROACH_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
         expand(PORTFOLIO_PATTERN, mode=MODES, approach=ENABLED_APPROACHES),
         expand(SUBMISSION_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
-        expand(ARCHIVE_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=[1]),
-        expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=[1]),
+        expand(ARCHIVE_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
+        expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(BEST_RUN_COPIED_SENTINEL_PATTERN, level=ENABLED_LEVELS),
 
 rule generate_dag_graph:
@@ -438,6 +438,8 @@ rule archive_score_run:
 
 rule copy_best_online_run:
     """Select best historic online run per level by total_score and copy that run directory into data/16_scores_best/online/level{level}/best_run/."""
+    input:
+        archived_runs = expand(ARCHIVE_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level="{level}"),
     output:
         sentinel = BEST_RUN_COPIED_SENTINEL_PATTERN,
     params:

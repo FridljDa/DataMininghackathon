@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-# Output filenames must match config.yaml plots.files
+# Output filenames must match Snakefile PLOT_FILES
 PLOT_FILES = [
     "seasonal_purchase_volume.png",
     "purchase_value_by_task_violin.png",

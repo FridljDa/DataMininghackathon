@@ -59,6 +59,63 @@ FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV = FEATURE_ANALYSIS["summary_offline_csv"]
 FEATURE_ANALYSIS_PLOTS = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS["plot_files"])
 FEATURE_ANALYSIS_PLOTS_OFFLINE = expand(f"{FEATURE_ANALYSIS_DIR}/{{f}}", f=FEATURE_ANALYSIS["plot_files_offline"])
 
+# Mode (online|offline) configuration: paths and behaviour for modelling/scoring pipeline
+MODES = ["online", "offline"]
+MODE_CFG = {
+    "online": {
+        "customer_csv": CUSTOMER_META_CSV,
+        "buyer_source": "customer-test",
+        "customer_input": INPUTS["customer_test"],
+        "score_level": "",
+        "candidates_raw": MODELLING["candidates_raw_parquet"],
+        "features_all": MODELLING["features_all_parquet"],
+        "features_selected": MODELLING["features_selected_parquet"],
+        "scores_parquet": MODELLING["scores_parquet"],
+        "scores_lgbm_parquet": MODELLING["scores_lgbm_parquet"],
+        "portfolio_parquet": MODELLING["portfolio_parquet"],
+        "submission_csv": SUBMISSION_CSV,
+        "score_summary": SCORE_OUTPUTS["summary"],
+        "score_details": SCORE_OUTPUTS["details"],
+        "archive_sentinel": ARCHIVE_SENTINEL_ONLINE,
+        "runs_dir": SCORE_RUN_ARCHIVE["online_runs_dir"],
+        "run_index_csv": SCORE_RUN_ARCHIVE["run_index_online"],
+        "feature_analysis_summary": FEATURE_ANALYSIS["summary_csv"],
+        "feature_analysis_plot_subdir": "online",
+    },
+    "offline": {
+        "customer_csv": SPLIT_CUSTOMER_CSV,
+        "buyer_source": "customer-split",
+        "customer_input": SPLIT_CUSTOMER_CSV,
+        "score_level": "1",
+        "candidates_raw": MODELLING["candidates_raw_offline_parquet"],
+        "features_all": MODELLING["features_all_offline_parquet"],
+        "features_selected": MODELLING["features_selected_offline_parquet"],
+        "scores_parquet": MODELLING["scores_offline_parquet"],
+        "scores_lgbm_parquet": MODELLING["scores_lgbm_offline_parquet"],
+        "portfolio_parquet": MODELLING["portfolio_offline_parquet"],
+        "submission_csv": MODELLING["submission_offline_csv"],
+        "score_summary": SCORE_OUTPUTS["summary_offline"],
+        "score_details": SCORE_OUTPUTS["details_offline"],
+        "archive_sentinel": ARCHIVE_SENTINEL_OFFLINE,
+        "runs_dir": SCORE_RUN_ARCHIVE["offline_runs_dir"],
+        "run_index_csv": SCORE_RUN_ARCHIVE["run_index_offline"],
+        "feature_analysis_summary": FEATURE_ANALYSIS["summary_offline_csv"],
+        "feature_analysis_plot_subdir": "offline",
+    },
+}
+# Path patterns for mode-wildcarded rules (must match config paths)
+CANDIDATES_RAW_PATTERN = "data/07_features/{mode}/candidates_raw.parquet"
+FEATURES_ALL_PATTERN = "data/07_features/{mode}/features_all.parquet"
+FEATURES_SELECTED_PATTERN = "data/07_features/{mode}/features_selected.parquet"
+SCORES_PATTERN = "data/09_predictions/{mode}/scores.parquet"
+SCORES_LGBM_PATTERN = "data/09_predictions/{mode}/scores_lgbm.parquet"
+PORTFOLIO_PATTERN = "data/10_portfolio/{mode}/portfolio.parquet"
+SUBMISSION_PATTERN = "data/11_submission/{mode}/submission.csv"
+SCORE_SUMMARY_PATTERN = "data/12_scores/{mode}/score_summary.csv"
+SCORE_DETAILS_PATTERN = "data/12_scores/{mode}/score_details.parquet"
+ARCHIVE_SENTINEL_PATTERN = "data/12_scores/{mode}/runs/.last_archived"
+FEATURE_ANALYSIS_SUMMARY_PATTERN = "data/08_feature_analysis/{mode}/feature_summary.csv"
+
 rule all:
     input:
         DAG_SVG,
@@ -141,14 +198,16 @@ rule generate_candidates:
     """Candidate generation for Level 1 (warm buyers, E-Class): lookback window, n_orders(b,e,L) >= eta, s_lookback >= tau."""
     input:
         plis = PLIS_TRAINING_SPLIT,
-        customer = CUSTOMER_META_CSV,
+        customer = lambda w: MODE_CFG[w.mode]["customer_csv"],
     output:
-        candidates_raw = CANDIDATES_RAW_PARQUET,
+        candidates_raw = CANDIDATES_RAW_PATTERN,
     params:
         train_end = MODELLING["train_end"],
         lookback_months = MODELLING["lookback_months"],
         min_order_frequency = MODELLING["min_order_frequency"],
         min_lookback_spend = MODELLING["min_lookback_spend"],
+    wildcard_constraints:
+        mode = "|".join(MODES),
     shell:
         "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
         "--output {output.candidates_raw} --train-end {params.train_end} "
@@ -158,13 +217,15 @@ rule generate_candidates:
 rule engineer_features:
     """Feature engineering from raw candidates: all modelling features."""
     input:
-        candidates_raw = CANDIDATES_RAW_PARQUET,
+        candidates_raw = CANDIDATES_RAW_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
-        customer = CUSTOMER_META_CSV,
+        customer = lambda w: MODE_CFG[w.mode]["customer_csv"],
     output:
-        features_all = FEATURES_ALL_PARQUET,
+        features_all = FEATURES_ALL_PATTERN,
     params:
         train_end = MODELLING["train_end"],
+    wildcard_constraints:
+        mode = "|".join(MODES),
     shell:
         "uv run src/engineer_features.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
         "--customer {input.customer} --output {output.features_all} --train-end {params.train_end}"
@@ -172,14 +233,16 @@ rule engineer_features:
 rule feature_analysis:
     """Summary statistics and informativeness plots for all engineered features."""
     input:
-        features_all = FEATURES_ALL_PARQUET,
+        features_all = FEATURES_ALL_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
     output:
-        summary_csv = FEATURE_ANALYSIS_SUMMARY_CSV,
-        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/online/feature_distributions.png",
-        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/online/feature_correlations.png",
-        value_by_period_plot = f"{FEATURE_ANALYSIS_DIR}/online/purchase_value_by_period.png",
-        quantity_by_period_plot = f"{FEATURE_ANALYSIS_DIR}/online/purchase_quantity_by_period.png",
+        summary_csv = FEATURE_ANALYSIS_SUMMARY_PATTERN,
+        distributions_plot = "data/08_feature_analysis/{mode}/feature_distributions.png",
+        correlations_plot = "data/08_feature_analysis/{mode}/feature_correlations.png",
+        value_by_period_plot = "data/08_feature_analysis/{mode}/purchase_value_by_period.png",
+        quantity_by_period_plot = "data/08_feature_analysis/{mode}/purchase_quantity_by_period.png",
+    wildcard_constraints:
+        mode = "|".join(MODES),
     shell:
         "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
         "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot} "
@@ -189,11 +252,13 @@ rule feature_analysis:
 rule feature_selection:
     """Keep keys + config-driven selected features for downstream modelling."""
     input:
-        features_all = FEATURES_ALL_PARQUET,
+        features_all = FEATURES_ALL_PATTERN,
     output:
-        features_selected = FEATURES_SELECTED_PARQUET,
+        features_selected = FEATURES_SELECTED_PATTERN,
     params:
         selected_features = ",".join(MODELLING["selected_features"]),
+    wildcard_constraints:
+        mode = "|".join(MODES),
     shell:
         "uv run src/feature_selection.py --features {input.features_all} --selected-features '{params.selected_features}' "
         "--output {output.features_selected}"
@@ -201,10 +266,10 @@ rule feature_selection:
 rule train_baseline:
     """Baseline scorer and validation labels; outputs scores.parquet."""
     input:
-        candidates = FEATURES_SELECTED_PARQUET,
+        candidates = FEATURES_SELECTED_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
     output:
-        scores = SCORES_PARQUET,
+        scores = SCORES_PATTERN,
     params:
         val_start = MODELLING["val_start"],
         val_end = MODELLING["val_end"],
@@ -215,6 +280,8 @@ rule train_baseline:
         savings_rate = SCORING_PARAMS["savings_rate"],
         fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
         val_months = MODELLING["val_months"],
+    wildcard_constraints:
+        mode = "|".join(MODES),
     shell:
         "uv run src/train_baseline.py --candidates {input.candidates} --plis {input.plis} "
         "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
@@ -224,10 +291,10 @@ rule train_baseline:
 rule train_lgbm:
     """Two-stage LightGBM (recurrence classifier + value regressor); outputs scores_lgbm.parquet."""
     input:
-        candidates = FEATURES_SELECTED_PARQUET,
+        candidates = FEATURES_SELECTED_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
     output:
-        scores = SCORES_LGBM_PARQUET,
+        scores = SCORES_LGBM_PATTERN,
     params:
         val_start = MODELLING["val_start"],
         val_end = MODELLING["val_end"],
@@ -235,6 +302,8 @@ rule train_lgbm:
         savings_rate = SCORING_PARAMS["savings_rate"],
         fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
         val_months = MODELLING["val_months"],
+    wildcard_constraints:
+        mode = "|".join(MODES),
     shell:
         "uv run src/train_lgbm.py --candidates {input.candidates} --plis {input.plis} "
         "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
@@ -244,15 +313,17 @@ rule train_lgbm:
 rule select_portfolio:
     """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet (default: two-stage LGBM scores)."""
     input:
-        scores = SCORES_LGBM_PARQUET,
+        scores = SCORES_LGBM_PATTERN,
     output:
-        portfolio = PORTFOLIO_PARQUET,
+        portfolio = PORTFOLIO_PATTERN,
     params:
         score_threshold = MODELLING["score_threshold"],
         min_orders_guardrail = MODELLING["min_orders_guardrail"],
         min_months_guardrail = MODELLING["min_months_guardrail"],
         high_spend_guardrail = MODELLING["high_spend_guardrail"],
         top_k_per_buyer = MODELLING["top_k_per_buyer"],
+    wildcard_constraints:
+        mode = "|".join(MODES),
     shell:
         "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
@@ -262,20 +333,27 @@ rule select_portfolio:
 rule write_submission_warm:
     """Format portfolio into submission CSV (Level 1: cluster=eclass); cold-start fallback to global default."""
     input:
-        portfolio = PORTFOLIO_PARQUET,
-        customer_test = INPUTS["customer_test"],
+        portfolio = PORTFOLIO_PATTERN,
+        customer = lambda w: MODE_CFG[w.mode]["customer_input"],
         plis = PLIS_TRAINING_SPLIT,
     output:
-        submission = SUBMISSION_CSV,
-    shell:
-        "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
-        "--buyer-source customer-test --customer-test {input.customer_test} --plis-training {input.plis} --output {output.submission}"
+        submission = SUBMISSION_PATTERN,
+    params:
+        buyer_source = lambda w: MODE_CFG[w.mode]["buyer_source"],
+    wildcard_constraints:
+        mode = "|".join(MODES),
+    run:
+        arg = "--customer-test" if wildcards.mode == "online" else "--customer-split"
+        shell(
+            "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
+            "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} --output {output.submission}"
+        )
 
 
 rule select_portfolio_baseline:
     """Optional: apply threshold/guardrails to baseline scores. Use for diagnostic comparison."""
     input:
-        scores = SCORES_PARQUET,
+        scores = MODELLING["scores_parquet"],
     output:
         portfolio = "data/10_portfolio/online/portfolio_baseline.parquet",
     params:
@@ -304,31 +382,39 @@ rule write_submission:
 rule score_submission:
     """Score submission against plis_testing holdout; write summary and details to data/12_scores."""
     input:
-        submission = SUBMISSION_CSV,
+        submission = SUBMISSION_PATTERN,
         plis_testing = PLIS_TESTING_SPLIT,
     output:
-        summary = SCORE_SUMMARY,
-        details = SCORE_DETAILS,
+        summary = SCORE_SUMMARY_PATTERN,
+        details = SCORE_DETAILS_PATTERN,
     params:
         savings_rate = SCORING_PARAMS["savings_rate"],
         fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
         scoring_months = SCORING_PARAMS["scoring_months"],
-    shell:
-        "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
-        "--summary {output.summary} --details {output.details} "
-        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
-        "--scoring-months {params.scoring_months}"
+    wildcard_constraints:
+        mode = "|".join(MODES),
+    run:
+        level_opt = " --level 1" if wildcards.mode == "offline" else ""
+        shell(
+            "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
+            "--summary {output.summary} --details {output.details}"
+            + level_opt + " "
+            "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
+            "--scoring-months {params.scoring_months}"
+        )
 
 rule archive_score_run:
-    """Copy current online score outputs into a timestamp+commit run folder and write metadata + run index."""
+    """Copy current score outputs into a timestamp+commit run folder and write metadata + run index."""
     input:
-        summary = SCORE_SUMMARY,
-        details = SCORE_DETAILS,
+        summary = SCORE_SUMMARY_PATTERN,
+        details = SCORE_DETAILS_PATTERN,
     output:
-        sentinel = ARCHIVE_SENTINEL_ONLINE,
+        sentinel = ARCHIVE_SENTINEL_PATTERN,
     params:
-        runs_dir = SCORE_RUN_ARCHIVE["online_runs_dir"],
-        index_csv = SCORE_RUN_ARCHIVE["run_index_online"],
+        runs_dir = lambda w: MODE_CFG[w.mode]["runs_dir"],
+        index_csv = lambda w: MODE_CFG[w.mode]["run_index_csv"],
+    wildcard_constraints:
+        mode = "|".join(MODES),
     shell:
         "uv run src/archive_score_run.py --summary {input.summary} --details {input.details} "
         "--runs-dir {params.runs_dir} --index-csv {params.index_csv} && touch {output.sentinel}"
@@ -343,169 +429,3 @@ rule submit_to_portal:
     shell:
         "uv run src/submit.py --challenge 2 --file {input.submission} --summary-csv {output.summary} && touch {output.sentinel}"
 
-# --- Offline scoring: predict for testing buyers only, score with Level-1 (eclass) matching ---
-rule generate_candidates_offline:
-    """Candidate generation for offline pipeline: n_orders(b,e,L) >= eta, s_lookback >= tau (task=testing buyers included)."""
-    input:
-        plis = PLIS_TRAINING_SPLIT,
-        customer = SPLIT_CUSTOMER_CSV,
-    output:
-        candidates_raw = CANDIDATES_RAW_OFFLINE_PARQUET,
-    params:
-        train_end = MODELLING["train_end"],
-        lookback_months = MODELLING["lookback_months"],
-        min_order_frequency = MODELLING["min_order_frequency"],
-        min_lookback_spend = MODELLING["min_lookback_spend"],
-    shell:
-        "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
-        "--output {output.candidates_raw} --train-end {params.train_end} "
-        "--lookback-months {params.lookback_months} --min-order-frequency {params.min_order_frequency} "
-        "--min-lookback-spend {params.min_lookback_spend}"
-
-rule engineer_features_offline:
-    """Feature engineering for offline pipeline."""
-    input:
-        candidates_raw = CANDIDATES_RAW_OFFLINE_PARQUET,
-        plis = PLIS_TRAINING_SPLIT,
-        customer = SPLIT_CUSTOMER_CSV,
-    output:
-        features_all = FEATURES_ALL_OFFLINE_PARQUET,
-    params:
-        train_end = MODELLING["train_end"],
-    shell:
-        "uv run src/engineer_features.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
-        "--customer {input.customer} --output {output.features_all} --train-end {params.train_end}"
-
-rule feature_analysis_offline:
-    """Feature analysis for offline feature set."""
-    input:
-        features_all = FEATURES_ALL_OFFLINE_PARQUET,
-        plis = PLIS_TRAINING_SPLIT,
-    output:
-        summary_csv = FEATURE_ANALYSIS_SUMMARY_OFFLINE_CSV,
-        distributions_plot = f"{FEATURE_ANALYSIS_DIR}/offline/feature_distributions.png",
-        correlations_plot = f"{FEATURE_ANALYSIS_DIR}/offline/feature_correlations.png",
-        value_by_period_plot = f"{FEATURE_ANALYSIS_DIR}/offline/purchase_value_by_period.png",
-        quantity_by_period_plot = f"{FEATURE_ANALYSIS_DIR}/offline/purchase_quantity_by_period.png",
-    shell:
-        "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
-        "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot} "
-        "--plis {input.plis} --value-by-period-plot {output.value_by_period_plot} "
-        "--quantity-by-period-plot {output.quantity_by_period_plot}"
-
-rule feature_selection_offline:
-    """Config-driven feature selection for offline pipeline."""
-    input:
-        features_all = FEATURES_ALL_OFFLINE_PARQUET,
-    output:
-        features_selected = FEATURES_SELECTED_OFFLINE_PARQUET,
-    params:
-        selected_features = ",".join(MODELLING["selected_features"]),
-    shell:
-        "uv run src/feature_selection.py --features {input.features_all} --selected-features '{params.selected_features}' "
-        "--output {output.features_selected}"
-
-rule train_baseline_offline:
-    """Baseline scorer for offline pipeline (optional/diagnostic)."""
-    input:
-        candidates = FEATURES_SELECTED_OFFLINE_PARQUET,
-        plis = PLIS_TRAINING_SPLIT,
-    output:
-        scores = SCORES_OFFLINE_PARQUET,
-    params:
-        val_start = MODELLING["val_start"],
-        val_end = MODELLING["val_end"],
-        n_min_label = MODELLING["n_min_label"],
-        alpha = MODELLING["alpha"],
-        beta = MODELLING["beta"],
-        gamma = MODELLING["gamma"],
-        savings_rate = SCORING_PARAMS["savings_rate"],
-        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
-        val_months = MODELLING["val_months"],
-    shell:
-        "uv run src/train_baseline.py --candidates {input.candidates} --plis {input.plis} "
-        "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
-        "--n-min-label {params.n_min_label} --alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
-        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
-
-rule train_lgbm_offline:
-    """Two-stage LightGBM for offline pipeline; outputs scores_lgbm.parquet."""
-    input:
-        candidates = FEATURES_SELECTED_OFFLINE_PARQUET,
-        plis = PLIS_TRAINING_SPLIT,
-    output:
-        scores = SCORES_LGBM_OFFLINE_PARQUET,
-    params:
-        val_start = MODELLING["val_start"],
-        val_end = MODELLING["val_end"],
-        n_min_label = MODELLING["n_min_label"],
-        savings_rate = SCORING_PARAMS["savings_rate"],
-        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
-        val_months = MODELLING["val_months"],
-    shell:
-        "uv run src/train_lgbm.py --candidates {input.candidates} --plis {input.plis} "
-        "--output {output.scores} --val-start {params.val_start} --val-end {params.val_end} "
-        "--n-min-label {params.n_min_label} "
-        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months}"
-
-rule select_portfolio_offline:
-    """Select portfolio for offline pipeline (default: two-stage LGBM EU scores)."""
-    input:
-        scores = SCORES_LGBM_OFFLINE_PARQUET,
-    output:
-        portfolio = PORTFOLIO_OFFLINE_PARQUET,
-    params:
-        score_threshold = MODELLING["score_threshold"],
-        min_orders_guardrail = MODELLING["min_orders_guardrail"],
-        min_months_guardrail = MODELLING["min_months_guardrail"],
-        high_spend_guardrail = MODELLING["high_spend_guardrail"],
-        top_k_per_buyer = MODELLING["top_k_per_buyer"],
-    shell:
-        "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} "
-        "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
-        "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
-        "--top-k-per-buyer {params.top_k_per_buyer}"
-
-rule write_submission_offline:
-    """Build submission from portfolio for testing buyers only (offline scoring)."""
-    input:
-        portfolio = PORTFOLIO_OFFLINE_PARQUET,
-        customer_split = SPLIT_CUSTOMER_CSV,
-        plis = PLIS_TRAINING_SPLIT,
-    output:
-        submission = SUBMISSION_OFFLINE_CSV,
-    shell:
-        "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
-        "--buyer-source customer-split --customer-split {input.customer_split} --plis-training {input.plis} --output {output.submission}"
-
-rule score_submission_offline:
-    """Score offline submission against plis_testing with Level-1 (eclass-only) matching."""
-    input:
-        submission = SUBMISSION_OFFLINE_CSV,
-        plis_testing = PLIS_TESTING_SPLIT,
-    output:
-        summary = SCORE_SUMMARY_OFFLINE,
-        details = SCORE_DETAILS_OFFLINE,
-    params:
-        savings_rate = SCORING_PARAMS["savings_rate"],
-        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
-        scoring_months = SCORING_PARAMS["scoring_months"],
-    shell:
-        "uv run src/score_submission.py --submission {input.submission} --plis-testing {input.plis_testing} "
-        "--summary {output.summary} --details {output.details} --level 1 "
-        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
-        "--scoring-months {params.scoring_months}"
-
-rule archive_score_run_offline:
-    """Copy current offline score outputs into a timestamp+commit run folder and write metadata + run index."""
-    input:
-        summary = SCORE_SUMMARY_OFFLINE,
-        details = SCORE_DETAILS_OFFLINE,
-    output:
-        sentinel = ARCHIVE_SENTINEL_OFFLINE,
-    params:
-        runs_dir = SCORE_RUN_ARCHIVE["offline_runs_dir"],
-        index_csv = SCORE_RUN_ARCHIVE["run_index_offline"],
-    shell:
-        "uv run src/archive_score_run.py --summary {input.summary} --details {input.details} "
-        "--runs-dir {params.runs_dir} --index-csv {params.index_csv} && touch {output.sentinel}"

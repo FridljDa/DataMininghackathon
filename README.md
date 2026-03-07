@@ -27,10 +27,10 @@ Each scoring run is archived so you never lose prior results and can see which c
 - **Contents:** Each run folder contains `score_summary.csv`, `score_details.parquet`, and `metadata.json` (commit, branch, dirty, created_at).
 - **Index:** `data/12_scores/online/run_index.csv` and `data/12_scores/offline/run_index.csv` list every run with columns `run_id`, `commit_sha`, `branch`, `dirty`, `created_at`, `run_dir` for quick commit→score lookup.
 
-The default pipeline archives the **online** score after scoring. To score and archive the **offline** pipeline:
+The default pipeline archives the **online** score after scoring. To score and archive the **offline** pipeline, request the offline outputs:
 
 ```bash
-uv run snakemake score_submission_offline archive_score_run_offline --cores 1
+uv run snakemake data/12_scores/offline/score_summary.csv data/12_scores/offline/runs/.last_archived --cores 1
 ```
 
 To see which commit achieved a given score, open the run folder’s `metadata.json` or look up the run in the corresponding `run_index.csv`.

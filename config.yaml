@@ -18,9 +18,9 @@ scoring_parameters:
 modelling:
   # All enabled approaches run through selection and produce portfolio/submission per approach (data/11_predictions, 12_portfolio, 13_submission, 14_scores by {mode}/{approach}/).
   enabled_approaches:
-    - baseline
-    - lgbm_two_stage
-    - pass_through
+   # - baseline
+   # - lgbm_two_stage
+   # - pass_through
     - phase3_repro
 
   windows:
@@ -45,6 +45,18 @@ modelling:
       min_months: 1
       high_spend: 0
       min_avg_monthly_spend: 0  # 0 = disabled; when > 0, pass if avg_monthly_spend_buyer_tenure >= this (late joiners)
+
+  # Per-feature missing-value handling for features_raw (before derived engineering).
+  # Actions: drop_row (drop rows where feature is null), ignore (leave as-is), fill (impute).
+  # For fill: strategy = constant | median | mean | mode; use value for constant.
+  # Features not listed use default_action.
+  missing_value_sanitation:
+    default_action: ignore
+    features: {}
+    # Example entries (uncomment and add under features:):
+    #   legal_entity_id: { action: drop_row }
+    #   historical_purchase_value_total: { action: fill, strategy: median }
+    #   n_orders: { action: fill, strategy: constant, value: 0 }
 
   features:
     selected:

@@ -74,6 +74,27 @@ def main() -> None:
         choices=("1", "2"),
         help="Level 1 = (legal_entity_id, eclass); Level 2 = (legal_entity_id, eclass, manufacturer).",
     )
+    parser.add_argument(
+        "--lookback-months",
+        type=int,
+        default=60,
+        dest="lookback_months",
+        help="Lookback window in months for candidate eligibility (modelling.candidates.lookback_months).",
+    )
+    parser.add_argument(
+        "--min-order-frequency",
+        type=int,
+        default=1,
+        dest="min_order_frequency",
+        help="Minimum orders in lookback to qualify as candidate (modelling.candidates.min_order_frequency).",
+    )
+    parser.add_argument(
+        "--min-lookback-spend",
+        type=float,
+        default=0.0,
+        dest="min_lookback_spend",
+        help="Minimum EUR spend in lookback to qualify as candidate (modelling.candidates.min_lookback_spend).",
+    )
     args = parser.parse_args()
 
     plis_path = Path(args.plis)
@@ -82,6 +103,9 @@ def main() -> None:
     out_path = Path(args.output)
     train_end = pd.Timestamp(args.train_end)
     level = int(args.level)
+    lookback_months = args.lookback_months
+    min_order_frequency = args.min_order_frequency
+    min_lookback_spend = args.min_lookback_spend
 
     plis = _read_plis(plis_path, require_manufacturer=(level == 2))
     plis["orderdate"] = pd.to_datetime(plis["orderdate"], format="%Y-%m-%d")
@@ -105,13 +129,31 @@ def main() -> None:
     plis_train = plis[plis["orderdate"] <= train_end].copy()
     plis_train = plis_train[plis_train["legal_entity_id"].isin(hot_ids)]
 
-    if level == 1:
-        # Set A (seen): every (legal_entity_id, eclass) hot entity ever bought in train period
-        seen = (
-            plis_train[["legal_entity_id", "eclass"]]
-            .drop_duplicates()
-            .reset_index(drop=True)
+    lookback_start = train_end - pd.DateOffset(months=lookback_months)
+    plis_lookback = plis_train[
+        (plis_train["orderdate"] >= lookback_start) & (plis_train["orderdate"] <= train_end)
+    ].copy()
+    plis_lookback["_spend"] = (
+        pd.to_numeric(plis_lookback["quantityvalue"], errors="coerce").fillna(0)
+        * pd.to_numeric(plis_lookback["vk_per_item"], errors="coerce").fillna(0)
+    )
+    entity_key = ["legal_entity_id", "eclass"] if level == 1 else ["legal_entity_id", "eclass", "manufacturer"]
+    lookback_agg = (
+        plis_lookback.groupby(entity_key)
+        .agg(
+            n_orders_in_lookback=("_spend", "count"),
+            lookback_spend=("_spend", "sum"),
         )
+        .reset_index()
+    )
+    eligible = lookback_agg[
+        (lookback_agg["n_orders_in_lookback"] >= min_order_frequency)
+        & (lookback_agg["lookback_spend"] >= min_lookback_spend)
+    ][entity_key]
+
+    if level == 1:
+        # Set A (seen): (legal_entity_id, eclass) passing lookback thresholds
+        seen = eligible.reset_index(drop=True)
         n_seen = len(seen)
         trending_eclasses = _read_trending_classes(trending_path)
         hot_df = pd.DataFrame({"legal_entity_id": list(hot_ids)})
@@ -125,12 +167,8 @@ def main() -> None:
         )
         group_cols = ["legal_entity_id", "eclass"]
     else:
-        # Level 2: seen only, key = (legal_entity_id, eclass, manufacturer)
-        union_keys = (
-            plis_train[["legal_entity_id", "eclass", "manufacturer"]]
-            .drop_duplicates()
-            .reset_index(drop=True)
-        )
+        # Level 2: seen only, key = (legal_entity_id, eclass, manufacturer) passing lookback thresholds
+        union_keys = eligible.reset_index(drop=True)
         n_seen = len(union_keys)
         n_trending_cross = 0
         group_cols = ["legal_entity_id", "eclass", "manufacturer"]

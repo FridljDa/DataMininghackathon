@@ -1,77 +1,46 @@
-# `data/07_candidates/{mode}/candidates_raw.parquet`
+# `data/07_candidates/{mode}/level{level}/candidates_raw.parquet`
 
 ## Purpose
 
-Intermediate candidate table for Level 1 (E-Class) recommendation modelling.
+Intermediate candidate table for Level 1 (E-Class) or Level 2 (E-Class + manufacturer) recommendation modelling.
 
-Each row is one buyer-candidate pair: (`legal_entity_id`, `eclass`) that passed candidate eligibility filters in the lookback window.  
-This is the first downstream dataset after split preparation and is the direct input to the feature pipeline: `src/engineer_features_raw.py` writes non-derived columns plus top-K SKU attribute columns (from `data/02_raw/features_per_sku.csv`, joined via PLIs) to `data/08_features_raw/{mode}/level{level}/features_raw.parquet`, then `src/engineer_features_derived.py` adds derived features and writes `data/09_features_derived/{mode}/features_all.parquet`.
+Each row is one candidate key that passed eligibility filters in the lookback window. Level 1: (`legal_entity_id`, `eclass`); Level 2: (`legal_entity_id`, `eclass`, `manufacturer`). Output contains **key columns only**; aggregates are computed later by `src/engineer_features_raw.py`, which writes `data/08_features_raw/{mode}/level{level}/features_raw.parquet`. Derived feature engineering then produces `data/09_features_derived/{mode}/level{level}/features_all.parquet`.
 
 Practical definition from `src/generate_candidates.py`:
 
 - Restrict PLIs to training period (`orderdate <= train_end`) and warm/testing buyers only (`task in ["predict future", "testing"]`).
-- In lookback window `L` months:
-  - keep pair when `n_orders_in_L >= eta`
-  - and `s_lookback >= tau`
-- For kept pairs, store full-train aggregates (`n_orders`, `historical_purchase_value_total`, min/max order date, order months).
+- Lookback window: `[train_end - lookback_months, train_end]` (inclusive). Per entity key, compute in that window:
+  - `n_orders_in_lookback`
+  - `lookback_spend` = sum(quantityvalue × vk_per_item)
+- Keep only keys with `n_orders_in_lookback >= min_order_frequency` and `lookback_spend >= min_lookback_spend` (from `modelling.candidates` in `config.yaml`).
+- **Level 1:** *Seen* keys (passing the above) are unioned with the trending cross (hot buyers × `data/07_candidates/trending_classes.csv` eclasses), then deduplicated.
+- **Level 2:** Output is the set of seen keys only (no trending cross).
 
 ## File Format
 
 - Format: Parquet
-- Path pattern: `data/07_candidates/online/candidates_raw.parquet` and `data/07_candidates/offline/candidates_raw.parquet`
-- Current columns: 7
-- Current rows:
-  - online: 25,237
-  - offline: 47,975
-
-## Top 3 Rows (Raw Sample)
-
-Sample from `data/07_candidates/online/candidates_raw.parquet`:
-
-| legal_entity_id | eclass | n_orders | historical_purchase_value_total | orderdate_min | orderdate_max | orderdates_str |
-|---:|---:|---:|---:|---|---|---|
-| 41165867 | 19010107 | 1 | 551.31 | 2024-10-30 00:00:00 | 2024-10-30 00:00:00 | ['2024-10'] |
-| 41165867 | 19010108 | 1 | 391.67 | 2024-12-12 00:00:00 | 2024-12-12 00:00:00 | ['2024-12'] |
-| 41165867 | 19019090 | 2 | 184.15 | 2024-09-10 00:00:00 | 2024-11-07 00:00:00 | ['2024-09', '2024-11'] |
+- Path pattern: `data/07_candidates/{mode}/level{level}/candidates_raw.parquet` (e.g. `online/level1/`, `offline/level2/`).
+- Columns: **key only** — Level 1: `legal_entity_id`, `eclass`; Level 2: `legal_entity_id`, `eclass`, `manufacturer`.
 
 ## Columns
 
 - `legal_entity_id`: buyer/customer identifier.
-- `eclass`: Level 1 product category candidate for the buyer.
-- `n_orders`: number of line-level purchase records for this (`legal_entity_id`, `eclass`) in train period (`orderdate <= train_end`).
-- `historical_purchase_value_total`: total spend proxy in train period, computed as `sum(quantityvalue * vk_per_item)`.
-- `orderdate_min`: earliest observed purchase date for this buyer-eclass in train period.
-- `orderdate_max`: latest observed purchase date for this buyer-eclass in train period (used as recency anchor in derived features).
-- `orderdates_str`: unique order months encoded as `YYYY-MM` strings for parquet-safe serialization (list-like field).
+- `eclass`: E-Class product category candidate for the buyer.
+- `manufacturer`: (Level 2 only) manufacturer part of the candidate key.
 
 ## Modeling Notes
 
 - This is a warm/startable candidate universe, not final model features and not final predictions.
-- Candidate inclusion is controlled by `config.yaml` modelling parameters:
-  - `train_end`: `2024-12-31`
-  - `lookback_months` (`L`): `18`
-  - `min_order_frequency` (`eta`): `1`
-  - `min_lookback_spend` (`tau`): `100.0`
-- `historical_purchase_value_total >= 100` appears in outputs because `tau = 100` and eligibility is spend-filtered in lookback.
-- Date coverage in current files:
-  - global `orderdate_min`: `2023-01-01`
-  - global `orderdate_max`: `2024-12-31`
-- Main downstream dependency:
-  - consumed by `src/engineer_features_raw.py` (pass-through plus SKU-attribute top-K columns to `data/08_features_raw`), then `src/engineer_features_derived.py` reconstructs periods from `orderdates_str` and derives recurrence/recency/trend/economic features into `data/09_features_derived`.
-- SKU-attribute columns in `features_raw` are named `sku_attr_<key>_<value>` (sanitized); they are generated from `modelling.features_per_sku` (top_k_keys, top_k_values_per_key). To use them in modelling, add the desired column names to `modelling.features.selected` after a run (names are data-dependent).
-- Why this dataset exists:
-  - shrinks the modelling space to buyer-category pairs with minimal historical signal before expensive feature engineering and training.
+- Candidate eligibility is controlled by `config.yaml` under `modelling.candidates`:
+  - `lookback_months`: length of lookback window (months) ending at `train_end`
+  - `min_order_frequency`: minimum number of orders in lookback for the key to be included
+  - `min_lookback_spend`: minimum EUR spend in lookback for the key to be included
+- These values are passed from the Snakefile into `src/generate_candidates.py` and applied before writing this parquet.
+- Main downstream: `src/engineer_features_raw.py` joins these keys with PLIs/customer/features_per_sku to build `features_raw` (with aggregates and SKU attributes); `src/engineer_features_derived.py` then adds derived features. SKU-attribute columns in `features_raw` are named `sku_attr_<key>_<value>` (sanitized). To use them in modelling, add the desired names to `modelling.features.selected` (names are data-dependent).
+- Why this dataset exists: shrinks the modelling space to keys with minimal historical signal in the lookback window before expensive feature engineering and training.
 
 ## Pairwise Relationships
 
-Sanity-check basis: current generated files (full parquet, online + offline).
-
-- (`legal_entity_id`, `eclass`) is unique per row (candidate key).
-- `legal_entity_id` <-> `eclass`: many-to-many (`N:M`) globally.
-- Online snapshot:
-  - buyers: 47
-  - unique eclasses: 2,911
-- Offline snapshot:
-  - buyers: 97
-  - unique eclasses: 3,387
+- Each row is a unique candidate key: (`legal_entity_id`, `eclass`) for Level 1; (`legal_entity_id`, `eclass`, `manufacturer`) for Level 2.
+- `legal_entity_id` and `eclass` (and `manufacturer` at Level 2) are many-to-many globally.
 

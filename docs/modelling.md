@@ -124,14 +124,14 @@ $$
 
 Interpretation:
 - $ \text{history}(b) \subseteq \mathcal{E} $ is the set of eclasses buyer $ b $ has ever purchased
-- $ n_{\text{orders}}(b,e, I_{\text{lookback}}(T,L)) $ is the number of orders of eclass $ e $ by buyer $ b $ in interval $ [T-L, T) $
-- $ s_{\text{lookback}}(b,e, I_{\text{lookback}}(T,L)) = \sum_{\substack{\text{rows for }(b,e)\\ \text{with } \text{orderdate}\in [T-L,T)}} \text{quantityvalue} \times \text{vk\_per\_item} $: total spend on eclass $ e $ by buyer $ b $ in the lookback interval (EUR)
+- $ n_{\text{orders}}(b,e, I_{\text{lookback}}(T,L)) $ is the number of orders of eclass $ e $ by buyer $ b $ in the lookback interval $ [T-L, T] $ (inclusive)
+- $ s_{\text{lookback}}(b,e, I_{\text{lookback}}(T,L)) = \sum_{\substack{\text{rows for }(b,e)\\ \text{with } \text{orderdate}\in [T-L,T]}} \text{quantityvalue} \times \text{vk\_per\_item} $: total spend on eclass $ e $ by buyer $ b $ in the lookback interval (EUR)
 - $ T $ is the training cutoff timestamp
-- $ L $ is the lookback length (default: 18 months)
-- $ \eta $ is the minimum order frequency threshold (default: 1)
-- $ \tau $ is the minimum lookback spend threshold in EUR (default: 100)
-- So $ \mathcal{C}_b $ keeps only eclasses from $ b $'s history that were bought at least $ \eta $ times and with at least $ \tau $ EUR spend in $ [T-L, T) $
+- $ L $, $ \eta $, and $ \tau $ are set in `config.yaml` under `modelling.candidates`: `lookback_months` ($ L $), `min_order_frequency` ($ \eta $), `min_lookback_spend` ($ \tau $). The pipeline implements this in `src/generate_candidates.py`.
+- So $ \mathcal{C}_b $ keeps only eclasses from $ b $'s history that were bought at least $ \eta $ times and with at least $ \tau $ EUR spend in $ [T-L, T] $
 - Therefore, by construction, $ \mathcal{C}_b \subseteq \text{history}(b) \subseteq \mathcal{E} $
+
+Level 1 output also unions *seen* (keys passing the above filters) with a trending cross (hot buyers × trending eclasses from `data/07_candidates/trending_classes.csv`). Level 2 output is seen-only (no trending cross).
 
 ---
 

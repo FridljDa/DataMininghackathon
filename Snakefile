@@ -233,12 +233,16 @@ rule generate_candidates:
         candidates_raw = CANDIDATES_RAW_PATTERN,
     params:
         train_end = WIN["train_end"],
+        lookback_months = CAND["lookback_months"],
+        min_order_frequency = CAND["min_order_frequency"],
+        min_lookback_spend = CAND["min_lookback_spend"],
     wildcard_constraints:
         mode = MODE_RE,
         level = LEVEL_RE,
     shell:
         "uv run src/generate_candidates.py --plis {input.plis} --customer {input.customer} "
-        "--trending-classes {input.trending_classes} --output {output.candidates_raw} --train-end {params.train_end} --level {wildcards.level}"
+        "--trending-classes {input.trending_classes} --output {output.candidates_raw} --train-end {params.train_end} --level {wildcards.level} "
+        "--lookback-months {params.lookback_months} --min-order-frequency {params.min_order_frequency} --min-lookback-spend {params.min_lookback_spend}"
 
 rule engineer_features_raw:
     """Assembly: keys from candidates + aggregates from PLIs + customer context + top-K SKU attributes; level2 includes manufacturer."""

@@ -4,6 +4,7 @@
 !/data/06_plots/**
 !/data/07_feature_analysis/
 !/data/07_feature_analysis/**
+!/data/11_scores
 .idea
 /.snakemake/
 .env

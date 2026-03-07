@@ -113,6 +113,8 @@ SUBMISSION_TUNING_OUTPUTS = (
 SCORES_APPROACH_PATTERN = f"{DATA_DIR}/12_predictions/{{mode}}/{{approach}}/level{{level}}/scores.parquet"
 PORTFOLIO_PATTERN = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/level{{level}}/portfolio.parquet"
 SUBMISSION_PATTERN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/submission.csv"
+SUBMISSION_WARM_PART_PATTERN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/submission_warm.csv"
+SUBMISSION_COLD_PART_PATTERN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/submission_cold.csv"
 ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/online/runs/level{{level}}/.last_archived_{{approach}}"
 SUBMITTED_SENTINEL_PATTERN = f"{DATA_DIR}/14_submission/.submitted_challenge2_{{approach}}_level{{level}}"
 LIVE_SUMMARY_TEMP_PATTERN = f"{DATA_DIR}/14_submission/.score_summary_live_{{approach}}_level{{level}}.csv"
@@ -435,8 +437,31 @@ rule select_portfolio:
         "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
         "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer}"
 
-rule write_submission_warm:
-    """Format portfolio into submission CSV (Level 1: cluster=eclass; Level 2: cluster=eclass|manufacturer); cold-start fallback."""
+rule write_submission_warm_only:
+    """Write submission rows for warm buyers only (portfolio items per buyer)."""
+    input:
+        portfolio = PORTFOLIO_PATTERN,
+        customer = lambda w: MODE_CFG[w.mode]["customer_input"],
+        plis = PLIS_TRAINING_SPLIT,
+    output:
+        submission_warm = SUBMISSION_WARM_PART_PATTERN,
+    params:
+        buyer_source = lambda w: MODE_CFG[w.mode]["buyer_source"],
+    wildcard_constraints:
+        mode = MODE_RE,
+        approach = APPROACH_RE,
+        level = LEVEL_RE,
+    run:
+        arg = "--customer-test" if wildcards.mode == "online" else "--customer-split"
+        shell(
+            "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
+            "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} "
+            "--level {wildcards.level} --mode warm_only --output {output.submission_warm}"
+        )
+
+
+rule write_submission_cold_only:
+    """Write submission rows for cold-start buyers only (NACE/score-based fallback)."""
     input:
         portfolio = PORTFOLIO_PATTERN,
         customer = lambda w: MODE_CFG[w.mode]["customer_input"],
@@ -444,7 +469,7 @@ rule write_submission_warm:
         nace_codes = INPUTS["nace_codes"],
         scores = SCORES_APPROACH_PATTERN,
     output:
-        submission = SUBMISSION_PATTERN,
+        submission_cold = SUBMISSION_COLD_PART_PATTERN,
     params:
         buyer_source = lambda w: MODE_CFG[w.mode]["buyer_source"],
         cold_start_top_k = config["submission"]["cold_start_top_k"],
@@ -458,8 +483,29 @@ rule write_submission_warm:
             "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
             "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} "
             "--nace-codes {input.nace_codes} --scores {input.scores} --level {wildcards.level} "
-            "--cold-start-top-k {params.cold_start_top_k} --output {output.submission}"
+            "--cold-start-top-k {params.cold_start_top_k} --mode cold_only --output {output.submission_cold}"
         )
+
+
+rule merge_submission_parts:
+    """Concatenate warm and cold submission parts and deduplicate into final submission.csv."""
+    input:
+        warm = SUBMISSION_WARM_PART_PATTERN,
+        cold = SUBMISSION_COLD_PART_PATTERN,
+    output:
+        submission = SUBMISSION_PATTERN,
+    wildcard_constraints:
+        mode = MODE_RE,
+        approach = APPROACH_RE,
+        level = LEVEL_RE,
+    shell:
+        "uv run python -c \""
+        "import pandas as pd; "
+        "w = pd.read_csv('{input.warm}'); "
+        "c = pd.read_csv('{input.cold}'); "
+        "out = pd.concat([w, c]).drop_duplicates(subset=['legal_entity_id', 'cluster']); "
+        "out.to_csv('{output.submission}', index=False)"
+        "\""
 
 
 rule write_submission:

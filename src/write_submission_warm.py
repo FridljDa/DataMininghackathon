@@ -19,6 +19,9 @@ exist for a given NACE group.
 
 Use --buyer-source customer-test for real submission; use --buyer-source customer-split
 with --customer-split for offline scoring.
+
+When --mode is warm_only or cold_only, only the corresponding rows are written (for use
+in split DAG rules); merge_submission_parts then concatenates them into the final CSV.
 """
 
 from __future__ import annotations
@@ -384,6 +387,12 @@ def main() -> None:
         "cold-start rankings derived from model score_base aggregated over warm buyers in "
         "the same NACE industry, rather than raw PLI frequency).",
     )
+    parser.add_argument(
+        "--mode",
+        choices=("all", "warm_only", "cold_only"),
+        default="all",
+        help="all = warm + cold rows (default). warm_only = only buyers in portfolio. cold_only = only cold-start buyers.",
+    )
     parser.add_argument("--output", required=True, help="Path to submission CSV.")
     args = parser.parse_args()
 
@@ -463,7 +472,8 @@ def main() -> None:
             .tolist()
         )
 
-    use_nace_hierarchy = bool(args.nace_codes and Path(args.nace_codes).exists())
+    need_cold = args.mode in ("all", "cold_only")
+    use_nace_hierarchy = bool(need_cold and args.nace_codes and Path(args.nace_codes).exists())
     nace_codes_df = pd.DataFrame()
     if use_nace_hierarchy:
         nace_codes_df = pd.read_csv(Path(args.nace_codes), sep="\t", dtype=str, low_memory=False)
@@ -474,7 +484,7 @@ def main() -> None:
     plis: Optional[pd.DataFrame] = None
 
     use_scores_rankings = False
-    if args.scores and Path(args.scores).exists():
+    if need_cold and args.scores and Path(args.scores).exists():
         scores_df = pd.read_parquet(args.scores)
         rankings_eclass, rankings_cluster = _build_cold_start_rankings_from_scores(
             scores_df,
@@ -491,7 +501,7 @@ def main() -> None:
             else:
                 default_clusters = [default_eclass] if default_eclass else []
 
-    if not use_scores_rankings:
+    if need_cold and not use_scores_rankings:
         if use_nace_hierarchy:
             plis_cols = ["legal_entity_id", "eclass", "quantityvalue", "vk_per_item"]
             if _plis_has_nace(plis_path):
@@ -537,7 +547,7 @@ def main() -> None:
 
     nace_to_eclasses: dict[str, list[str]] = {}
     nace_to_clusters: dict[str, list[str]] = {}
-    if use_scores_rankings and not use_nace_hierarchy:
+    if need_cold and use_scores_rankings and not use_nace_hierarchy:
         for (level_name, val), eclasses in rankings_eclass.items():
             if level_name == "nace_2" and val:
                 nace_to_eclasses[val] = eclasses
@@ -545,7 +555,7 @@ def main() -> None:
             for (level_name, val), clusters in rankings_cluster.items():
                 if level_name == "nace_2" and val:
                     nace_to_clusters[val] = clusters
-    elif not use_nace_hierarchy and _plis_has_nace(plis_path) and plis is not None:
+    elif need_cold and not use_nace_hierarchy and _plis_has_nace(plis_path) and plis is not None:
         plis["nace_2"] = plis["nace_code"].astype(str).str.strip().str[:2].replace("nan", "")
         plis = plis[plis["nace_2"] != ""]
         if len(plis) > 0:
@@ -613,9 +623,13 @@ def main() -> None:
 
     for lid in all_buyers:
         if lid in warm_in_portfolio:
+            if args.mode == "cold_only":
+                continue
             for _, row in portfolio[portfolio["legal_entity_id"] == lid].iterrows():
                 rows.append({"legal_entity_id": lid, "cluster": row["cluster"]})
         else:
+            if args.mode == "warm_only":
+                continue
             nace_val = customer_nace.loc[lid] if customer_nace is not None and lid in customer_nace.index else ""
             sec_nace = (
                 customer_secondary_nace.loc[lid]
@@ -633,6 +647,8 @@ def main() -> None:
                     rows.append({"legal_entity_id": lid, "cluster": c})
 
     submission = pd.DataFrame(rows).drop_duplicates(subset=["legal_entity_id", "cluster"])
+    if submission.empty:
+        submission = pd.DataFrame(columns=["legal_entity_id", "cluster"])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(out_path, index=False)
     print(f"Wrote {len(submission)} submission rows to {out_path}")

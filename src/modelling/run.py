@@ -20,6 +20,27 @@ from modelling.approaches import get_approach
 from modelling.common.labels import attach_validation_labels
 
 
+def _ensure_required_base_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize common schema expected by scoring/selection steps.
+    """
+    df = df.copy()
+
+    # Backward-compatible alias: some feature sets keep n_orders but not m_active.
+    if "m_active" not in df.columns and "n_orders" in df.columns:
+        df["m_active"] = pd.to_numeric(df["n_orders"], errors="coerce").fillna(0)
+
+    # Keep historical_purchase_value_total available for downstream selection.
+    if (
+        "historical_purchase_value_total" not in df.columns
+        and "historical_purchase_value_sqrt" in df.columns
+    ):
+        sqrt_val = pd.to_numeric(df["historical_purchase_value_sqrt"], errors="coerce").fillna(0)
+        df["historical_purchase_value_total"] = sqrt_val.clip(lower=0) ** 2
+
+    return df
+
+
 def _print_offline_score(
     df: pd.DataFrame,
     val_months: float,
@@ -94,6 +115,7 @@ def run_main() -> None:
     df = attach_validation_labels(
         df, plis_path, val_start, val_end, args.n_min_label
     )
+    df = _ensure_required_base_columns(df)
 
     approach = get_approach(args.approach)
     params = {
@@ -112,6 +134,7 @@ def run_main() -> None:
         "use_monthly_lookback_rates": bool(args.use_monthly_lookback_rates),
     }
     df = approach.run(df, **params)
+    df = _ensure_required_base_columns(df)
 
     for col in ("legal_entity_id", "eclass", "score_base", "n_orders", "m_active", "historical_purchase_value_total"):
         if col not in df.columns:

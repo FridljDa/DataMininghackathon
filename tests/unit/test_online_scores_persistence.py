@@ -41,6 +41,11 @@ def test_archive_score_run_writes_flattened_run_folder_only(tmp_path: Path, proj
             "uv", "run", "src/archive_score_run.py",
             "--live-summary", str(live_summary),
             "--runs-dir", str(runs_dir),
+            "--approach", "lgbm_two_stage",
+            "--level", "1",
+            "--train-end", "2025-12-31",
+            "--top-k-per-buyer", "15",
+            "--selected-features", "n_orders,CV_gap",
         ],
         cwd=project_root,
     )
@@ -62,6 +67,12 @@ def test_archive_score_run_writes_flattened_run_folder_only(tmp_path: Path, proj
     assert "branch" in meta
     assert "dirty" in meta
     assert "created_at" in meta
+    assert meta.get("approach") == "lgbm_two_stage"
+    assert meta.get("level") == 1
+    assert "config" in meta
+    assert meta["config"].get("train_end") == "2025-12-31"
+    assert meta["config"].get("top_k_per_buyer") == 15
+    assert meta["config"].get("selected_features") == ["n_orders", "CV_gap"]
 
     # Only these two files; no offline score artifacts
     assert not (run_dir / "score_summary.csv").exists()

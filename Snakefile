@@ -27,10 +27,12 @@ PLIS_TESTING_SPLIT = f"{DATA_DIR}/05_training_validation/plis_testing.csv"
 
 # Score outputs and archive (per mode and approach)
 SCORES_DIR = f"{DATA_DIR}/15_scores"
+SCORES_BEST_DIR = f"{DATA_DIR}/16_scores_best"
 SCORE_RUN_ARCHIVE = {
     "online_runs_dir": f"{SCORES_DIR}/online/runs",
 }
 SCORING_PARAMS = config["scoring_parameters"]
+BEST_RUN_COPIED_SENTINEL_PATTERN = f"{SCORES_BEST_DIR}/online/level{{level}}/best_run/.copied"
 
 # Exploration plots
 PLOTS_DIR = f"{DATA_DIR}/06_plots"
@@ -117,6 +119,7 @@ rule all:
         expand(SUBMISSION_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(ARCHIVE_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=[1]),
         expand(SUBMITTED_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=[1]),
+        expand(BEST_RUN_COPIED_SENTINEL_PATTERN, level=ENABLED_LEVELS),
 
 rule generate_dag_graph:
     """Write high-level workflow graph as SVG (rule-level, not job-level)."""
@@ -411,12 +414,40 @@ rule archive_score_run:
         sentinel = ARCHIVE_SENTINEL_PATTERN,
     params:
         runs_dir = lambda w: f"{SCORES_DIR}/online/runs/level{w.level}",
+        train_end = WIN["train_end"],
+        lookback_months = CAND["lookback_months"],
+        score_threshold = SEL["score_threshold"],
+        top_k_per_buyer = SEL["top_k_per_buyer"],
+        min_orders = GRD["min_orders"],
+        min_months = GRD["min_months"],
+        high_spend = GRD["high_spend"],
+        min_avg_monthly_spend = GRD.get("min_avg_monthly_spend", 0),
+        cold_start_top_k = config["submission"]["cold_start_top_k"],
+        selected_features = ",".join(FEAT["selected"]),
     wildcard_constraints:
         approach = APPROACH_RE,
         level = LEVEL_RE,
     shell:
         "uv run src/archive_score_run.py --live-summary {input.live_summary} "
-        "--runs-dir {params.runs_dir} && touch {output.sentinel}"
+        "--runs-dir {params.runs_dir} --approach {wildcards.approach} --level {wildcards.level} "
+        "--train-end {params.train_end} --lookback-months {params.lookback_months} "
+        "--score-threshold {params.score_threshold} --top-k-per-buyer {params.top_k_per_buyer} "
+        "--min-orders {params.min_orders} --min-months {params.min_months} --high-spend {params.high_spend} "
+        "--min-avg-monthly-spend {params.min_avg_monthly_spend} --cold-start-top-k {params.cold_start_top_k} "
+        "--selected-features '{params.selected_features}' && touch {output.sentinel}"
+
+rule copy_best_online_run:
+    """Select best historic online run per level by total_score and copy that run directory into data/16_scores_best/online/level{level}/best_run/."""
+    output:
+        sentinel = BEST_RUN_COPIED_SENTINEL_PATTERN,
+    params:
+        scores_dir = f"{SCORES_DIR}/online",
+        best_run_dir = lambda w: f"{SCORES_BEST_DIR}/online/level{w.level}/best_run",
+    wildcard_constraints:
+        level = LEVEL_RE,
+    shell:
+        "uv run src/select_best_score_run.py --scores-dir {params.scores_dir} --level {wildcards.level} "
+        "--best-run-dir {params.best_run_dir} && touch {output.sentinel}"
 
 rule submit_to_portal:
     """Upload online submission to Unite evaluator (challenge 2) per approach and level. Writes live score to temp file for archive_score_run. Requires portal_credentials in config.yaml."""

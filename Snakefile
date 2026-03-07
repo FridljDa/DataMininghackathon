@@ -50,6 +50,33 @@ rule all:
         PLOT_OUTPUTS,
         SCORE_SUMMARY,
         SCORE_DETAILS,
+#TODO as first snake make rule: create snakemake DAG graph
+
+rule build_customer_meta:
+    """Build customer metadata from plis_training (all unique customers, task from customer_test or none)."""
+    input:
+        plis = PLIS_TRAINING_CSV,
+        customer_test = INPUTS["customer_test"],
+    output:
+        customer = CUSTOMER_META_CSV,
+    shell:
+        "uv run src/build_customer_meta.py --plis {input.plis} --customer-test {input.customer_test} --output {output.customer}"
+
+rule generate_exploration_plots:
+    """Generate EDA plots from raw CSVs and customer metadata into data/04_plots."""
+    input:
+        plis = PLIS_TRAINING_CSV,
+        customer_test = INPUTS["customer_test"],
+        les_cs = INPUTS["les_cs"],
+        customer_meta = SPLIT_CUSTOMER_CSV,
+    output:
+        plots = PLOT_OUTPUTS,
+    params:
+        out_dir = PLOTS_DIR,
+    shell:
+        "uv run src/generate_exploration_plots.py --plis {input.plis} "
+        "--customer-test {input.customer_test} --les-cs {input.les_cs} "
+        "--customer-meta {input.customer_meta} --output-dir {params.out_dir}"
 
 rule prepare_split_customer_meta:
     """Relabel task=none customers to task=testing so their purchase-value distribution matches warm (warm-matched selection)."""
@@ -80,6 +107,7 @@ rule split_plis_training_validation:
         "uv run src/split_plis_training_validation.py --input {input.plis} --customer-meta {input.customer} "
         "--train {output.train} --test {output.test} --cutoff-date {params.cutoff}"
 
+#TODO split up in 2 rules (Candidate generation and feature engineering)
 rule build_features:
     """Candidate generation and feature engineering for Level 1 (warm buyers, E-Class)."""
     input:
@@ -169,15 +197,6 @@ rule write_submission_warm:
         "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
         "--buyer-source customer-test --customer-test {input.customer_test} --plis-training {input.plis} --output {output.submission}"
 
-rule build_customer_meta:
-    """Build customer metadata from plis_training (all unique customers, task from customer_test or none)."""
-    input:
-        plis = PLIS_TRAINING_CSV,
-        customer_test = INPUTS["customer_test"],
-    output:
-        customer = CUSTOMER_META_CSV,
-    shell:
-        "uv run src/build_customer_meta.py --plis {input.plis} --customer-test {input.customer_test} --output {output.customer}"
 
 rule write_submission:
     """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/10_submission/submission_baseline.csv' to run."""
@@ -208,6 +227,7 @@ rule score_submission:
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
         "--scoring-months {params.scoring_months}"
 
+#TODO understand difference between offline and not offline. maybe move to dedicated directories?
 # --- Offline scoring: predict for testing buyers only, score with Level-1 (eclass) matching ---
 rule build_features_offline:
     """Build candidates including task=testing buyers (for offline holdout evaluation)."""
@@ -295,19 +315,3 @@ rule score_submission_offline:
         "--summary {output.summary} --details {output.details} --level 1 "
         "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} "
         "--scoring-months {params.scoring_months}"
-
-rule generate_exploration_plots:
-    """Generate EDA plots from raw CSVs and customer metadata into data/04_plots."""
-    input:
-        plis = PLIS_TRAINING_CSV,
-        customer_test = INPUTS["customer_test"],
-        les_cs = INPUTS["les_cs"],
-        customer_meta = SPLIT_CUSTOMER_CSV,
-    output:
-        plots = PLOT_OUTPUTS,
-    params:
-        out_dir = PLOTS_DIR,
-    shell:
-        "uv run src/generate_exploration_plots.py --plis {input.plis} "
-        "--customer-test {input.customer_test} --les-cs {input.les_cs} "
-        "--customer-meta {input.customer_meta} --output-dir {params.out_dir}"

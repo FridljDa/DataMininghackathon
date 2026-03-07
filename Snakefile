@@ -197,30 +197,41 @@ rule engineer_features:
         "uv run src/engineer_features.py --candidates-raw {input.candidates_raw} --plis {input.plis} "
         "--customer {input.customer} --nace-codes {input.nace_codes} --output {output.features_all} --train-end {params.train_end}"
 
+FEATURE_ANALYSIS_REDUNDANCY_PATTERN = "data/09_feature_analysis/{mode}/feature_redundancy.csv"
+
 rule feature_analysis:
-    """Summary statistics and informativeness plots for all engineered features."""
+    """Summary statistics, target-aware signal, redundancy, and plots for all engineered features."""
     input:
         features_all = FEATURES_ALL_PATTERN,
+        plis = PLIS_TRAINING_SPLIT,
     output:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_PATTERN,
+        redundancy_csv = FEATURE_ANALYSIS_REDUNDANCY_PATTERN,
         distributions_plot = "data/09_feature_analysis/{mode}/feature_distributions.png",
         correlations_plot = "data/09_feature_analysis/{mode}/feature_correlations.png",
+    params:
+        val_start = MODELLING["val_start"],
+        val_end = MODELLING["val_end"],
+        n_min_label = MODELLING["n_min_label"],
     wildcard_constraints:
         mode = MODE_RE,
     shell:
         "uv run src/feature_analysis.py --features {input.features_all} --summary-csv {output.summary_csv} "
+        "--plis {input.plis} --val-start {params.val_start} --val-end {params.val_end} --n-min-label {params.n_min_label} "
+        "--redundancy-csv {output.redundancy_csv} "
         "--distributions-plot {output.distributions_plot} --correlations-plot {output.correlations_plot}"
 
 rule suggest_features:
-    """Suggest feature list from feature_summary.csv for manual use in config.yaml selected_features."""
+    """Suggest feature list from feature_summary.csv and feature_redundancy.csv for manual use in config selected_features."""
     input:
         summary_csv = FEATURE_ANALYSIS_SUMMARY_PATTERN,
+        redundancy_csv = FEATURE_ANALYSIS_REDUNDANCY_PATTERN,
     output:
         suggestions_yaml = FEATURE_ANALYSIS_SUGGESTIONS_PATTERN,
     wildcard_constraints:
         mode = MODE_RE,
     shell:
-        "uv run src/suggest_features.py --summary-csv {input.summary_csv} --output {output.suggestions_yaml}"
+        "uv run src/suggest_features.py --summary-csv {input.summary_csv} --redundancy-csv {input.redundancy_csv} --output {output.suggestions_yaml}"
 
 rule feature_selection:
     """Keep keys + config-driven selected features for downstream modelling (post feature_analysis)."""

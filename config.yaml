@@ -116,6 +116,8 @@ feature_analysis:
   dir: "data/09_feature_analysis"
   summary_csv: "data/09_feature_analysis/online/feature_summary.csv"
   summary_offline_csv: "data/09_feature_analysis/offline/feature_summary.csv"
+  redundancy_csv: "data/09_feature_analysis/online/feature_redundancy.csv"
+  redundancy_offline_csv: "data/09_feature_analysis/offline/feature_redundancy.csv"
   suggestion_online: "data/09_feature_analysis/online/feature_suggestions.yaml"
   suggestion_offline: "data/09_feature_analysis/offline/feature_suggestions.yaml"
   plot_files:

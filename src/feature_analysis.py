@@ -1,9 +1,11 @@
 """
 Feature analysis: summary statistics and informativeness plots.
 
-Reads full features parquet, computes per-feature stats (null rate, cardinality,
-variance, std) and writes a summary CSV. Generates distribution and per-feature
-vs historical_purchase_value_total correlation plots for downstream feature selection.
+Reads full features parquet and (optionally) plis to attach validation-period
+label and s_val. Computes per-feature stats: null/zero rate, quantiles,
+cardinality, variance; and target-aware stats (univariate signal vs recurrence
+label and vs positive-case spend). Writes feature_summary.csv and optionally
+feature_redundancy.csv and distribution/correlation plots.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import roc_auc_score
 
 # Optional matplotlib for plots
 try:
@@ -31,6 +34,8 @@ EXCLUDE_FROM_PREDICTORS = {"legal_entity_id", "eclass", TARGET_COL, "historical_
 
 # Heuristic: use hexbin when row count above this to avoid overplotting
 HEXBIN_MIN_ROWS = 1500
+# Minimum valid pairs for target-aware stats
+MIN_VALID_FOR_SIGNAL = 20
 
 
 def _binned_median(x: pd.Series, y: pd.Series, n_bins: int = 10) -> tuple[np.ndarray, np.ndarray]:
@@ -86,6 +91,26 @@ def main() -> None:
     parser.add_argument("--features", required=True, help="Path to features_all parquet.")
     parser.add_argument("--summary-csv", required=True, dest="summary_csv", help="Path to output feature summary CSV.")
     parser.add_argument(
+        "--plis",
+        default="",
+        help="Path to plis_training (split) TSV for validation-period labels/spend (optional).",
+    )
+    parser.add_argument("--val-start", default="", dest="val_start", help="Validation period start (YYYY-MM-DD).")
+    parser.add_argument("--val-end", default="", dest="val_end", help="Validation period end (YYYY-MM-DD).")
+    parser.add_argument(
+        "--n-min-label",
+        type=int,
+        default=1,
+        dest="n_min_label",
+        help="Min orders in val period for positive label (default: 1).",
+    )
+    parser.add_argument(
+        "--redundancy-csv",
+        default="",
+        dest="redundancy_csv",
+        help="Path to output feature-feature redundancy CSV (optional).",
+    )
+    parser.add_argument(
         "--distributions-plot",
         default="",
         dest="distributions_plot",
@@ -101,9 +126,36 @@ def main() -> None:
 
     df = pd.read_parquet(args.features)
 
+    # Attach validation label and s_val if plis and val window provided
+    label_series: pd.Series | None = None
+    s_val_series: pd.Series | None = None
+    if args.plis and args.val_start and args.val_end:
+        plis = pd.read_csv(args.plis, sep="\t", low_memory=False)
+        plis["orderdate"] = pd.to_datetime(plis["orderdate"], format="%Y-%m-%d")
+        plis["legal_entity_id"] = plis["legal_entity_id"].astype(str)
+        plis["eclass"] = plis["eclass"].astype(str).str.strip().replace("nan", "")
+        val_start = pd.Timestamp(args.val_start)
+        val_end = pd.Timestamp(args.val_end)
+        plis = plis[(plis["orderdate"] >= val_start) & (plis["orderdate"] <= val_end)]
+        q = pd.to_numeric(plis["quantityvalue"], errors="coerce").fillna(0)
+        v = pd.to_numeric(plis["vk_per_item"], errors="coerce").fillna(0)
+        plis["_spend"] = q * v
+        plis = plis[plis["eclass"] != ""]
+        val_agg = (
+            plis.groupby(["legal_entity_id", "eclass"])
+            .agg(n_orders_val=("_spend", "count"), s_val=("_spend", "sum"))
+            .reset_index()
+        )
+        df = df.merge(val_agg, on=["legal_entity_id", "eclass"], how="left")
+        df["n_orders_val"] = df["n_orders_val"].fillna(0).astype(int)
+        df["s_val"] = df["s_val"].fillna(0)
+        df["label"] = (df["n_orders_val"] >= args.n_min_label).astype(int)
+        label_series = df["label"]
+        s_val_series = df["s_val"]
+
     # Key columns always retained; exclude from numeric summary
     key_cols = {"legal_entity_id", "eclass"}
-    feature_cols = [c for c in df.columns if c not in key_cols]
+    feature_cols = [c for c in df.columns if c not in key_cols and c not in {"label", "s_val", "n_orders_val"}]
 
     rows = []
     for col in feature_cols:
@@ -123,6 +175,45 @@ def main() -> None:
             d["std"] = s.std()
             d["min"] = s.min()
             d["max"] = s.max()
+            zero_count = (s == 0).sum()
+            d["zero_rate"] = zero_count / n if n else 0.0
+            d["top_category_share"] = np.nan
+            for qname, qval in [("p01", 1), ("p05", 5), ("p50", 50), ("p95", 95), ("p99", 99)]:
+                d[qname] = s.quantile(qval / 100.0)
+        else:
+            d["zero_rate"] = np.nan
+            vc = s.fillna("").value_counts(normalize=True, dropna=False)
+            d["top_category_share"] = float(vc.iloc[0]) if len(vc) else np.nan
+        # Target-aware stats (recurrence label and positive-case spend)
+        if label_series is not None and pd.api.types.is_numeric_dtype(s):
+            valid = s.notna() & label_series.notna()
+            if valid.sum() >= MIN_VALID_FOR_SIGNAL and label_series.loc[valid].nunique() >= 2:
+                try:
+                    auc = roc_auc_score(label_series.loc[valid], s.loc[valid])
+                    d["label_auc"] = max(auc, 1.0 - auc)
+                except Exception:
+                    d["label_auc"] = np.nan
+                rho = s.loc[valid].corr(label_series.loc[valid].astype(float), method="spearman")
+                d["abs_spearman_label"] = abs(float(rho)) if pd.notna(rho) else np.nan
+            else:
+                d["label_auc"] = np.nan
+                d["abs_spearman_label"] = np.nan
+            pos = label_series == 1
+            if pos.sum() >= MIN_VALID_FOR_SIGNAL and s_val_series is not None:
+                s_pos = s.loc[pos]
+                v_pos = np.log1p(s_val_series.loc[pos])
+                valid_pos = s_pos.notna() & v_pos.notna()
+                if valid_pos.sum() >= MIN_VALID_FOR_SIGNAL:
+                    rho_val = s_pos.loc[valid_pos].corr(v_pos.loc[valid_pos], method="spearman")
+                    d["value_spearman_pos"] = float(rho_val) if pd.notna(rho_val) else np.nan
+                else:
+                    d["value_spearman_pos"] = np.nan
+            else:
+                d["value_spearman_pos"] = np.nan
+        else:
+            d["label_auc"] = np.nan
+            d["abs_spearman_label"] = np.nan
+            d["value_spearman_pos"] = np.nan
         rows.append(d)
 
     summary = pd.DataFrame(rows)
@@ -130,6 +221,32 @@ def main() -> None:
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     summary.to_csv(out_csv, index=False)
     print(f"Wrote feature summary ({len(summary)} rows) to {out_csv}")
+
+    # Feature-feature redundancy (numeric pairs with high |Spearman|)
+    REDUNDANCY_THRESHOLD = 0.85
+    if args.redundancy_csv:
+        numeric_cols = [
+            r["feature"] for _, r in summary.iterrows()
+            if r["feature"] in df.columns and ("int" in str(r["dtype"]) or "float" in str(r["dtype"]))
+        ]
+        numeric_cols = [c for c in numeric_cols if c in df.columns]
+        redundancy_rows = []
+        if len(numeric_cols) >= 2:
+            X = df[numeric_cols].copy()
+            for c in numeric_cols:
+                X[c] = pd.to_numeric(X[c], errors="coerce")
+            corr = X.corr(method="spearman")
+            for i, a in enumerate(numeric_cols):
+                for j, b in enumerate(numeric_cols):
+                    if i >= j:
+                        continue
+                    val = corr.iloc[i, j]
+                    if pd.notna(val) and abs(val) >= REDUNDANCY_THRESHOLD:
+                        redundancy_rows.append({"feature_a": a, "feature_b": b, "abs_spearman": round(abs(float(val)), 4)})
+        redundancy_path = Path(args.redundancy_csv)
+        redundancy_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(redundancy_rows).to_csv(redundancy_path, index=False)
+        print(f"Wrote feature redundancy ({len(redundancy_rows)} pairs) to {redundancy_path}")
 
     if not _HAS_PLOTTING:
         raise ImportError(

@@ -101,6 +101,7 @@ def _extract_new_submission_block(result_text: str) -> str:
 
     We locate this block by finding the first line that contains an inline 'Savings:' label
     (i.e. 'Savings: €...' on one line) and collect lines up through 'Spend Captured:'.
+    If we cannot identify such a block, return an empty string instead of the full page text.
     """
     lines = [ln.strip() for ln in result_text.splitlines() if ln.strip()]
     start = None
@@ -110,13 +111,14 @@ def _extract_new_submission_block(result_text: str) -> str:
             start = max(0, idx - 3)
             break
     if start is None:
-        return result_text  # fall back to full text so caller can still try
+        return ""
     end = len(lines)
     for idx in range(start, len(lines)):
         if lines[idx].startswith("Spend Captured:"):
             end = idx + 1
             break
-    return "\n".join(lines[start:end])
+    block = "\n".join(lines[start:end])
+    return block if "Spend Captured:" in block else ""
 
 
 def _parse_portal_result_text(result_text: str) -> dict[str, float | int | None]:
@@ -132,7 +134,6 @@ def _parse_portal_result_text(result_text: str) -> dict[str, float | int | None]
         Spend Captured: 14.63%
     """
     block = _extract_new_submission_block(result_text)
-    lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
     row: dict[str, float | int | None] = {
         "total_score": None,
         "total_savings": None,
@@ -142,6 +143,9 @@ def _parse_portal_result_text(result_text: str) -> dict[str, float | int | None]
         "spend_capture_rate": None,
         "total_ground_spend": None,
     }
+    if not block:
+        return row
+    lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
 
     for line in lines:
         if line.startswith("Savings:"):

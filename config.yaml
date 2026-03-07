@@ -100,9 +100,9 @@ scoring_parameters:
 modelling:
   # All enabled approaches run through selection and produce portfolio/submission per approach (data/11_predictions, 12_portfolio, 13_submission, 14_scores by {mode}/{approach}/).
   enabled_approaches:
-    - baseline
+    #- baseline
     - lgbm_two_stage
-    - pass_through
+    #- pass_through
     - phase3_repro
   enabled_levels:
     - 1

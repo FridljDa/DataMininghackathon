@@ -65,7 +65,7 @@ Modeling uses a temporal cutoff $ T $:
 For each candidate pair $ (b,e) $, define:
 
 $$
-\text{label}(b,e) = \mathbf{1}\!\left[\text{orders in horizon}(b,e) \ge n_{\min}\right]
+y_{b,e} = \mathbf{1}\!\left[\text{orders in horizon}(b,e) \ge n_{\min}\right]
 $$
 
 with default $ n_{\min}=1 $.
@@ -76,7 +76,7 @@ $$
 s_{\text{future}}(b,e)=\sum_{\text{rows in horizon}} \text{quantityvalue}\times \text{vk\_per\_item}
 $$
 
-Default learning target is binary recurrence (`label`), with spend used for value-aware ranking.
+Default learning target is binary recurrence ($ y_{b,e} $), with spend used for value-aware ranking.
 
 > **Evaluator behavior note:** Predictions are set-based per buyer and cluster. Duplicate rows for the same $ (b,e) $ are sanitized and counted once by the organizer scorer.
 
@@ -185,7 +185,7 @@ Define two targets:
 
 - Binary recurrence target:
   $$
-  y_{b,e} := \mathbf{1}\!\left[\text{label}(b,e)=1\right] \in \{0,1\}
+  y_{b,e} \in \{0,1\}
   $$
 - Future spend target in the scoring horizon:
   $$

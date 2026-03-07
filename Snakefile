@@ -392,6 +392,9 @@ rule train_approach:
         use_monthly_lookback_rates = 1 if APP.get("phase3_repro", {}).get("use_monthly_lookback_rates", False) else 0,
         lgb_params_classifier = lambda w: APP.get(w.approach, {}).get("lgb_params_classifier", APP.get("lgbm_two_stage", {}).get("lgb_params_classifier", "")),
         lgb_params_regressor = lambda w: APP.get(w.approach, {}).get("lgb_params_regressor", APP.get("lgbm_two_stage", {}).get("lgb_params_regressor", "")),
+        min_positive_samples_for_regressor = lambda w: APP.get("lgbm_two_stage", {}).get("min_positive_samples_for_regressor", 10),
+        recency_decay_days = lambda w: APP.get("phase3_repro", {}).get("recency_decay_days", 365.0),
+        score_base_constant = lambda w: APP.get("pass_through", {}).get("score_base_constant", 1.0),
     wildcard_constraints:
         mode = MODE_RE,
         approach = "|".join(ENABLED_APPROACHES),
@@ -405,7 +408,9 @@ rule train_approach:
         "--eta {params.eta} --tau {params.tau} "
         "--sparse-eta-multiplier {params.sparse_eta_multiplier} --sparse-tau-multiplier {params.sparse_tau_multiplier} "
         "--use-monthly-lookback-rates {params.use_monthly_lookback_rates} "
-        "--lgb-params-classifier '{params.lgb_params_classifier}' --lgb-params-regressor '{params.lgb_params_regressor}'"
+        "--lgb-params-classifier '{params.lgb_params_classifier}' --lgb-params-regressor '{params.lgb_params_regressor}' "
+        "--min-positive-samples-for-regressor {params.min_positive_samples_for_regressor} "
+        "--recency-decay-days {params.recency_decay_days} --score-base-constant {params.score_base_constant}"
 
 rule select_portfolio:
     """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach and level; level2 portfolio includes manufacturer."""

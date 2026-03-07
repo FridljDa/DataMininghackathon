@@ -103,6 +103,27 @@ def run_main() -> None:
         dest="use_monthly_lookback_rates",
         help="If 1, phase3_repro uses avg_monthly_orders_in_lookback and avg_monthly_spend_in_lookback (default: 0).",
     )
+    parser.add_argument(
+        "--min-positive-samples-for-regressor",
+        type=int,
+        default=10,
+        dest="min_positive_samples_for_regressor",
+        help="lgbm_two_stage: min positive samples to train stage-B regressor (default: 10).",
+    )
+    parser.add_argument(
+        "--recency-decay-days",
+        type=float,
+        default=365.0,
+        dest="recency_decay_days",
+        help="phase3_repro: recency decay divisor in days (default: 365.0).",
+    )
+    parser.add_argument(
+        "--score-base-constant",
+        type=float,
+        default=1.0,
+        dest="score_base_constant",
+        help="pass_through: constant score_base value (default: 1.0).",
+    )
     parser.add_argument("--level", type=int, default=1, choices=(1, 2), help="Level 1 or 2; level 2 keys include manufacturer.")
     args = parser.parse_args()
 
@@ -134,6 +155,9 @@ def run_main() -> None:
         "sparse_eta_multiplier": args.sparse_eta_multiplier,
         "sparse_tau_multiplier": args.sparse_tau_multiplier,
         "use_monthly_lookback_rates": bool(args.use_monthly_lookback_rates),
+        "min_positive_samples_for_regressor": args.min_positive_samples_for_regressor,
+        "recency_decay_days": args.recency_decay_days,
+        "score_base_constant": args.score_base_constant,
     }
     df = approach.run(df, **params)
     df = _ensure_required_base_columns(df)

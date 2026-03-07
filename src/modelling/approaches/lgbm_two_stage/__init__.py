@@ -33,6 +33,7 @@ def run(
     fixed_fee_eur: float = 10.0,
     lgb_params_classifier: str = "",
     lgb_params_regressor: str = "",
+    min_positive_samples_for_regressor: int = 10,
     **_: object,
 ) -> pd.DataFrame:
     """
@@ -62,7 +63,7 @@ def run(
 
     # Stage B: conditional value regressor (positive examples only)
     pos = y_label == 1
-    if pos.sum() < 10:
+    if pos.sum() < min_positive_samples_for_regressor:
         v_hat = pd.Series(0.0, index=df.index)
         v_hat.loc[pos] = df.loc[pos, "s_val"]
     else:

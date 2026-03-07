@@ -34,6 +34,7 @@ def run(
     sparse_eta_multiplier: int = 3,
     sparse_tau_multiplier: float = 2.0,
     use_monthly_lookback_rates: bool = False,
+    recency_decay_days: float = 365.0,
     **_: object,
 ) -> pd.DataFrame:
     """
@@ -43,7 +44,8 @@ def run(
     """
     df = df.copy()
     days_since = _get_series(df, ("days_since_last", "delta_recency"), default=0.0)
-    recurrence_decay = np.exp(-days_since / 365.0)
+    decay_divisor = max(recency_decay_days, 1e-6)
+    recurrence_decay = np.exp(-days_since / decay_divisor)
 
     if use_monthly_lookback_rates and "avg_monthly_orders_in_lookback" in df.columns and "avg_monthly_spend_in_lookback" in df.columns:
         orders_rate = _get_series(df, ("avg_monthly_orders_in_lookback",), default=0.0)

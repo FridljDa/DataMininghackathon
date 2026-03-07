@@ -228,7 +228,11 @@ modelling:
       lgb_params_classifier: '{"num_leaves": 63, "n_estimators": 300, "learning_rate": 0.05, "min_child_samples": 10, "reg_alpha": 0.1, "reg_lambda": 1.0}'
       # JSON override for LGBMRegressor (value given recurrence); empty = use code defaults
       lgb_params_regressor: '{"num_leaves": 63, "n_estimators": 300, "learning_rate": 0.05, "min_child_samples": 10, "reg_alpha": 0.1, "reg_lambda": 1.0}'
-    pass_through: {}
+      # Min positive (recurrence) samples required to train stage-B regressor; below this, v_hat uses s_val for positives only
+      min_positive_samples_for_regressor: 10
+    pass_through:
+      # Constant score_base so all candidates pass selection when threshold/guardrails are permissive
+      score_base_constant: 1.0
     lgbm_v3_factorized:
       # Stage A: Tweedie count regressor for n_orders_val
       lgb_params_classifier: '{"objective": "tweedie", "tweedie_variance_power": 1.5, "num_leaves": 63, "n_estimators": 300, "learning_rate": 0.05, "min_child_samples": 10, "reg_alpha": 0.1, "reg_lambda": 1.0}'
@@ -243,6 +247,8 @@ modelling:
       sparse_tau_multiplier: 2.0
       # If true, score uses avg_monthly_*_in_lookback for tenure fairness
       use_monthly_lookback_rates: false
+      # Recency decay divisor in days: exp(-days_since_last / recency_decay_days)
+      recency_decay_days: 365.0
 
 # Submission / cold-start behaviour
 submission:

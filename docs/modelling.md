@@ -205,27 +205,61 @@ So baseline v1 is: **frequency + value - staleness**, then threshold + top-$K$.
 
 ### Two-stage model (v2)
 
-**Stage A — Recurrence probability:**
+Let one training example be a buyer-eclass pair $ (b,e) $ with features $ \mathbf{x}_{b,e} $.
 
-Train a binary classifier (e.g. LightGBM) on label $ y = \text{label}(b,e) $:
+Define two targets:
+
+- Binary recurrence target:
+  $$
+  y_{b,e} := \mathbf{1}\!\left[\text{label}(b,e)=1\right] \in \{0,1\}
+  $$
+- Future spend target in the scoring horizon:
+  $$
+  z_{b,e} := s_{\text{future}}(b,e) \ge 0
+  $$
+
+where:
+- $ y_{b,e}=1 $ means the pair recurs in the future window.
+- $ z_{b,e} $ is the euro spend for that pair in the same future window.
+
+**Stage A — recurrence model (classification):**
+
+Fit a classifier on all candidate pairs:
 
 $$
-\hat{p}(b, e) = P(\text{recur} \mid \mathbf{x}_{b,e})
+\hat{p}_{b,e} := P(y_{b,e}=1 \mid \mathbf{x}_{b,e})
 $$
 
-**Stage B — Conditional value estimate:**
+Interpretation: estimated probability that pair $ (b,e) $ will recur.
 
-On positive training examples, regress on future spend:
+**Stage B — value model (regression on positives):**
 
-$$
-\hat{v}(b, e) = E[s_{\text{future}}(b,e) \mid \mathbf{x}_{b,e},\ \text{recur}=1]
-$$
-
-**Expected utility:**
+Fit a regressor only on pairs with $ y_{b,e}=1 $:
 
 $$
-\widehat{EU}(b, e) = \hat{p}(b, e) \cdot \hat{v}(b, e) \cdot r - F
+\hat{v}_{b,e} := E[z_{b,e} \mid \mathbf{x}_{b,e},\ y_{b,e}=1]
 $$
+
+Interpretation: expected spend *if recurrence happens*.
+
+**Combine both models at inference time:**
+
+Using the law of total expectation:
+
+$$
+E[z_{b,e}\mid \mathbf{x}_{b,e}] \approx \hat{p}_{b,e}\cdot \hat{v}_{b,e}
+$$
+
+Expected utility (illustrative linear savings with rate $ r $ and fee $ F $):
+
+$$
+\widehat{EU}(b,e)=\hat{p}_{b,e}\cdot \hat{v}_{b,e}\cdot r - F
+$$
+
+So:
+- Stage A answers: "How likely is recurrence?"
+- Stage B answers: "If it recurs, how much value?"
+- Their product gives expected spend before fee.
 
 ### Pass-through (candidate-only)
 

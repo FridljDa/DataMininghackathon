@@ -178,10 +178,10 @@ $$
 For each buyer $ b \in \mathcal{B}_{\text{warm}} $:
 
 1. Compute $ \widehat{EU}(b, e) $ for all $ e \in \mathcal{C}_b $.
-2. Keep only pairs with positive expected utility:
+2. Keep only pairs above an EU threshold $ \tau_{EU} $:
 
 $$
-\hat{S}_b = \left\{ e \in \mathcal{C}_b \;\middle|\; \widehat{EU}(b,e) > 0 \right\}
+\hat{S}_b = \left\{ e \in \mathcal{C}_b \;\middle|\; \widehat{EU}(b,e) > \tau_{EU} \right\}
 $$
 
 3. Apply minimum evidence guardrail — require at least one of:
@@ -191,6 +191,12 @@ $$
 
 4. Cap at top $ K $ by $ \widehat{EU} $ (tune $ K $ on validation; start $ K = 15 $).
 
+Pass-through configuration (to force all candidates into submission):
+- Set $ \tau_{EU} \ll 0 $ (or any value below the minimum $ \widehat{EU}(b,e) $)
+- Set $ X = 1 $, $ Y = 1 $, and $ \tau_{\text{high}} = 0 $
+- Set $ K \geq \max_b |\mathcal{C}_b| $ (or effectively no cap)
+- Then $ \hat{S}_b = \mathcal{C}_b $ for every warm buyer $ b $
+
 ---
 
 ## 8. Tuning Priority
@@ -199,10 +205,10 @@ In order of expected impact on validation euro score:
 
 | Priority | Parameter | Notes |
 |---|---|---|
-| 1 | EU threshold (or $ \theta $ for baseline) | Core precision-recall tradeoff |
+| 1 | EU threshold $ \tau_{EU} $ (or $ \theta $ for baseline) | Core precision-recall tradeoff; set very low for pass-through |
 | 2 | Per-buyer cap $ K $ | Hard ceiling on fee exposure |
 | 3 | Lookback window $ L $ | Candidate set size |
-| 4 | Guardrail thresholds $ X, Y, \tau_s $ | Edge case pruning |
+| 4 | Guardrail/candidate thresholds $ \eta, X, Y, \tau_{\text{high}} $ | Candidate strictness and edge case pruning |
 | 5 | Value model calibration | Affects ranking among positive recurrence candidates |
 
 ---

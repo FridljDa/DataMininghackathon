@@ -29,12 +29,11 @@ Each scoring run is archived per approach so you never lose prior results and ca
 
 ## Best runs (16_scores_best)
 
-The pipeline selects the **best online run per level** (across all approaches) by highest `total_score` and writes curated outputs under `data/16_scores_best/online/level<level>/`:
+The pipeline selects the **best historic online run per level** (across all runs under `data/15_scores/online/runs/level<level>/`) by highest `total_score` and copies that run directory into `data/16_scores_best/online/level<level>/best_run/` (overwriting any previous copy).
 
-- **best_run_summary.csv** — Score metrics (`total_score`, `total_savings`, `total_fees`, `num_hits`, `num_predictions`, `spend_capture_rate`, `total_ground_spend`) plus run identity (`approach`, `run_id`, `run_dir`, `commit_sha`, `branch`, `dirty`, `created_at`).
-- **best_run_metadata.json** — Full metadata for reproducibility: `mode`, `level`, `approach`, `run_id`, `run_dir`, git fields, all score fields, `source_index_csv`, `selected_at_utc`, and the run’s original `metadata.json` as `run_metadata`.
+- **Path:** `data/16_scores_best/online/level<level>/best_run/` — full copy of the best run (e.g. `score_summary_live.csv`, `metadata.json`, `score_details.parquet` if present).
 
-Tie-break order: latest `created_at`, then `approach`, then `run_id`. Build with e.g. `uv run snakemake data/16_scores_best/online/level1/best_run_summary.csv --cores 1`.
+Tie-break: latest `created_at`, then `run_id`. Build with e.g. `uv run snakemake data/16_scores_best/online/level1/best_run/.copied --cores 1`.
 
 The default pipeline builds and archives scores for all enabled approaches (online and offline). To request a single offline output for one approach:
 

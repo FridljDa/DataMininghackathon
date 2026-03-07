@@ -87,6 +87,14 @@ meta:
     reason: null_rate 0.83 > 0.5
   - feature: avg_monthly_spend_pair_tenure
     reason: null_rate 0.83 > 0.5
+  - feature: m_observed
+    reason: redundant with has_multi_year_history
+  - feature: has_gap_history
+    reason: redundant with has_multi_year_history
+  - feature: n_distinct_manufacturers
+    reason: redundant with has_multi_year_history
+  - feature: top_manufacturer_share
+    reason: redundant with has_multi_year_history
   - feature: avg_monthly_orders_in_lookback
     reason: redundant with avg_monthly_orders_buyer_tenure
   - feature: m_active
@@ -111,11 +119,3 @@ meta:
     reason: redundant with avg_monthly_orders_buyer_tenure
   - feature: effective_lookback_months
     reason: redundant with buyer_tenure_months
-  - feature: m_observed
-    reason: redundant with has_multi_year_history
-  - feature: has_gap_history
-    reason: redundant with has_multi_year_history
-  - feature: n_distinct_manufacturers
-    reason: redundant with has_multi_year_history
-  - feature: top_manufacturer_share
-    reason: redundant with has_multi_year_history

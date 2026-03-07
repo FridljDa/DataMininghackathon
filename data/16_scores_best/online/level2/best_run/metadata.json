@@ -1,8 +1,8 @@
 {
-  "commit": "31d5e79cffae73a1e799922c14164187c3d84ff5",
+  "commit": "aa143fef6d86206ac5ff6d00cc11aae3340db899",
   "branch": "main",
   "dirty": true,
-  "created_at": "2026-03-07T21:37:00Z",
+  "created_at": "2026-03-07T22:18:21Z",
   "approach": "phase3_repro",
   "level": 2,
   "config": {
@@ -19,6 +19,7 @@
     "cold_start_top_k": 30,
     "selected_features": [
       "CV_gap",
+      "avg_price_per_unit",
       "avg_monthly_orders_pair_tenure",
       "avg_monthly_spend_pair_tenure",
       "avg_spend_per_order",
@@ -45,7 +46,8 @@
       "years_since_last_order",
       "top_manufacturer_share",
       "n_distinct_manufacturers",
-      "eclass_n_buyers_global"
+      "eclass_n_buyers_global",
+      "avg_price_per_unit"
     ]
   }
 }

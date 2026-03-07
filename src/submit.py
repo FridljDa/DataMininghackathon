@@ -7,12 +7,15 @@ Usage:
     uv run src/submit.py --challenge 2 --file submission.csv --level 1
     uv run src/submit.py --challenge 2 --file submission.csv --summary-csv data/11_scores/online/score_summary_live.csv
 
-Credentials are read from config.yaml (portal_credentials.team and portal_credentials.password).
+Credentials are read from config.yaml (portal_credentials.team and portal_credentials.password),
+or from environment variables UNITE_TEAM_NAME and UNITE_PASSWORD.
 """
 
 import argparse
 import csv
+import os
 import sys
+import time
 from pathlib import Path
 
 import yaml
@@ -21,18 +24,37 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 PORTAL_URL = "https://unite-evaluator.vercel.app"
 LOGIN_URL = f"{PORTAL_URL}/login"
 
+ENV_TEAM = "UNITE_TEAM_NAME"
+ENV_PASSWORD = "UNITE_PASSWORD"
 
-def _load_credentials(config_path: Path | None = None) -> tuple[str, str]:
-    """Load team and password from config.yaml. Returns (team, password); may be empty."""
+
+def _load_credentials(config_path: Path | None = None) -> tuple[str, str, str]:
+    """Load team and password from config.yaml, then env vars. Returns (team, password, source)."""
     path = config_path or (Path(__file__).resolve().parents[1] / "config.yaml")
-    if not path.exists():
-        return "", ""
-    with path.open() as f:
-        config = yaml.safe_load(f)
-    creds = config.get("portal_credentials") or {}
-    team = (creds.get("team") or "").strip()
-    password = (creds.get("password") or "").strip()
-    return team, password
+    team = ""
+    password = ""
+    source = "none"
+
+    if path.exists():
+        with path.open() as f:
+            config = yaml.safe_load(f)
+        creds = config.get("portal_credentials") or {}
+        team = (creds.get("team") or "").strip()
+        password = (creds.get("password") or "").strip()
+        if team and password:
+            return team, password, "config.yaml"
+
+    team = (os.environ.get(ENV_TEAM) or "").strip()
+    password = (os.environ.get(ENV_PASSWORD) or "").strip()
+    if team and password:
+        return team, password, "environment"
+
+    missing = []
+    if not team:
+        missing.append("portal_credentials.team in config.yaml or " + ENV_TEAM)
+    if not password:
+        missing.append("portal_credentials.password in config.yaml or " + ENV_PASSWORD)
+    return "", "", f"missing: {'; '.join(missing)}"
 
 
 def _parse_euro(s: str) -> float | None:
@@ -129,24 +151,62 @@ def _write_summary_csv(path: Path, row: dict[str, float | int | None], submissio
         w.writerow(out_row)
 
 
-def login(page, team: str, password: str) -> None:
-    """Authenticate and establish a browser session."""
+LOGIN_MAX_ATTEMPTS = 3
+LOGIN_BACKOFF_SEC = 2
+
+
+def _login_attempt(page, team: str, password: str) -> bool:
+    """Perform one login attempt. Return True if we are no longer on /login."""
     page.goto(LOGIN_URL, wait_until="domcontentloaded")
     page.locator("#teamName").fill(team)
     page.locator("#password").fill(password)
     page.locator("button[type=submit]").click()
 
-    # Auth token is set via Supabase; wait for redirect or session cookie.
     try:
         page.wait_for_url(lambda url: "/login" not in url, timeout=10_000)
     except PlaywrightTimeout:
         pass
     page.goto(PORTAL_URL, wait_until="domcontentloaded")
+    return "/login" not in page.url
 
-    if "/login" in page.url:
-        raise RuntimeError("Login failed — check portal_credentials in config.yaml")
 
-    print(f"✓ Logged in as {team}")
+def _login_error_context(page, credential_source: str) -> str:
+    """Build diagnostic string for login failure."""
+    parts = [
+        f"Login failed (credentials from {credential_source}).",
+        f"Final URL: {page.url}",
+    ]
+    try:
+        body_text = page.locator("body").inner_text() or ""
+        if body_text:
+            snippet = body_text.strip()[:500].replace("\n", " ")
+            parts.append(f"Page text: {snippet}")
+    except Exception:
+        pass
+    return " ".join(parts)
+
+
+def login(
+    page,
+    team: str,
+    password: str,
+    *,
+    credential_source: str = "config",
+    max_attempts: int = LOGIN_MAX_ATTEMPTS,
+    backoff_sec: float = LOGIN_BACKOFF_SEC,
+) -> None:
+    """Authenticate and establish a browser session. Retries on transient redirect/session issues."""
+    for attempt in range(1, max_attempts + 1):
+        if _login_attempt(page, team, password):
+            print(f"✓ Logged in as {team}")
+            return
+        if attempt < max_attempts:
+            time.sleep(backoff_sec)
+
+    raise RuntimeError(
+        _login_error_context(page, credential_source)
+        + " — check portal_credentials in config.yaml or UNITE_TEAM_NAME and UNITE_PASSWORD."
+    )
 
 
 def submit(
@@ -288,10 +348,10 @@ def main() -> None:
         print(f"Error: file not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    team, password = _load_credentials()
+    team, password, source = _load_credentials()
     if not team or not password:
         print(
-            "Error: portal_credentials.team and portal_credentials.password must be set in config.yaml",
+            f"Error: {source}. Set portal_credentials in config.yaml or {ENV_TEAM} and {ENV_PASSWORD} in the environment.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -301,7 +361,7 @@ def main() -> None:
         context = browser.new_context()
         page = context.new_page()
         try:
-            login(page, team, password)
+            login(page, team, password, credential_source=source)
             result_text, submission_id = submit(page, args.challenge, args.file, level=args.level)
         finally:
             browser.close()

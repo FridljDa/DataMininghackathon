@@ -9,9 +9,12 @@ import pytest
 from src.submit import (
     PORTAL_URL,
     LOGIN_URL,
+    ENV_PASSWORD,
+    ENV_TEAM,
     login,
     main,
     submit,
+    _load_credentials,
     _parse_euro,
     _parse_portal_result_text,
     _parse_percent,
@@ -68,6 +71,45 @@ def _make_response_ctx(json_body: dict) -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
+# _load_credentials()
+# ---------------------------------------------------------------------------
+
+class TestLoadCredentials:
+    def test_load_from_config_when_present(self, tmp_path: Path) -> None:
+        config = tmp_path / "config.yaml"
+        config.write_text("portal_credentials:\n  team: 'TEAM1'\n  password: 'pass1'\n")
+        team, password, source = _load_credentials(config_path=config)
+        assert team == "TEAM1"
+        assert password == "pass1"
+        assert source == "config.yaml"
+
+    def test_fallback_to_env_when_config_missing(self) -> None:
+        with patch.dict("os.environ", {ENV_TEAM: "env_team", ENV_PASSWORD: "env_pass"}, clear=False):
+            team, password, source = _load_credentials(config_path=Path("/nonexistent/config.yaml"))
+        assert team == "env_team"
+        assert password == "env_pass"
+        assert source == "environment"
+
+    def test_fallback_to_env_when_config_has_empty_creds(self, tmp_path: Path) -> None:
+        config = tmp_path / "config.yaml"
+        config.write_text("other: true\n")
+        with patch.dict("os.environ", {ENV_TEAM: "e_team", ENV_PASSWORD: "e_pass"}, clear=False):
+            team, password, source = _load_credentials(config_path=config)
+        assert team == "e_team"
+        assert password == "e_pass"
+        assert source == "environment"
+
+    def test_missing_returns_source_message(self, tmp_path: Path) -> None:
+        config = tmp_path / "config.yaml"
+        config.write_text("portal_credentials: {}\n")
+        with patch.dict("os.environ", {ENV_TEAM: "", ENV_PASSWORD: ""}, clear=False):
+            team, password, source = _load_credentials(config_path=config)
+        assert team == ""
+        assert password == ""
+        assert "missing" in source.lower()
+
+
+# ---------------------------------------------------------------------------
 # login()
 # ---------------------------------------------------------------------------
 
@@ -89,8 +131,20 @@ class TestLogin:
 
     def test_failed_login_raises(self) -> None:
         page = _make_page(url=f"{PORTAL_URL}/login")
-        with pytest.raises(RuntimeError, match="Login failed"):
-            login(page, "bad", "creds")
+        with pytest.raises(RuntimeError) as exc_info:
+            login(page, "bad", "creds", max_attempts=1)
+        msg = str(exc_info.value)
+        assert "Login failed" in msg
+        assert "Final URL" in msg
+        assert "credentials from" in msg
+
+    def test_login_retry_succeeds_on_second_attempt(self) -> None:
+        """First attempt stays on /login, second attempt succeeds."""
+        page = _make_page(url=PORTAL_URL)  # unused for url
+        url_iter = iter([f"{PORTAL_URL}/login", PORTAL_URL])
+        type(page).url = property(lambda self: next(url_iter))
+        login(page, "myteam", "secret", max_attempts=2, backoff_sec=0)
+        assert page.goto.call_count >= 2
 
     def test_login_prints_team_name(self, capsys) -> None:
         page = _make_page(url=PORTAL_URL)
@@ -340,10 +394,11 @@ class TestMain:
         csv.write_text("a,b\n")
         with pytest.raises(SystemExit) as exc:
             with patch("sys.argv", ["submit", "--challenge", "2", "--file", str(csv)]):
-                with patch("src.submit._load_credentials", return_value=("", "")):
+                with patch("src.submit._load_credentials", return_value=("", "", "missing: team")):
                     main()
         assert exc.value.code == 1
-        assert "portal_credentials" in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "portal_credentials" in err or ENV_TEAM in err
 
     def test_invalid_level_rejected_by_argparse(self, tmp_path, capsys) -> None:
         csv = tmp_path / "s.csv"
@@ -358,7 +413,7 @@ class TestMain:
         csv = tmp_path / "s.csv"
         csv.write_text("a,b\n")
         with patch("sys.argv", ["submit", "--challenge", "2", "--file", str(csv), "--level", "3"]):
-            with patch("src.submit._load_credentials", return_value=("t", "p")):
+            with patch("src.submit._load_credentials", return_value=("t", "p", "config.yaml")):
                 with patch("src.submit.sync_playwright") as mock_pw:
                         side_effect, cache = _make_locator_side_effect()
                         mock_page = MagicMock()

@@ -3,3 +3,4 @@ run_id,commit_sha,branch,dirty,created_at,run_dir
 20260307_090707_4a0dfab_dirty,4a0dfab76ac22fe48e26ac9eaf5972f0be256188,main,true,2026-03-07T09:07:07Z,data/11_scores/online/runs/20260307_090707_4a0dfab_dirty
 20260307_090911_4a0dfab_dirty,4a0dfab76ac22fe48e26ac9eaf5972f0be256188,main,true,2026-03-07T09:09:11Z,data/11_scores/online/runs/20260307_090911_4a0dfab_dirty
 20260307_092250_21484d0_dirty,21484d0f7c42306d7e9fc26c72bb2edbd2ebfe92,main,true,2026-03-07T09:22:50Z,data/11_scores/online/runs/20260307_092250_21484d0_dirty
+20260307_103645_7360623_dirty,73606230ace905c8d0743ee1f24fbf1e792e54f3,main,true,2026-03-07T10:36:45Z,data/12_scores/online/runs/20260307_103645_7360623_dirty

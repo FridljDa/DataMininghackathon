@@ -20,8 +20,8 @@ modelling:
   enabled_approaches:
     - baseline
     - lgbm_two_stage
-    - pass_through
-    - phase3_repro
+    #- pass_through
+    #- phase3_repro
   enabled_levels:
     - 1
     - 2

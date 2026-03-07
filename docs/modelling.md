@@ -143,6 +143,12 @@ For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{warm}} $ and 
 - Momentum/trend signals (recent acceleration/deceleration versus prior periods).
 - Buyer-context signals (size/sector metadata and related static attributes).
 
+### Tenure-normalized (average monthly) features
+Raw counts and spend are not comparable when buyers joined at different times. The pipeline adds quotient features that normalize by observed tenure so late joiners are comparable to long-tenure buyers:
+- **Buyer/pair tenure:** `buyer_tenure_months`, `pair_tenure_months`, `effective_lookback_months` (denominators; no leakage, clipped ≥ 1).
+- **Average monthly:** `avg_monthly_orders_buyer_tenure`, `avg_monthly_orders_pair_tenure`, `avg_monthly_spend_buyer_tenure`, `avg_monthly_spend_pair_tenure`, `avg_monthly_orders_in_lookback`, `avg_monthly_spend_in_lookback`.
+Selection guardrails can optionally use `avg_monthly_spend_buyer_tenure` (`modelling.selection.guardrails.min_avg_monthly_spend`). The phase3_repro approach can score using monthlyized lookback rates via `modelling.approaches.phase3_repro.use_monthly_lookback_rates`.
+
 ### Design principles
 - Keep the concrete feature list configurable and versioned with experiments.
 - Use only information available up to the train cutoff (strict no-leakage rule).

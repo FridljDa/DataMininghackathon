@@ -251,6 +251,11 @@ def submit(
 
     submission_result: dict = {}
 
+    # Count existing scored submissions before submitting so we can detect the new one.
+    pre_submit_score_count: int = page.evaluate(
+        "() => (document.body.innerText.match(/Total Score:/g) || []).length"
+    )
+
     # Submit and wait for the API response using expect_response.
     print("⏳ Submitting…")
     with page.expect_response(
@@ -291,14 +296,14 @@ def submit(
         )
     print("⏳ Waiting for scoring results…")
 
-    # Wait for "Your Submissions" section to appear with a score (not just "evaluating").
+    # Wait for a NEW scored submission to appear (count must exceed pre-submit count).
     try:
         page.wait_for_function(
-            """() => {
-                const text = document.body.innerText;
-                return text.includes('Your Submissions') && text.includes('Total Score:');
-            }""",
-            timeout=60_000,
+            f"""() => {{
+                const count = (document.body.innerText.match(/Total Score:/g) || []).length;
+                return count > {pre_submit_score_count};
+            }}""",
+            timeout=120_000,
         )
     except PlaywrightTimeout:
         print("⚠  Scoring timed out — results may appear on the portal later.")

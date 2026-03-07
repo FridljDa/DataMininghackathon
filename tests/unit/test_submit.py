@@ -181,6 +181,7 @@ class TestSubmit:
         page.expect_response = _make_response_ctx(
             response_body or {"success": True, "submission": {"id": "abc-123"}}
         )
+        page.evaluate.return_value = 0
         return page
 
     # --- level selection ---
@@ -297,6 +298,36 @@ class TestSubmit:
         submit(page, challenge_id=2, file_path=csv, level=2)  # must not raise
 
         assert "timed out" in capsys.readouterr().out
+
+    def test_wait_uses_score_count_not_text_includes(self, tmp_path) -> None:
+        """wait_for_function must wait for a NEW Total Score: entry, not any existing one."""
+        csv = tmp_path / "s.csv"
+        csv.write_text("legal_entity_id,cluster\n")
+        l2 = _make_button("Level 2 — E-Class + Manufacturer")
+        page = self._page_with_buttons([l2])
+        page.evaluate.return_value = 3  # 3 prior scored submissions on page
+
+        submit(page, challenge_id=2, file_path=csv, level=2)
+
+        page.evaluate.assert_called_once()
+        js_arg = page.wait_for_function.call_args[0][0]
+        assert "Total Score:" in js_arg
+        assert "count > 3" in js_arg
+        assert "text.includes" not in js_arg
+
+    def test_evaluate_called_before_submit_click(self, tmp_path) -> None:
+        """page.evaluate (pre-submit count) must be called before the submit button click."""
+        csv = tmp_path / "s.csv"
+        csv.write_text("legal_entity_id,cluster\n")
+        l2 = _make_button("Level 2 — E-Class + Manufacturer")
+        page = self._page_with_buttons([l2])
+        call_order: list[str] = []
+        page.evaluate.side_effect = lambda *a, **kw: call_order.append("evaluate") or 0
+        page.locator("button[type=submit]").click.side_effect = lambda: call_order.append("click")
+
+        submit(page, challenge_id=2, file_path=csv, level=2)
+
+        assert call_order.index("evaluate") < call_order.index("click")
 
     def test_navigates_to_correct_challenge_url(self, tmp_path) -> None:
         csv = tmp_path / "s.csv"

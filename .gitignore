@@ -30,3 +30,4 @@
 __pycache__/
 *.py[cod]
 *$py.class
+/data/16_scores_best/online/level2/best_run/.copied

@@ -148,6 +148,7 @@ modelling:
     min_lookback_spend: 0
 
   # Selection policy: threshold, guardrails, per-buyer cap. Intentionally lenient to increase recall/coverage.
+  # Defaults apply to both levels unless overridden under by_level.
   selection:
     # Keep only pairs with EU score above this
     score_threshold: 0.0
@@ -163,6 +164,25 @@ modelling:
       high_spend: 0
       # 0 = disabled; when > 0, pass if avg_monthly_spend_buyer_tenure >= this (late joiners)
       min_avg_monthly_spend: 0
+    # Per-level overrides (optional). Keys "1" and "2" override defaults for that level.
+    # Level 1: more selective (tuned offline evidence: top_k 150, guardrails 2/2/200).
+    # Level 2: more optimistic (lower threshold, broader submission for leaderboard upside).
+    by_level:
+      1:
+        top_k_per_buyer: 150
+        guardrails:
+          min_orders: 2
+          min_months: 2
+          high_spend: 200
+          min_avg_monthly_spend: 0
+      2:
+        score_threshold: -0.05
+        top_k_per_buyer: 400
+        guardrails:
+          min_orders: 0
+          min_months: 1
+          high_spend: 0
+          min_avg_monthly_spend: 0
 
   # SKU attribute features from features_per_sku.csv (top-K keys/values per candidate key)
   features_per_sku:
@@ -253,7 +273,11 @@ modelling:
 # Submission / cold-start behaviour
 submission:
   # Max eclasses/clusters per cold-start buyer (lift-based NACE ranking)
-  cold_start_top_k: 50
+  cold_start_top_k: 200
+  # Per-level overrides (optional). Keys "1" and "2" override cold_start_top_k for that level.
+  by_level:
+    1: {}
+    2: {}
 
 # Credentials for uploading to competition portal
 portal_credentials:

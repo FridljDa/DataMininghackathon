@@ -60,6 +60,30 @@ VAL = WIN["validation"]
 CAND = MODELLING["candidates"]
 SEL = MODELLING["selection"]
 GRD = SEL["guardrails"]
+
+
+def _selection_for_level(level):
+    """Resolve selection params for a level: merge defaults with by_level overrides."""
+    by_level = SEL.get("by_level") or {}
+    overrides = by_level.get(str(level)) or {}
+    grd_default = SEL.get("guardrails") or {}
+    grd = overrides.get("guardrails") or grd_default
+    return {
+        "score_threshold": overrides.get("score_threshold", SEL.get("score_threshold", 0.0)),
+        "top_k_per_buyer": overrides.get("top_k_per_buyer", SEL.get("top_k_per_buyer", 400)),
+        "min_orders_guardrail": grd.get("min_orders", 0),
+        "min_months_guardrail": grd.get("min_months", 1),
+        "high_spend_guardrail": grd.get("high_spend", 0),
+        "min_avg_monthly_spend": grd.get("min_avg_monthly_spend", 0),
+    }
+
+
+def _cold_start_top_k_for_level(level):
+    """Resolve cold_start_top_k for a level: use submission.by_level if present."""
+    sub = config.get("submission") or {}
+    by_level = sub.get("by_level") or {}
+    overrides = by_level.get(str(level)) or {}
+    return overrides.get("cold_start_top_k", sub.get("cold_start_top_k", 50))
 FEAT = MODELLING["features"]
 APP = MODELLING["approaches"]
 
@@ -99,7 +123,10 @@ FEATURES_SELECTED_PATTERN = f"{DATA_DIR}/11_features_selected/{{mode}}/level{{le
 # Per-approach and per-level: scores, portfolio, submission (data/12–14 by {mode}/{approach}/level{level}/)
 ENABLED_APPROACHES = MODELLING["enabled_approaches"]
 ENABLED_LEVELS = MODELLING["enabled_levels"]
+# Hybrid approach has no scores; portfolio is merged from lgbm_two_stage + phase3_repro
+APPROACHES_WITH_SCORES = [a for a in ENABLED_APPROACHES if a != "hybrid_lgbm_phase3"]
 APPROACH_RE = "|".join(ENABLED_APPROACHES)
+APPROACH_RE_WITH_SCORES = "|".join(APPROACHES_WITH_SCORES)
 LEVEL_RE = "|".join(str(l) for l in ENABLED_LEVELS)
 SUBMISSION_TUNING_OUTPUTS = (
     expand(f"{SUBMISSION_TUNING_DIR}/run_metrics_level{{level}}.csv", level=ENABLED_LEVELS)
@@ -371,7 +398,7 @@ rule feature_selection:
         "--output {output.features_selected} --level {wildcards.level}"
 
 rule train_approach:
-    """Run a modelling approach (baseline or lgbm_two_stage); outputs data/12_predictions/{mode}/{approach}/level{level}/scores.parquet."""
+    """Run a modelling approach (baseline or lgbm_two_stage); outputs data/12_predictions/{mode}/{approach}/level{level}/scores.parquet. Excludes hybrid_lgbm_phase3 (no training)."""
     input:
         candidates = FEATURES_SELECTED_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
@@ -399,7 +426,7 @@ rule train_approach:
         score_base_constant = lambda w: APP.get("pass_through", {}).get("score_base_constant", 1.0),
     wildcard_constraints:
         mode = MODE_RE,
-        approach = "|".join(ENABLED_APPROACHES),
+        approach = APPROACH_RE_WITH_SCORES,
         level = LEVEL_RE,
     shell:
         "uv run python src/modelling/run.py --approach {wildcards.approach} --level {wildcards.level} "
@@ -415,27 +442,45 @@ rule train_approach:
         "--recency-decay-days {params.recency_decay_days} --score-base-constant {params.score_base_constant}"
 
 rule select_portfolio:
-    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach and level; level2 portfolio includes manufacturer."""
+    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach and level; level2 portfolio includes manufacturer. Uses level-specific selection when by_level is set. Excludes hybrid_lgbm_phase3 (use rule portfolio_hybrid)."""
     input:
         scores = SCORES_APPROACH_PATTERN,
     output:
         portfolio = PORTFOLIO_PATTERN,
     params:
-        score_threshold = SEL["score_threshold"],
-        min_orders_guardrail = GRD["min_orders"],
-        min_months_guardrail = GRD["min_months"],
-        high_spend_guardrail = GRD["high_spend"],
-        min_avg_monthly_spend = GRD.get("min_avg_monthly_spend", 0),
-        top_k_per_buyer = SEL["top_k_per_buyer"],
+        score_threshold = lambda w: _selection_for_level(w.level)["score_threshold"],
+        min_orders_guardrail = lambda w: _selection_for_level(w.level)["min_orders_guardrail"],
+        min_months_guardrail = lambda w: _selection_for_level(w.level)["min_months_guardrail"],
+        high_spend_guardrail = lambda w: _selection_for_level(w.level)["high_spend_guardrail"],
+        min_avg_monthly_spend = lambda w: _selection_for_level(w.level)["min_avg_monthly_spend"],
+        top_k_per_buyer = lambda w: _selection_for_level(w.level)["top_k_per_buyer"],
     wildcard_constraints:
         mode = MODE_RE,
-        approach = APPROACH_RE,
+        approach = APPROACH_RE_WITH_SCORES,
         level = LEVEL_RE,
     shell:
         "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} --level {wildcards.level} "
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
         "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
         "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer}"
+
+rule portfolio_hybrid:
+    """Merge lgbm_two_stage (primary) and phase3_repro (secondary) portfolios up to target_per_buyer per buyer. Enable by adding hybrid_lgbm_phase3 to modelling.enabled_approaches."""
+    input:
+        primary = f"{DATA_DIR}/13_portfolio/{{mode}}/lgbm_two_stage/level{{level}}/portfolio.parquet",
+        secondary = f"{DATA_DIR}/13_portfolio/{{mode}}/phase3_repro/level{{level}}/portfolio.parquet",
+        scores_secondary = f"{DATA_DIR}/12_predictions/{{mode}}/phase3_repro/level{{level}}/scores.parquet",
+    output:
+        portfolio = f"{DATA_DIR}/13_portfolio/{{mode}}/hybrid_lgbm_phase3/level{{level}}/portfolio.parquet",
+    params:
+        target_per_buyer = 400,
+    wildcard_constraints:
+        mode = MODE_RE,
+        level = LEVEL_RE,
+    shell:
+        "uv run src/merge_portfolio_hybrid.py --primary {input.primary} --secondary {input.secondary} "
+        "--scores-secondary {input.scores_secondary} --output {output.portfolio} --level {wildcards.level} "
+        "--target-per-buyer {params.target_per_buyer}"
 
 rule write_submission_warm_only:
     """Write submission rows for warm buyers only (portfolio items per buyer)."""
@@ -461,18 +506,18 @@ rule write_submission_warm_only:
 
 
 rule write_submission_cold_only:
-    """Write submission rows for cold-start buyers only (NACE/score-based fallback)."""
+    """Write submission rows for cold-start buyers only (NACE/score-based fallback). Uses level-specific cold_start_top_k when submission.by_level is set. For hybrid_lgbm_phase3 uses phase3_repro scores."""
     input:
         portfolio = PORTFOLIO_PATTERN,
         customer = lambda w: MODE_CFG[w.mode]["customer_input"],
         plis = PLIS_TRAINING_SPLIT,
         nace_codes = INPUTS["nace_codes"],
-        scores = SCORES_APPROACH_PATTERN,
+        scores = lambda w: f"{DATA_DIR}/12_predictions/{w.mode}/phase3_repro/level{w.level}/scores.parquet" if w.approach == "hybrid_lgbm_phase3" else f"{DATA_DIR}/12_predictions/{w.mode}/{w.approach}/level{w.level}/scores.parquet",
     output:
         submission_cold = SUBMISSION_COLD_PART_PATTERN,
     params:
         buyer_source = lambda w: MODE_CFG[w.mode]["buyer_source"],
-        cold_start_top_k = config["submission"]["cold_start_top_k"],
+        cold_start_top_k = lambda w: _cold_start_top_k_for_level(w.level),
     wildcard_constraints:
         mode = MODE_RE,
         approach = APPROACH_RE,
@@ -520,7 +565,7 @@ rule write_submission:
         "--customer-test {input.customer_test} --plis-training {input.plis}"
 
 rule archive_score_run:
-    """Copy live score summary into a timestamp+sha run folder under data/15_scores/online/runs/level{level}/ (score_summary_live.csv + metadata.json only)."""
+    """Copy live score summary into a timestamp+sha run folder under data/15_scores/online/runs/level{level}/ (score_summary_live.csv + metadata.json only). Archives level-specific selection params when by_level is set."""
     input:
         live_summary = LIVE_SUMMARY_TEMP_PATTERN,
         submit_done = SUBMITTED_SENTINEL_PATTERN,
@@ -530,13 +575,13 @@ rule archive_score_run:
         runs_dir = lambda w: f"{SCORES_DIR}/online/runs/level{w.level}",
         train_end = WIN["train_end"],
         lookback_months = CAND["lookback_months"],
-        score_threshold = SEL["score_threshold"],
-        top_k_per_buyer = SEL["top_k_per_buyer"],
-        min_orders = GRD["min_orders"],
-        min_months = GRD["min_months"],
-        high_spend = GRD["high_spend"],
-        min_avg_monthly_spend = GRD.get("min_avg_monthly_spend", 0),
-        cold_start_top_k = config["submission"]["cold_start_top_k"],
+        score_threshold = lambda w: _selection_for_level(w.level)["score_threshold"],
+        top_k_per_buyer = lambda w: _selection_for_level(w.level)["top_k_per_buyer"],
+        min_orders = lambda w: _selection_for_level(w.level)["min_orders_guardrail"],
+        min_months = lambda w: _selection_for_level(w.level)["min_months_guardrail"],
+        high_spend = lambda w: _selection_for_level(w.level)["high_spend_guardrail"],
+        min_avg_monthly_spend = lambda w: _selection_for_level(w.level)["min_avg_monthly_spend"],
+        cold_start_top_k = lambda w: _cold_start_top_k_for_level(w.level),
         selected_features = ",".join(FEAT["selected"]),
     wildcard_constraints:
         approach = APPROACH_RE,

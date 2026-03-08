@@ -81,7 +81,7 @@ def main() -> None:
             yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
         print(f"Level2 threshold={thresh} ...")
-        cmd = ["snakemake", str(portfolio_path), str(submission_path), "--configfile", str(config_path)]
+        cmd = ["snakemake", str(portfolio_path), str(submission_path), "--configfile", str(config_path), "--cores", "4"]
         rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
         if rc != 0:
             print(f"Snakemake failed for threshold={thresh}", file=sys.stderr)

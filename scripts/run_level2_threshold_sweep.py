@@ -138,9 +138,23 @@ def _load_override_and_merge(
     config = copy.deepcopy(base_config)
     _deep_merge(config, override)
     _normalize_by_level_in_config(config)
-    # So Snakemake's wildcard_constraints and rules only build this trial's approach and level.
+    # For normal trials, build only the selected approach.
+    # For combined trials, keep the override-provided source approaches so the
+    # synthetic merge approach has upstream portfolios/scores to combine.
     mod = config.setdefault("modelling", {})
-    mod["enabled_approaches"] = [approach]
+    if approach == "combined_enabled_approaches":
+        enabled = mod.get("enabled_approaches")
+        if isinstance(enabled, list) and enabled:
+            if approach not in enabled:
+                enabled.append(approach)
+            mod["enabled_approaches"] = enabled
+        else:
+            base_enabled = list(base_config.get("modelling", {}).get("enabled_approaches", []))
+            if approach not in base_enabled:
+                base_enabled.append(approach)
+            mod["enabled_approaches"] = base_enabled
+    else:
+        mod["enabled_approaches"] = [approach]
     mod["enabled_levels"] = [int(level) if level.isdigit() else level]
     return config, level, approach
 

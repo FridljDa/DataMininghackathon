@@ -1,0 +1,24 @@
+# Combined level-2 run 2: aggressive coverage profile
+_sweep:
+  level: "2"
+  approach: combined_enabled_approaches
+
+modelling:
+  enabled_approaches:
+    - lgbm_two_stage
+    - phase3_repro
+    - combined_enabled_approaches
+  selection:
+    by_level:
+      "2":
+        score_threshold: -0.03
+        top_k_per_buyer: 120
+        guardrails:
+          min_orders: 1
+          min_months: 1
+          high_spend: 100.0
+          min_avg_monthly_spend: 0
+submission:
+  by_level:
+    "2":
+      cold_start_top_k: 180

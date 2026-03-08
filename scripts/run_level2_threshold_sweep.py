@@ -30,34 +30,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Explicit ordered trial plan for the deadline push.
+# Prioritize level 1 volume expansion first: leaderboard gap is much larger there,
+# and recent evidence suggests warm-cap expansion is a stronger lever than small
+# threshold nudges. Each trial may optionally set `approach`; otherwise the
+# command-line `--approach` value is used.
 TRIAL_SPECS = [
     {
-        "level": "2",
-        "score_threshold": -0.03,
-        "top_k_per_buyer": 400,
-        "cold_start_top_k": 200,
-        "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
-    },
-    {
-        "level": "2",
-        "score_threshold": -0.05,
-        "top_k_per_buyer": 400,
-        "cold_start_top_k": 200,
-        "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
-    },
-    {
+        "approach": "lgbm_two_stage",
         "level": "1",
         "score_threshold": 0.0,
-        "top_k_per_buyer": 800,
-        "cold_start_top_k": 200,
+        "top_k_per_buyer": 1200,
+        "cold_start_top_k": 500,
         "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
     },
     {
+        "approach": "phase3_repro",
         "level": "1",
         "score_threshold": 0.0,
-        "top_k_per_buyer": 1000,
-        "cold_start_top_k": 200,
-        "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
+        "top_k_per_buyer": 150,
+        "cold_start_top_k": 50,
+        "guardrails": {"min_orders": 2, "min_months": 2, "high_spend": 200.0, "min_avg_monthly_spend": 0},
     },
 ]
 
@@ -162,6 +154,7 @@ def main() -> None:
     trial_index = 0
     if args.dry_run:
         for trial in TRIAL_SPECS:
+            approach = str(trial.get("approach", args.approach))
             level = str(trial["level"])
             score_threshold = float(trial["score_threshold"])
             top_k = int(trial["top_k_per_buyer"])
@@ -169,15 +162,16 @@ def main() -> None:
             run_id = _make_run_id(trial_index)
             trial_index += 1
             print(
-                f"Level {level} run_id={run_id} score_threshold={score_threshold} "
+                f"approach={approach} level={level} run_id={run_id} score_threshold={score_threshold} "
                 f"top_k_per_buyer={top_k} cold_start_top_k={cold_start_top_k} "
                 f"guardrails={trial['guardrails']}"
             )
-            print(f"  -> data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/")
+            print(f"  -> data/15_scores/online/runs/level{level}/{approach}/{run_id}/")
         return
 
     last_level: str | None = None
     for trial in TRIAL_SPECS:
+        approach = str(trial.get("approach", args.approach))
         level = str(trial["level"])
         score_threshold = float(trial["score_threshold"])
         top_k = int(trial["top_k_per_buyer"])
@@ -201,9 +195,9 @@ def main() -> None:
             original_submission,
         )
 
-        archive_sentinel = Path(f"data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/.archived")
+        archive_sentinel = Path(f"data/15_scores/online/runs/level{level}/{approach}/{run_id}/.archived")
         print(
-            f"Level{level} run_id={run_id} threshold={score_threshold}, "
+            f"approach={approach} level={level} run_id={run_id} threshold={score_threshold}, "
             f"top_k={top_k}, cold_start_top_k={cold_start_top_k} ..."
         )
 

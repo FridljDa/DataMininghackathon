@@ -52,7 +52,7 @@ Guardrails can stay at current defaults or use the tighter set (`min_orders: 2`,
    Repeat for `--level 2` with the corresponding paths.
 
 4. **Inspect**  
-   Use `data/17_submission_tuning/param_effects_level{1,2}.csv`, `run_metrics_level{1,2}.csv`, and the plots to pick the best risk-adjusted settings per level.
+   Use `data/17_submission_tuning/param_effects_level{1,2}.csv`, `run_metrics_level{1,2}.csv`, and the plots to pick the best risk-adjusted settings per level. For tuning history and parameter-suggestion workflows (e.g. the submission-param-suggester skill), `run_records_level{1,2}.jsonl` provides one JSON object per archived run with fields: `total_score`, `total_savings`, `total_fees`, `num_hits`, `num_predictions`, `spend_capture_rate`, `run_id`, `created_at`, `approach`, `level`, and `params` (the full `metadata.config` snapshot for that run, including nested `guardrails` and any future keys).
 
 ## Optional: sweep runner script
 

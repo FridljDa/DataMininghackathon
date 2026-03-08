@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -10,6 +12,15 @@ from typing import Any
 import yaml
 
 
+# Path into record["params"] (metadata.config) for each param
+PARAM_TO_JSONL_KEYS: dict[str, tuple[str, ...]] = {
+    "config_top_k_per_buyer": ("top_k_per_buyer",),
+    "config_cold_start_top_k": ("cold_start_top_k",),
+    "guardrail_min_orders": ("guardrails", "min_orders"),
+    "guardrail_min_months": ("guardrails", "min_months"),
+    "guardrail_high_spend": ("guardrails", "high_spend"),
+    "guardrail_min_avg_monthly_spend": ("guardrails", "min_avg_monthly_spend"),
+}
 PARAM_TO_CONFIG_PATH: dict[str, tuple[str, ...]] = {
     "config_top_k_per_buyer": ("modelling", "selection", "top_k_per_buyer"),
     "config_cold_start_top_k": ("submission", "cold_start_top_k"),
@@ -93,6 +104,81 @@ def read_param_effects(tuning_dir: Path) -> list[EffectRow]:
                     max_score=float(row.get("max_score", "0") or 0),
                 )
             )
+    return out
+
+
+def _get_param_value_from_params(params: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    cur: Any = params
+    for k in keys:
+        if not isinstance(cur, dict) or k not in cur:
+            return None
+        cur = cur[k]
+    return cur
+
+
+def read_run_records_jsonl(tuning_dir: Path) -> list[dict[str, Any]]:
+    """Read run_records_level{1,2}.jsonl; return flat list of records with level attached."""
+    records: list[dict[str, Any]] = []
+    for level in (1, 2):
+        p = tuning_dir / f"run_records_level{level}.jsonl"
+        if not p.exists():
+            continue
+        with p.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    rec["_level"] = level
+                    records.append(rec)
+                except json.JSONDecodeError:
+                    continue
+    return records
+
+
+def effects_from_jsonl_records(records: list[dict[str, Any]]) -> list[EffectRow]:
+    """Build EffectRows from run_records JSONL (group by level, param, value; aggregate scores)."""
+    # (level, param, value) -> list of total_score
+    buckets: dict[tuple[int, str, Any], list[float]] = defaultdict(list)
+    for rec in records:
+        level = rec.get("_level")
+        if level not in (1, 2):
+            continue
+        score_raw = rec.get("total_score")
+        if score_raw is None:
+            continue
+        try:
+            score = float(score_raw)
+        except (TypeError, ValueError):
+            continue
+        params = rec.get("params") or {}
+        for param, keys in PARAM_TO_JSONL_KEYS.items():
+            if param not in PARAM_TO_CONFIG_PATH:
+                continue
+            val = _get_param_value_from_params(params, keys)
+            if val is None:
+                continue
+            # Normalize value for grouping (lists like selected_features -> str)
+            if isinstance(val, list):
+                val = ",".join(str(x) for x in val)
+            key = (level, param, val)
+            buckets[key].append(score)
+    out: list[EffectRow] = []
+    for (level, param, value), scores in buckets.items():
+        value_typed = value if isinstance(value, (int, float)) else to_number_or_str(str(value))
+        n = len(scores)
+        out.append(
+            EffectRow(
+                level=level,
+                param=param,
+                value=value_typed,
+                count=n,
+                mean_score=sum(scores) / n,
+                median_score=sorted(scores)[n // 2] if n else 0.0,
+                max_score=max(scores),
+            )
+        )
     return out
 
 
@@ -242,7 +328,14 @@ def main() -> None:
     score_runs_count = read_score_files(args.scores_dir)
     best_runs_count = read_score_files(args.best_dir)
 
-    effects = read_param_effects(args.tuning_dir)
+    # Prefer JSONL run records (full params) when available; fall back to param_effects CSV.
+    jsonl_records = read_run_records_jsonl(args.tuning_dir)
+    if jsonl_records:
+        effects = effects_from_jsonl_records(jsonl_records)
+        effects_source = "run_records JSONL"
+    else:
+        effects = read_param_effects(args.tuning_dir)
+        effects_source = "param_effects CSV"
     if args.level == "all":
         levels = {1, 2}
     else:
@@ -265,7 +358,7 @@ def main() -> None:
     print()
     print("# Evidence")
     print(f"- parsed score files: data/15_scores={score_runs_count}, data/16_scores_best={best_runs_count}")
-    print(f"- parsed tuning effect rows: {len(effects)}")
+    print(f"- tuning effects: {len(effects)} rows from {effects_source}")
     print(f"- scope: level={args.level}, min_count={args.min_count}")
     if notes:
         for n in notes:

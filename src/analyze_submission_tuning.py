@@ -125,6 +125,36 @@ def _run_metrics_rows(runs: list[dict]) -> list[dict]:
     return rows
 
 
+def _run_record_for_jsonl(r: dict, level: int) -> dict:
+    """Build one JSONL record: score metrics, run_id, created_at, approach, level, params (full config)."""
+    row = r["score_row"]
+    meta = r["meta"]
+
+    def _num(key: str):
+        val = row.get(key)
+        if val is None or (isinstance(val, str) and val.strip() == ""):
+            return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
+    record: dict = {
+        "total_score": _num("total_score"),
+        "total_savings": _num("total_savings"),
+        "total_fees": _num("total_fees"),
+        "num_hits": _num("num_hits"),
+        "num_predictions": _num("num_predictions"),
+        "spend_capture_rate": _num("spend_capture_rate"),
+        "run_id": r["run_id"],
+        "created_at": meta.get("created_at") or None,
+        "approach": meta.get("approach") or None,
+        "level": level,
+        "params": dict(meta.get("config") or {}),
+    }
+    return record
+
+
 def _param_effects_df(run_metrics_df: pd.DataFrame) -> pd.DataFrame:
     """Group by each parameter and aggregate count, mean/median/max total_score."""
     if run_metrics_df.empty:
@@ -328,6 +358,14 @@ def main() -> None:
         run_metrics_df = pd.DataFrame(rows)
         run_metrics_df.to_csv(run_metrics_path, index=False)
     print(f"Wrote {run_metrics_path} ({len(run_metrics_df)} runs)")
+
+    # ---- Run records JSONL (one object per run: metrics + full params) ----
+    run_records_path = out_dir / f"run_records_level{level}.jsonl"
+    with run_records_path.open("w", encoding="utf-8") as f:
+        for r in runs:
+            record = _run_record_for_jsonl(r, level)
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    print(f"Wrote {run_records_path} ({len(runs)} runs)")
 
     # ---- Param effects ----
     param_effects_path = out_dir / f"param_effects_level{level}.csv"

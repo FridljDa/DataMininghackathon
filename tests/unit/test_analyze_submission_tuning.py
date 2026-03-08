@@ -15,6 +15,7 @@ from src.analyze_submission_tuning import (
     _load_customer_task_map,
     _load_run,
     _param_effects_df,
+    _run_record_for_jsonl,
     _run_metrics_rows,
     _submission_shape,
 )
@@ -109,6 +110,58 @@ def test_gather_runs_empty_or_missing_dir(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # _run_metrics_rows / _param_effects_df
 # ---------------------------------------------------------------------------
+
+
+def test_run_record_for_jsonl_schema_and_params() -> None:
+    """_run_record_for_jsonl returns record with metrics, run_id, approach, level, and full params (including nested guardrails)."""
+    r = {
+        "run_id": "20250307_120000_abc",
+        "score_row": {
+            "total_score": "1000.5",
+            "total_savings": "2000.0",
+            "total_fees": "999.5",
+            "num_hits": "50",
+            "num_predictions": "80",
+            "spend_capture_rate": "0.25",
+            "total_ground_spend": "10000.0",
+        },
+        "meta": {
+            "approach": "lgbm_two_stage",
+            "created_at": "2025-03-07T12:00:00Z",
+            "config": {
+                "top_k_per_buyer": 30,
+                "guardrails": {"min_orders": 2, "min_months": 2, "high_spend": 200.0},
+            },
+        },
+        "run_dir": Path("."),
+    }
+    record = _run_record_for_jsonl(r, level=1)
+    assert record["total_score"] == 1000.5
+    assert record["total_savings"] == 2000.0
+    assert record["num_hits"] == 50
+    assert record["run_id"] == "20250307_120000_abc"
+    assert record["created_at"] == "2025-03-07T12:00:00Z"
+    assert record["approach"] == "lgbm_two_stage"
+    assert record["level"] == 1
+    assert record["params"] == {
+        "top_k_per_buyer": 30,
+        "guardrails": {"min_orders": 2, "min_months": 2, "high_spend": 200.0},
+    }
+
+
+def test_run_record_for_jsonl_missing_numeric_as_none() -> None:
+    """Missing or invalid numeric fields in score row become None in JSONL record."""
+    r = {
+        "run_id": "r2",
+        "score_row": {"total_score": "100", "total_savings": "", "total_fees": None},
+        "meta": {"config": {}},
+        "run_dir": Path("."),
+    }
+    record = _run_record_for_jsonl(r, level=2)
+    assert record["total_score"] == 100.0
+    assert record["total_savings"] is None
+    assert record["level"] == 2
+    assert record["params"] == {}
 
 
 def test_run_metrics_rows_flattens_config() -> None:
@@ -345,3 +398,63 @@ def test_main_writes_placeholder_when_no_runs(tmp_path: Path, project_root: Path
     assert (out_dir / "submission_size_vs_score_level1.png").exists()
     content = (out_dir / "run_metrics_level1.csv").read_text()
     assert "No archived runs" in content or "run_id" in content
+    # Empty runs => empty JSONL (0 lines)
+    run_records_path = out_dir / "run_records_level1.jsonl"
+    assert run_records_path.exists()
+    assert run_records_path.read_text().strip() == ""
+
+
+def test_main_writes_run_records_jsonl_with_runs(tmp_path: Path, project_root: Path) -> None:
+    """When runs exist, script writes run_records_levelN.jsonl with one JSON object per run (metrics + params)."""
+    out_dir = tmp_path / "out"
+    runs_dir = tmp_path / "runs_level1"
+    runs_dir.mkdir(parents=True)
+    run_dir = runs_dir / "20250307_120000_abc"
+    run_dir.mkdir()
+    (run_dir / "score_summary_live.csv").write_text(
+        "total_score,total_savings,total_fees,num_hits,num_predictions,spend_capture_rate,total_ground_spend\n"
+        "1000.5,2000.0,999.5,50,80,0.25,10000.0\n",
+        encoding="utf-8",
+    )
+    (run_dir / "metadata.json").write_text(
+        json.dumps({
+            "approach": "lgbm_two_stage",
+            "level": 1,
+            "created_at": "2025-03-07T12:00:00Z",
+            "config": {
+                "top_k_per_buyer": 30,
+                "guardrails": {"min_orders": 2, "min_months": 2},
+            },
+        }),
+        encoding="utf-8",
+    )
+    best_run_dir = tmp_path / "best_run"
+    best_run_dir.mkdir(parents=True)
+    customer_test = tmp_path / "customer_test.csv"
+    customer_test.write_text("legal_entity_id\ttask\n1\tcold start\n", encoding="utf-8")
+    result = _run(
+        [
+            "uv", "run", "src/analyze_submission_tuning.py",
+            "--level", "1",
+            "--output-dir", str(out_dir),
+            "--runs-dir", str(runs_dir),
+            "--best-run-dir", str(best_run_dir),
+            "--customer-test", str(customer_test),
+            "--submissions",
+        ],
+        cwd=project_root,
+    )
+    assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    run_records_path = out_dir / "run_records_level1.jsonl"
+    assert run_records_path.exists()
+    lines = [ln for ln in run_records_path.read_text().strip().split("\n") if ln]
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["total_score"] == 1000.5
+    assert record["num_hits"] == 50
+    assert record["run_id"] == "20250307_120000_abc"
+    assert record["approach"] == "lgbm_two_stage"
+    assert record["level"] == 1
+    assert "params" in record
+    assert record["params"]["top_k_per_buyer"] == 30
+    assert record["params"]["guardrails"] == {"min_orders": 2, "min_months": 2}

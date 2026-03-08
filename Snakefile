@@ -130,6 +130,7 @@ APPROACH_RE_WITH_SCORES = "|".join(APPROACHES_WITH_SCORES)
 LEVEL_RE = "|".join(str(l) for l in ENABLED_LEVELS)
 SUBMISSION_TUNING_OUTPUTS = (
     expand(f"{SUBMISSION_TUNING_DIR}/run_metrics_level{{level}}.csv", level=ENABLED_LEVELS)
+    + expand(f"{SUBMISSION_TUNING_DIR}/run_records_level{{level}}.jsonl", level=ENABLED_LEVELS)
     + expand(f"{SUBMISSION_TUNING_DIR}/param_effects_level{{level}}.csv", level=ENABLED_LEVELS)
     + expand(f"{SUBMISSION_TUNING_DIR}/current_submission_shape_level{{level}}.csv", level=ENABLED_LEVELS)
     + expand(f"{SUBMISSION_TUNING_DIR}/score_vs_predictions_level{{level}}.png", level=ENABLED_LEVELS)
@@ -622,6 +623,7 @@ rule analyze_submission_tuning:
         customer_test = INPUTS["customer_test"],
     output:
         run_metrics = f"{SUBMISSION_TUNING_DIR}/run_metrics_level{{level}}.csv",
+        run_records = f"{SUBMISSION_TUNING_DIR}/run_records_level{{level}}.jsonl",
         param_effects = f"{SUBMISSION_TUNING_DIR}/param_effects_level{{level}}.csv",
         current_shape = f"{SUBMISSION_TUNING_DIR}/current_submission_shape_level{{level}}.csv",
         plot_score_predictions = f"{SUBMISSION_TUNING_DIR}/score_vs_predictions_level{{level}}.png",

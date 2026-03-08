@@ -8,7 +8,8 @@ description: Analyzes submission tuning and score history CSV files, then recomm
 ## Purpose
 
 Suggest next parameter values to try in `config.yaml` by reading:
-- `data/17_submission_tuning/*.csv`
+- `data/17_submission_tuning/run_records_level*.jsonl` (preferred when present; one JSON object per run with full `params`)
+- `data/17_submission_tuning/param_effects_level*.csv` and `run_metrics_level*.csv` (fallback)
 - `data/16_scores_best/**/*.csv`
 - `data/15_scores/**/*.csv`
 
@@ -28,7 +29,7 @@ python .cursor/skills/submission-param-suggester/scripts/suggest_next_params.py 
 
 ## Behavior
 
-1. Reads `param_effects_level*.csv` and `run_metrics_level*.csv` from tuning data.
+1. Reads tuning data: when present, `run_records_level*.jsonl` (full params per run); otherwise `param_effects_level*.csv` and `run_metrics_level*.csv`.
 2. Reads `score_summary_live.csv` files from score history directories.
 3. Maps observed parameters to existing `config.yaml` keys:
    - `config_top_k_per_buyer` -> `modelling.selection.top_k_per_buyer`

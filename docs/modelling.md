@@ -13,10 +13,10 @@ Optional segmentation (if used in a specific run):
 - $ \mathcal{B}_{\text{warm}} \subseteq \mathcal{B} $: warm buyers (`cs = 1`)
 - $ \mathcal{B}_{\text{cold}} = \mathcal{B} \setminus \mathcal{B}_{\text{warm}} $: cold buyers (`cs = 0`)
 
-Defined by our modelling choices:
+Defined by our modelling choices (warm path only; cold path does not use $ \mathcal{C}_b $ or portfolio $ \hat{S}_b $ — see Section 7b):
 
-- $ \mathcal{C}_b \subseteq \mathcal{E} $: candidate set we construct for buyer $ b $ (Section 4)
-- $ \hat{S}_b \subseteq \mathcal{C}_b $: final predicted set selected by the policy (Section 7)
+- $ \mathcal{C}_b \subseteq \mathcal{E} $: candidate set we construct for buyer $ b $ (Section 4, warm)
+- $ \hat{S}_b \subseteq \mathcal{C}_b $: final predicted set selected by the policy (Section 7, warm)
 
 Core symbols:
 - $ T $: training cutoff timestamp
@@ -34,6 +34,8 @@ Time-window notation (half-open intervals):
 
 ## 1. Problem Framing
 
+The final submission covers all scored buyers $ \mathcal{B}_{\text{scored}} $ (warm and cold). **Sections 3–7 below describe the warm-customer path** (history-based candidates, recurrence targets, features, models, selection). Cold customers are handled by a separate mechanism summarised in the **Cold Customers** section.
+
 For each scored buyer $ b \in \mathcal{B}_{\text{scored}} $ we must select a portfolio $ \hat{S}_b \subseteq \mathcal{E} $ of E-Class identifiers that maximises **net economic benefit**:
 
 $$
@@ -48,14 +50,14 @@ Selection is precision-first: every element that is not a true recurring need pa
 
 ---
 
-## 2. Data
+## 2. Data (warm path focus)
 
 Raw inputs:
-- `data/02_raw/plis_training.csv` (all historical PLIs)
-- `data/02_raw/customer_test.csv` (buyers to predict for online submission)
+- `data/02_raw/plis_training.csv` (all historical PLIs; for cold buyers $ b \in \mathcal{B}_{\text{cold}} $, organisers remove their PLIs from this file)
+- `data/02_raw/customer_test.csv` (buyers to predict for online submission; includes task / cold vs warm)
 - `data/02_raw/features_per_sku.csv` (product attributes: SKU → key/value; used in `engineer_features_raw` to add top-K attribute columns to `data/08_features_raw`).
 
-Focus for this modelling document: warm-buyer recurrence logic for Level 1 (`cluster = eclass`) trained on observed history and used for online submission.
+**Scope of this section and Sections 3–7:** Warm-buyer recurrence logic for Level 1 (`cluster = eclass`) trained on observed history and used for online submission. Cold customers have no purchase history in the training data and are handled separately (see **Cold Customers**).
 
 Available columns used from historical PLIs:
 
@@ -65,9 +67,9 @@ Available columns used from historical PLIs:
 
 ---
 
-## 3. Target Definition
+## 3. Target Definition (warm path)
 
-Modeling uses a temporal cutoff $ T $ and two explicit time intervals:
+For **warm** buyers, modeling uses a temporal cutoff $ T $ and two explicit time intervals:
 
 - features are computed from pre-cutoff data, primarily from $ I_{\text{lookback}}(T,L) $
 - targets are computed from $ I_{\text{future}}(T,H) $
@@ -105,9 +107,9 @@ Default learning target is binary recurrence ($ y_{b,e} $), with spend used for 
 
 ---
 
-## 4. Candidate Generation
+## 4. Candidate Generation (warm path)
 
-For each scored buyer, restrict the candidate set to reduce fee leakage.
+For each **warm** scored buyer, restrict the candidate set to reduce fee leakage. (Cold buyers have no history-based candidate set; see **Cold Customers**.)
 
 We construct $ \mathcal{C}_b $ as:
 
@@ -135,11 +137,11 @@ Level 1 output also unions *seen* (keys passing the above filters) with a trendi
 
 ---
 
-## 5. Feature Engineering
+## 5. Feature Engineering (warm path)
 
 **Pipeline data contract:** Candidate outputs (`data/07_candidates/{mode}/level{level}/candidates_raw.parquet`) contain only key columns: Level 1 = `legal_entity_id`, `eclass`; Level 2 = `legal_entity_id`, `eclass`, `manufacturer`. Raw features (`data/08_features_raw/.../features_raw.parquet`) are assembled from `data/02_raw` (and split PLIs): keys plus pair-level aggregates (e.g. `n_orders`, `historical_purchase_value_total`, orderdate min/max, `orderdates_str`), buyer context (`estimated_number_employees`, `nace_code`, `secondary_nace_code`), and top-K SKU attribute columns. Derived feature engineering then adds computed features from this raw matrix.
 
-For each candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{scored}} $ and $ e \in \mathcal{C}_b $, derive a flexible feature set from pre-cutoff history (primarily $ I_{\text{lookback}}(T,L) $):
+For each **warm** candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{warm}} $ and $ e \in \mathcal{C}_b $, derive a flexible feature set from pre-cutoff history (primarily $ I_{\text{lookback}}(T,L) $):
 
 ### Core feature families
 - Frequency/intensity signals (how often and how consistently a pair is purchased).
@@ -173,7 +175,9 @@ The exact active columns for any run are controlled by pipeline configuration an
 
 ---
 
-## 6. Modelling
+## 6. Modelling (warm path)
+
+All approaches in this section score **warm** buyer–eclass (or buyer–cluster) candidate pairs. Cold buyers do not receive scores from these models.
 
 ### Baseline (v1)
 
@@ -338,15 +342,15 @@ Important caveats:
 
 ### Pass-through (candidate-only)
 
-The **pass_through** approach is an explicit “model” that performs no scoring: every candidate is assigned a constant positive score so that, when the selection policy is configured for pass-through (see below), no further filtering is applied. Use it to submit exactly the candidate set $ \mathcal{C}_b $ for each scored buyer — e.g. for diagnostics or as an upper-bound on recall.
+The **pass_through** approach is an explicit “model” that performs no scoring: every candidate is assigned a constant positive score so that, when the selection policy is configured for pass-through (see below), no further filtering is applied. Use it to submit exactly the candidate set $ \mathcal{C}_b $ for each **warm** scored buyer — e.g. for diagnostics or as an upper-bound on recall.
 
-- Enable the `pass_through` approach in `modelling.enabled_approaches` and use the pass-through selection configuration; then $ \hat{S}_b = \mathcal{C}_b $ for every $ b $.
+- Enable the `pass_through` approach in `modelling.enabled_approaches` and use the pass-through selection configuration; then $ \hat{S}_b = \mathcal{C}_b $ for every warm $ b $.
 
 ---
 
-## 7. Selection Policy
+## 7. Selection Policy (warm path)
 
-For each buyer $ b \in \mathcal{B}_{\text{scored}} $:
+For each **warm** buyer $ b \in \mathcal{B}_{\text{warm}} $:
 
 1. Compute $ \widehat{EU}(b, e) $ for all $ e \in \mathcal{C}_b $.
 2. Keep only pairs above an EU threshold $ \tau_{EU} $:
@@ -366,7 +370,27 @@ $$
 - Set $ \tau_{EU} \leq 0 $ (e.g. `score_threshold: 0`; pass_through sets all scores $ > 0 $)
 - Set $ X = 1 $, $ Y = 1 $, and $ \tau_{\text{high}} = 0 $
 - Set $ K \geq \max_b |\mathcal{C}_b| $ (e.g. `top_k_per_buyer: 9999`)
-- Then $ \hat{S}_b = \mathcal{C}_b $ for every scored buyer $ b $ (portfolio equals candidate set)
+- Then $ \hat{S}_b = \mathcal{C}_b $ for every warm buyer $ b $ (portfolio equals candidate set)
+
+---
+
+## 7b. Cold Customers
+
+**Definition and data:** Cold buyers are those with $ b \in \mathcal{B}_{\text{cold}} $ (`cs = 0` in `les_cs.csv`, task “cold start” in `customer_test.csv`). For these buyers, the organiser removes all PLIs from `plis_training.csv`, so there is **no purchase history** available for candidate generation or pair-level features.
+
+**What does not apply:** The warm path in Sections 3–7 does not apply to cold buyers:
+
+- **Candidates:** $ \mathcal{C}_b \subseteq \text{history}(b) $ is empty because $ \text{history}(b) $ is unobserved. We do not build history-based candidate sets for cold buyers.
+- **Targets and features:** Recurrence targets and pair-level feature engineering are defined only for $ (b,e) $ pairs with observed history; cold buyers are not part of that training or scoring pipeline.
+- **Selection policy:** There is no portfolio $ \hat{S}_b $ from the warm EU-threshold and top-$K$ policy; cold buyers receive recommendations from a separate mechanism.
+
+**Our cold approach:** Cold buyers receive a fixed number of recommendations (eclasses at Level 1, or eclass|manufacturer at Level 2) from **industry-informed rankings** rather than from a per-buyer candidate set:
+
+- **Candidate source:** Rankings are built from warm-buyer behaviour, optionally by NACE (industry) hierarchy: most specific NACE level with enough warm buyers, then fallback to broader level or global. When model scores are available, cold rankings can be derived from score aggregates over warm buyers in the same NACE group (cross-task borrowing).
+- **Cap:** A single parameter `submission.cold_start_top_k` (e.g. 50–200) limits how many eclasses (or clusters) are recommended per cold buyer. This controls fee exposure and is tuned separately from the warm per-buyer cap $ K $.
+- **Outputs:** The submission pipeline writes warm and cold rows separately when building the DAG (`submission_warm.csv`, `submission_cold.csv`); these are merged into the final `submission.csv`. Warm buyers get $ \hat{S}_b $ from the portfolio; cold buyers get the top-`cold_start_top_k` items from the appropriate NACE (or global) ranking.
+
+So the **overall approach** differs by segment: warm = history-based candidates → features → model → EU-based selection → portfolio; cold = no history → industry/score-based rankings → top-$K$ per cold buyer → submission.
 
 ---
 
@@ -376,11 +400,12 @@ In order of expected impact on euro score:
 
 | Priority | Parameter | Notes |
 |---|---|---|
-| 1 | EU threshold $ \tau_{EU} $ (or $ \theta $ for baseline) | Core precision-recall tradeoff; set very low for pass-through |
-| 2 | Per-buyer cap $ K $ | Hard ceiling on fee exposure |
-| 3 | Lookback window $ L $ | Candidate set size |
-| 4 | Guardrail/candidate thresholds $ \eta, X, Y, \tau_{\text{high}} $ | Candidate strictness and edge case pruning |
-| 5 | Value model calibration | Affects ranking among positive recurrence candidates |
+| 1 | EU threshold $ \tau_{EU} $ (or $ \theta $ for baseline) | Core precision-recall tradeoff (warm); set very low for pass-through |
+| 2 | Per-buyer cap $ K $ | Hard ceiling on fee exposure (warm) |
+| 3 | Lookback window $ L $ | Candidate set size (warm) |
+| 4 | Guardrail/candidate thresholds $ \eta, X, Y, \tau_{\text{high}} $ | Candidate strictness and edge case pruning (warm) |
+| 5 | Value model calibration | Affects ranking among positive recurrence candidates (warm) |
+| — | `cold_start_top_k` | Cold path: max recommendations per cold buyer; tune separately from $ K $ |
 
 ---
 

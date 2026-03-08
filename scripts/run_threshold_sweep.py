@@ -19,8 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Sweep matrix
-THRESHOLDS = [0.0, -0.01, -0.05, -0.10, -0.20]
+# Sweep matrix (includes -0.03 for Next Optimism level2 sweep)
+THRESHOLDS = [0.0, -0.01, -0.03, -0.05, -0.10, -0.20]
 TOP_K_VALUES = [150, 300, 400]
 LEVELS = [1, 2]
 

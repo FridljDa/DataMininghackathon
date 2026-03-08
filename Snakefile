@@ -158,6 +158,11 @@ LIVE_SUMMARY_TEMP_PATTERN_RUN = f"{DATA_DIR}/14_submission/.score_summary_live_{
 SUBMITTED_SENTINEL_PATTERN_RUN = f"{DATA_DIR}/14_submission/.submitted_challenge2_{{approach}}_level{{level}}_{{run_id}}"
 ARCHIVE_SENTINEL_RUN_PATTERN = f"{SCORES_DIR}/online/runs/level{{level}}/{{approach}}/{{run_id}}/.archived"
 
+# Run-scoped metadata sidecar (created at data/12, propagated through 13 and 14)
+METADATA_PATTERN_RUN_12 = f"{DATA_DIR}/12_predictions/{{mode}}/{{approach}}/level{{level}}/{{run_id}}/metadata.json"
+METADATA_PATTERN_RUN_13 = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/level{{level}}/{{run_id}}/metadata.json"
+METADATA_PATTERN_RUN_14 = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/{{run_id}}/metadata.json"
+
 rule all:
     input:
         DAG_SVG,
@@ -454,12 +459,13 @@ rule train_approach:
         "--recency-decay-days {params.recency_decay_days} --score-base-constant {params.score_base_constant}"
 
 rule train_approach_run:
-    """Run-scoped: same as train_approach but output under level{level}/{run_id}/ for sweep trials."""
+    """Run-scoped: same as train_approach but output under level{level}/{run_id}/ for sweep trials (scores + metadata.json)."""
     input:
         candidates = FEATURES_SELECTED_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
     output:
         scores = SCORES_APPROACH_PATTERN_RUN,
+        metadata = METADATA_PATTERN_RUN_12,
     params:
         val_start = VAL["start"],
         val_end = VAL["end"],
@@ -480,6 +486,16 @@ rule train_approach_run:
         min_positive_samples_for_regressor = lambda w: APP.get("lgbm_two_stage", {}).get("min_positive_samples_for_regressor", 10),
         recency_decay_days = lambda w: APP.get("phase3_repro", {}).get("recency_decay_days", 365.0),
         score_base_constant = lambda w: APP.get("pass_through", {}).get("score_base_constant", 1.0),
+        train_end = WIN["train_end"],
+        lookback_months = CAND["lookback_months"],
+        score_threshold = lambda w: _selection_for_level(w.level)["score_threshold"],
+        top_k_per_buyer = lambda w: _selection_for_level(w.level)["top_k_per_buyer"],
+        min_orders = lambda w: _selection_for_level(w.level)["min_orders_guardrail"],
+        min_months = lambda w: _selection_for_level(w.level)["min_months_guardrail"],
+        high_spend = lambda w: _selection_for_level(w.level)["high_spend_guardrail"],
+        min_avg_monthly_spend = lambda w: _selection_for_level(w.level)["min_avg_monthly_spend"],
+        cold_start_top_k = lambda w: _cold_start_top_k_for_level(w.level),
+        selected_features = ",".join(FEAT["selected"]),
     wildcard_constraints:
         mode = MODE_RE,
         approach = APPROACH_RE_WITH_SCORES,
@@ -496,7 +512,14 @@ rule train_approach_run:
         "--use-monthly-lookback-rates {params.use_monthly_lookback_rates} "
         "--lgb-params-classifier '{params.lgb_params_classifier}' --lgb-params-regressor '{params.lgb_params_regressor}' "
         "--min-positive-samples-for-regressor {params.min_positive_samples_for_regressor} "
-        "--recency-decay-days {params.recency_decay_days} --score-base-constant {params.score_base_constant}"
+        "--recency-decay-days {params.recency_decay_days} --score-base-constant {params.score_base_constant} "
+        "&& uv run src/write_run_metadata.py --output {output.metadata} --run-id {wildcards.run_id} "
+        "--approach {wildcards.approach} --level {wildcards.level} "
+        "--train-end {params.train_end} --lookback-months {params.lookback_months} "
+        "--score-threshold {params.score_threshold} --top-k-per-buyer {params.top_k_per_buyer} "
+        "--min-orders {params.min_orders} --min-months {params.min_months} --high-spend {params.high_spend} "
+        "--min-avg-monthly-spend {params.min_avg_monthly_spend} --cold-start-top-k {params.cold_start_top_k} "
+        "--selected-features '{params.selected_features}'"
 
 rule select_portfolio:
     """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach and level; level2 portfolio includes manufacturer. Uses level-specific selection when by_level is set. Excludes hybrid_lgbm_phase3 (use rule portfolio_hybrid)."""
@@ -522,11 +545,13 @@ rule select_portfolio:
         "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer}"
 
 rule select_portfolio_run:
-    """Run-scoped: same as select_portfolio but under level{level}/{run_id}/ for sweep trials."""
+    """Run-scoped: same as select_portfolio but under level{level}/{run_id}/ for sweep trials; copies metadata to data/13."""
     input:
         scores = SCORES_APPROACH_PATTERN_RUN,
+        metadata = METADATA_PATTERN_RUN_12,
     output:
         portfolio = PORTFOLIO_PATTERN_RUN,
+        metadata = METADATA_PATTERN_RUN_13,
     params:
         score_threshold = lambda w: _selection_for_level(w.level)["score_threshold"],
         min_orders_guardrail = lambda w: _selection_for_level(w.level)["min_orders_guardrail"],
@@ -543,7 +568,8 @@ rule select_portfolio_run:
         "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} --level {wildcards.level} "
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
         "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
-        "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer}"
+        "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer} "
+        "&& cp {input.metadata} {output.metadata}"
 
 rule portfolio_hybrid:
     """Merge lgbm_two_stage (primary) and phase3_repro (secondary) portfolios up to target_per_buyer per buyer. Enable by adding hybrid_lgbm_phase3 to modelling.enabled_approaches."""
@@ -589,6 +615,7 @@ rule write_submission_warm_only_run:
     """Run-scoped: warm submission part under level{level}/{run_id}/ for sweep trials."""
     input:
         portfolio = PORTFOLIO_PATTERN_RUN,
+        metadata = METADATA_PATTERN_RUN_13,
         customer = lambda w: MODE_CFG[w.mode]["customer_input"],
         plis = PLIS_TRAINING_SPLIT,
     output:
@@ -638,6 +665,7 @@ rule write_submission_cold_only_run:
     """Run-scoped: cold submission part under level{level}/{run_id}/ for sweep trials."""
     input:
         portfolio = PORTFOLIO_PATTERN_RUN,
+        metadata = METADATA_PATTERN_RUN_13,
         customer = lambda w: MODE_CFG[w.mode]["customer_input"],
         plis = PLIS_TRAINING_SPLIT,
         nace_codes = INPUTS["nace_codes"],

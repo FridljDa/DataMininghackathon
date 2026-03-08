@@ -5,6 +5,7 @@ Uses the run-scoped Snakemake pipeline: each trial gets a generated run_id, buil
 predictions/portfolio/submission under data/12, 13, 14/.../level{level}/{run_id}/,
 submits online, and archives to data/15_scores/online/runs/level{level}/{run_id}/.
 No flat sweep_level1/ or sweep_level2/ copies; all runs are in the main run archive.
+The script writes a temporary config per trial and never rewrites config.yaml.
 
 Level 1: aggressive grid (score_threshold, top_k_per_buyer, cold_start_top_k).
 Level 2: smaller grid. Mode is forced to online so every trial goes through the portal.

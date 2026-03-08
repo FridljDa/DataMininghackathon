@@ -56,11 +56,11 @@ Guardrails can stay at current defaults or use the tighter set (`min_orders: 2`,
 
 ## Optional: sweep runner script
 
-From the repo root you can run a small script that iterates over the matrix, patches `config.yaml` with `by_level` overrides, and runs Snakemake from `select_portfolio` through merged submission (no re-train, no submit/archive):
+From the repo root you can run a small script that iterates over the matrix, writes a temporary per-trial config with `by_level` overrides, and runs Snakemake from `select_portfolio` through merged submission (no re-train, no submit/archive). It does not rewrite `config.yaml`:
 
 ```bash
-uv run scripts/run_threshold_sweep.py --dry-run   # print trials only
-uv run scripts/run_threshold_sweep.py             # run each trial (portfolio + submission)
+uv run scripts/run_level2_threshold_sweep.py --dry-run   # print trials only
+uv run scripts/run_level2_threshold_sweep.py             # run each trial (portfolio + submission)
 ```
 
 You still need to submit and archive each produced submission manually (or via your CI) so that `analyze_submission_tuning` sees the archived runs.

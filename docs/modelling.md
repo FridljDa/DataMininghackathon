@@ -155,7 +155,7 @@ For each **warm** candidate pair $ (b, e) $ with $ b \in \mathcal{B}_{\text{warm
 Raw counts and spend are not comparable when buyers joined at different times. The pipeline adds quotient features that normalize by observed tenure so late joiners are comparable to long-tenure buyers:
 - **Buyer/pair tenure:** `buyer_tenure_months`, `pair_tenure_months`, `effective_lookback_months` (denominators; no leakage, clipped ≥ 1).
 - **Average monthly:** `avg_monthly_orders_buyer_tenure`, `avg_monthly_orders_pair_tenure`, `avg_monthly_spend_buyer_tenure`, `avg_monthly_spend_pair_tenure`, `avg_monthly_orders_in_lookback`, `avg_monthly_spend_in_lookback`.
-Selection guardrails can optionally use `avg_monthly_spend_buyer_tenure` (`modelling.selection.guardrails.min_avg_monthly_spend`). The phase3_repro approach can score using monthlyized lookback rates via `modelling.approaches.phase3_repro.use_monthly_lookback_rates`.
+Selection guardrails can optionally use `avg_monthly_spend_buyer_tenure` (`modelling.selection.guardrails.min_avg_monthly_spend`). The phase3_repro approach can score using monthlyized lookback rates via `modelling.approaches.phase3_repro.use_monthly_lookback_rates` (see Section 6, *Phase 3 reproduction (phase3_repro)*).
 
 ### Design principles
 - Keep the concrete feature list configurable and versioned with experiments.
@@ -339,6 +339,33 @@ Important caveats:
 - Because the evaluator is fee-sensitive and set-based, the final decision rule should still be thresholded and top-$ K $ capped as in Section 7.
 
 **Missing values (v2 and v3):** Numeric features are passed to LightGBM with NaNs preserved so the learner can use native missing-value splits. Categorical features have missing values mapped to the empty string and cast to category. In v3, Stage B uses `avg_price_per_unit` with missing filled to 0 for the deterministic value proxy.
+
+### Phase 3 reproduction (phase3_repro)
+
+The **phase3_repro** approach is a hand-crafted scoring formula (no learned model) that reproduces a Phase 3–style score from lookback activity. It gives each buyer–eclass pair a base score combining order frequency, recency decay, and spend, then optionally applies a sparse-history emission gate.
+
+**Score construction (default):**
+
+$$
+\text{score}_{\text{base}}(b,e) = n_{\text{orders}} \cdot \exp\!\left(-\frac{\delta_{\text{recency}}}{\lambda}\right) \cdot \bar{v}_{\text{order}} \cdot r
+$$
+
+where $ n_{\text{orders}} $ is the number of orders in the lookback (pipeline: `n_orders_in_lookback`), $ \delta_{\text{recency}} $ is days since last order (`days_since_last`), $ \lambda $ is the recency decay half-life in days (`modelling.approaches.phase3_repro.recency_decay_days`, default 365), $ \bar{v}_{\text{order}} $ is average spend per order (`avg_spend_per_order`), and $ r $ is the savings rate from `scoring_parameters.savings_rate`.
+
+**Monthlyized variant:** When `modelling.approaches.phase3_repro.use_monthly_lookback_rates` is true and the feature pipeline supplies `avg_monthly_orders_in_lookback` and `avg_monthly_spend_in_lookback`, the formula uses those rates instead so scores are comparable across buyer tenure (e.g. late joiners vs long-tenure buyers):
+
+$$
+\text{score}_{\text{base}}(b,e) = \text{avg\_monthly\_orders} \cdot \exp\!\left(-\frac{\delta_{\text{recency}}}{\lambda}\right) \cdot \text{avg\_monthly\_spend} \cdot r
+$$
+
+**Sparse-history gate:** Rows with `history_cohort == "sparse_history"` (from the feature engineer) are emitted only if they meet minimum evidence. If the required columns exist (`history_cohort`, `n_orders_in_lookback`, `lookback_spend`), sparse-history pairs that do not satisfy **both** of the following have $ \text{score}_{\text{base}} $ set to zero:
+
+- $ n_{\text{orders in lookback}} \geq \eta \cdot \texttt{sparse\_eta\_multiplier} $
+- $ \text{lookback\_spend} \geq \tau \cdot \texttt{sparse\_tau\_multiplier} $
+
+Config: `modelling.approaches.phase3_repro.eta`, `tau`, `sparse_eta_multiplier`, `sparse_tau_multiplier` (defaults: 2, 100.0, 3, 2.0).
+
+**Decision rule:** As with other warm-path approaches, the final portfolio is still determined by the selection policy in Section 7 (score threshold, top-$K$ per buyer, guardrails). Enable `phase3_repro` in `modelling.enabled_approaches` to run scoring and downstream portfolio/submission steps; it is also used as the secondary source in the hybrid strategy (primary lgbm_two_stage, backfill from phase3_repro up to `target_per_buyer`).
 
 ### Pass-through (candidate-only)
 

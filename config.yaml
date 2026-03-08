@@ -205,7 +205,7 @@ submission:
   cold_start_top_k: 200
   by_level:
     '1':
-      cold_start_top_k: 50
+      cold_start_top_k: 200
     '2':
       cold_start_top_k: 200
 portal_credentials:

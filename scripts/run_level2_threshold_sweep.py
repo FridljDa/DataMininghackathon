@@ -25,13 +25,13 @@ from pathlib import Path
 # Per-level sweep specs. Keys are string level ids "1", "2".
 LEVEL_SPECS = {
     "1": {
-        "thresholds": [-0.02, -0.05],
-        "top_k_per_buyer": [150, 400],
+        "thresholds": [0.0, -0.02, -0.05],
+        "top_k_per_buyer": [400],
         "cold_start_top_k": [50, 200],
         "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
     },
     "2": {
-        "thresholds": [-0.03],
+        "thresholds": [0.0, -0.03, -0.05],
         "top_k_per_buyer": [400],
         "cold_start_top_k": [200],
         "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},

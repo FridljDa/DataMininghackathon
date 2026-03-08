@@ -710,12 +710,14 @@ rule merge_submission_parts:
         "\""
 
 rule merge_submission_parts_run:
-    """Run-scoped: merge warm and cold parts under level{level}/{run_id}/ for sweep trials."""
+    """Run-scoped: merge warm and cold parts under level{level}/{run_id}/ for sweep trials; copies metadata to data/14."""
     input:
         warm = SUBMISSION_WARM_PART_PATTERN_RUN,
         cold = SUBMISSION_COLD_PART_PATTERN_RUN,
+        metadata = METADATA_PATTERN_RUN_13,
     output:
         submission = SUBMISSION_PATTERN_RUN,
+        metadata = METADATA_PATTERN_RUN_14,
     wildcard_constraints:
         mode = MODE_RE,
         approach = APPROACH_RE,
@@ -728,7 +730,8 @@ rule merge_submission_parts_run:
         "c = pd.read_csv('{input.cold}'); "
         "out = pd.concat([w, c]).drop_duplicates(subset=['legal_entity_id', 'cluster']); "
         "out.to_csv('{output.submission}', index=False)"
-        "\""
+        "\" "
+        "&& cp {input.metadata} {output.metadata}"
 
 rule write_submission:
     """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/14_submission/submission_baseline.csv' to run."""

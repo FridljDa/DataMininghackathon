@@ -522,11 +522,12 @@ rule train_approach_run:
         "--selected-features '{params.selected_features}'"
 
 rule select_portfolio:
-    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach and level; level2 portfolio includes manufacturer. Uses level-specific selection when by_level is set. Excludes hybrid_lgbm_phase3 (use rule portfolio_hybrid)."""
+    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach and level; level2 portfolio includes manufacturer. Uses level-specific selection when by_level is set. Excludes hybrid_lgbm_phase3 (use rule portfolio_hybrid). Writes selection_diagnostics.json for tuning."""
     input:
         scores = SCORES_APPROACH_PATTERN,
     output:
         portfolio = PORTFOLIO_PATTERN,
+        diagnostics = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/level{{level}}/selection_diagnostics.json",
     params:
         score_threshold = lambda w: _selection_for_level(w.level)["score_threshold"],
         min_orders_guardrail = lambda w: _selection_for_level(w.level)["min_orders_guardrail"],
@@ -542,7 +543,8 @@ rule select_portfolio:
         "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} --level {wildcards.level} "
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
         "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
-        "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer}"
+        "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer} "
+        "--diagnostics {output.diagnostics}"
 
 rule select_portfolio_run:
     """Run-scoped: same as select_portfolio but under level{level}/{run_id}/ for sweep trials; copies metadata to data/13."""
@@ -551,6 +553,7 @@ rule select_portfolio_run:
         metadata = METADATA_PATTERN_RUN_12,
     output:
         portfolio = PORTFOLIO_PATTERN_RUN,
+        diagnostics = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/level{{level}}/{{run_id}}/selection_diagnostics.json",
         metadata = METADATA_PATTERN_RUN_13,
     params:
         score_threshold = lambda w: _selection_for_level(w.level)["score_threshold"],
@@ -569,6 +572,7 @@ rule select_portfolio_run:
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
         "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
         "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer} "
+        "--diagnostics {output.diagnostics} "
         "&& cp {input.metadata} {output.metadata}"
 
 rule portfolio_hybrid:

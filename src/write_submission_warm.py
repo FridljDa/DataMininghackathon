@@ -391,7 +391,13 @@ def main() -> None:
         "--mode",
         choices=("all", "warm_only", "cold_only"),
         default="all",
-        help="all = warm + cold rows (default). warm_only = only buyers in portfolio. cold_only = only cold-start buyers.",
+        help="all = warm + cold rows (default). warm_only = only task-based warm buyers. cold_only = only cold-start buyers.",
+    )
+    parser.add_argument(
+        "--warm-fallback-portfolio",
+        dest="warm_fallback_portfolio",
+        default=None,
+        help="Optional path to a fallback portfolio.parquet. Warm buyers with zero rows in the primary portfolio get recommendations from this portfolio instead of cold-start.",
     )
     parser.add_argument("--output", required=True, help="Path to submission CSV.")
     args = parser.parse_args()
@@ -410,6 +416,12 @@ def main() -> None:
     portfolio["legal_entity_id"] = portfolio["legal_entity_id"].astype(str)
     portfolio["eclass"] = portfolio["eclass"].astype(str).str.strip()
     warm_in_portfolio = set(portfolio["legal_entity_id"].unique())
+
+    # Optional warm fallback: for task-based warm buyers with zero primary rows, use this portfolio.
+    fallback_portfolio: Optional[pd.DataFrame] = None
+    if args.warm_fallback_portfolio and Path(args.warm_fallback_portfolio).exists():
+        fallback_portfolio = pd.read_parquet(args.warm_fallback_portfolio)
+        fallback_portfolio["legal_entity_id"] = fallback_portfolio["legal_entity_id"].astype(str)
 
     if level == 1:
         portfolio["cluster"] = portfolio["eclass"]
@@ -437,6 +449,38 @@ def main() -> None:
             portfolio["manufacturer"] = portfolio["manufacturer"].fillna("").astype(str)
         portfolio["cluster"] = portfolio["eclass"] + "|" + portfolio["manufacturer"]
         portfolio = portfolio[portfolio["cluster"].str.contains(r"\S+\|\S+", regex=True, na=False)]
+
+    if fallback_portfolio is not None:
+        if level == 1:
+            fallback_portfolio = fallback_portfolio.copy()
+            fallback_portfolio["eclass"] = fallback_portfolio["eclass"].astype(str).str.strip()
+            fallback_portfolio["cluster"] = fallback_portfolio["eclass"]
+        else:
+            fallback_portfolio = fallback_portfolio.copy()
+            fallback_portfolio["eclass"] = fallback_portfolio["eclass"].astype(str).str.strip()
+            if "manufacturer" not in fallback_portfolio.columns and plis_path.exists():
+                plis_full = pd.read_csv(plis_path, sep="\t", usecols=["legal_entity_id", "eclass", "manufacturer"], low_memory=False)
+                plis_full["legal_entity_id"] = plis_full["legal_entity_id"].astype(str)
+                plis_full["eclass"] = plis_full["eclass"].astype(str).str.strip().replace("nan", "")
+                plis_full["manufacturer"] = plis_full["manufacturer"].astype(str).str.strip().replace("nan", "")
+                plis_full = plis_full[(plis_full["eclass"] != "") & (plis_full["manufacturer"] != "")]
+                if len(plis_full) > 0:
+                    top_manu = (
+                        plis_full.groupby(["legal_entity_id", "eclass", "manufacturer"], as_index=False)
+                        .size()
+                        .sort_values("size", ascending=False)
+                        .drop_duplicates(subset=["legal_entity_id", "eclass"], keep="first")
+                        [["legal_entity_id", "eclass", "manufacturer"]]
+                    )
+                    fallback_portfolio = fallback_portfolio.merge(top_manu, on=["legal_entity_id", "eclass"], how="left")
+                else:
+                    fallback_portfolio["manufacturer"] = ""
+            fallback_portfolio["manufacturer"] = fallback_portfolio.get("manufacturer", pd.Series(dtype=object)).fillna("").astype(str)
+            fallback_portfolio["cluster"] = fallback_portfolio["eclass"] + "|" + fallback_portfolio["manufacturer"]
+            fallback_portfolio = fallback_portfolio[fallback_portfolio["cluster"].str.contains(r"\S+\|\S+", regex=True, na=False)]
+        fallback_by_buyer = {lid: grp for lid, grp in fallback_portfolio.groupby("legal_entity_id")}
+    else:
+        fallback_by_buyer = {}
 
     if args.buyer_source == "customer-test":
         customer_path = Path(args.customer_test)

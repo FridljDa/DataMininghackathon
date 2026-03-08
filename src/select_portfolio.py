@@ -4,11 +4,16 @@ Selection policy: threshold, evidence guardrails, per-buyer cap K.
 Reads scores.parquet; keeps pairs with score_base > threshold that pass at least
 one guardrail; caps at top K per buyer by score_base.
 Outputs portfolio.parquet: Level 1 = (legal_entity_id, eclass); Level 2 = (legal_entity_id, eclass, manufacturer).
+
+When --diagnostics is set, writes a JSON summary of row counts at each stage (scoring,
+threshold, guardrails, top-k) to that path for level-1 tuning.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -66,6 +71,13 @@ def main() -> None:
         dest="top_k_per_buyer",
         help="Max eclasses per buyer (default: 15).",
     )
+    parser.add_argument(
+        "--diagnostics",
+        type=Path,
+        default=None,
+        dest="diagnostics",
+        help="If set, write selection stage counts (rows/buyers at threshold, guardrails, top-k) to this JSON path.",
+    )
     args = parser.parse_args()
 
     scores_path = Path(args.scores)
@@ -79,8 +91,17 @@ def main() -> None:
         if col not in df.columns:
             raise ValueError(f"scores must contain '{col}'. Got: {list(df.columns)}")
 
+    diag: dict[str, int] = {}
+    diag["n_scores_rows"] = len(df)
+    diag["n_scores_buyers"] = int(df["legal_entity_id"].nunique())
+
     # Threshold
-    df = df[df["score_base"] > args.score_threshold].copy()
+    above = df["score_base"] > args.score_threshold
+    df_thresh = df.loc[above].copy()
+    diag["n_above_threshold"] = len(df_thresh)
+    diag["n_buyers_above_threshold"] = int(df_thresh["legal_entity_id"].nunique()) if len(df_thresh) else 0
+    diag["n_buyers_zero_above_threshold"] = diag["n_scores_buyers"] - diag["n_buyers_above_threshold"]
+    df = df_thresh
 
     # Guardrail: at least one of n_orders >= X, m_active >= Y, historical_purchase_value_total >= tau_high,
     # or (when present) avg_monthly_spend_buyer_tenure >= min_avg_monthly_spend for late joiners
@@ -92,6 +113,8 @@ def main() -> None:
     if args.min_avg_monthly_spend > 0 and "avg_monthly_spend_buyer_tenure" in df.columns:
         guard = guard | (df["avg_monthly_spend_buyer_tenure"].fillna(0) >= args.min_avg_monthly_spend)
     df = df[guard].copy()
+    diag["n_after_guardrails"] = len(df)
+    diag["n_buyers_after_guardrails"] = int(df["legal_entity_id"].nunique()) if len(df) else 0
 
     # Top K per buyer by score_base
     df = (
@@ -102,9 +125,24 @@ def main() -> None:
 
     portfolio_cols = ["legal_entity_id", "eclass", "manufacturer"] if args.level == "2" else ["legal_entity_id", "eclass"]
     portfolio = df[[c for c in portfolio_cols if c in df.columns]].drop_duplicates()
+    diag["n_portfolio_rows"] = len(portfolio)
+    diag["n_portfolio_buyers"] = int(portfolio["legal_entity_id"].nunique()) if len(portfolio) else 0
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     portfolio.to_parquet(out_path, index=False)
     print(f"Wrote {len(portfolio)} portfolio rows to {out_path}")
+
+    if args.diagnostics is not None:
+        args.diagnostics.parent.mkdir(parents=True, exist_ok=True)
+        with args.diagnostics.open("w") as f:
+            json.dump(diag, f, indent=2)
+        print(f"Wrote selection diagnostics to {args.diagnostics}", file=sys.stderr)
+        print(
+            f"selection_diag level={args.level} scores={diag['n_scores_rows']} above_thr={diag['n_above_threshold']} "
+            f"after_guard={diag['n_after_guardrails']} portfolio={diag['n_portfolio_rows']} "
+            f"buyers_zero_above={diag['n_buyers_zero_above_threshold']}",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":

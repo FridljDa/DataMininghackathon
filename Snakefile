@@ -593,6 +593,27 @@ rule portfolio_hybrid:
         "--scores-secondary {input.scores_secondary} --output {output.portfolio} --level {wildcards.level} "
         "--target-per-buyer {params.target_per_buyer}"
 
+rule portfolio_hybrid_run:
+    """Run-scoped: merge lgbm_two_stage and phase3_repro portfolios for the same run_id (sweep trials)."""
+    input:
+        primary = f"{DATA_DIR}/13_portfolio/{{mode}}/lgbm_two_stage/level{{level}}/{{run_id}}/portfolio.parquet",
+        secondary = f"{DATA_DIR}/13_portfolio/{{mode}}/phase3_repro/level{{level}}/{{run_id}}/portfolio.parquet",
+        scores_secondary = f"{DATA_DIR}/12_predictions/{{mode}}/phase3_repro/level{{level}}/{{run_id}}/scores.parquet",
+        metadata = f"{DATA_DIR}/13_portfolio/{{mode}}/lgbm_two_stage/level{{level}}/{{run_id}}/metadata.json",
+    output:
+        portfolio = f"{DATA_DIR}/13_portfolio/{{mode}}/hybrid_lgbm_phase3/level{{level}}/{{run_id}}/portfolio.parquet",
+        metadata = f"{DATA_DIR}/13_portfolio/{{mode}}/hybrid_lgbm_phase3/level{{level}}/{{run_id}}/metadata.json",
+    params:
+        target_per_buyer = 400,
+    wildcard_constraints:
+        mode = MODE_RE,
+        level = LEVEL_RE,
+        run_id = RUN_ID_RE,
+    shell:
+        "uv run src/merge_portfolio_hybrid.py --primary {input.primary} --secondary {input.secondary} "
+        "--scores-secondary {input.scores_secondary} --output {output.portfolio} --level {wildcards.level} "
+        "--target-per-buyer {params.target_per_buyer} && cp {input.metadata} {output.metadata}"
+
 rule write_submission_warm_only:
     """Write submission rows for warm buyers only (portfolio items per buyer)."""
     input:

@@ -1,4 +1,5 @@
-# Focused level-1 trial 2: hybrid, slightly lower threshold.
+# Focused level-1 trial 1: hybrid (lgbm_two_stage + phase3_repro backfill), threshold 0.
+# Requires hybrid_lgbm_phase3 and phase3_repro in enabled_approaches for this run.
 _sweep:
   level: "1"
   approach: hybrid_lgbm_phase3
@@ -11,7 +12,7 @@ modelling:
   selection:
     by_level:
       "1":
-        score_threshold: -0.01
+        score_threshold: 0.0
         top_k_per_buyer: 400
         guardrails:
           min_orders: 0

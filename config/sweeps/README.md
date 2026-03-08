@@ -2,6 +2,8 @@
 
 Override files in this directory are merged on top of the repo root `config.yaml` when running the threshold sweep script. Each file should contain only the keys you want to override, using the same nested structure as the base config.
 
+The current set is a **focused level-1 experiment**: hybrid (`hybrid_lgbm_phase3` = lgbm_two_stage primary + phase3_repro backfill) with a small threshold sweep (2 runs). Overrides set `modelling.enabled_approaches` so that both approaches and the hybrid merge are built for the same `run_id`.
+
 ## Format
 
 - **Optional** top-level key `_sweep` (reserved; stripped before merge):

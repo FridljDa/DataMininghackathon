@@ -475,7 +475,10 @@ def main() -> None:
                     fallback_portfolio = fallback_portfolio.merge(top_manu, on=["legal_entity_id", "eclass"], how="left")
                 else:
                     fallback_portfolio["manufacturer"] = ""
-            fallback_portfolio["manufacturer"] = fallback_portfolio.get("manufacturer", pd.Series(dtype=object)).fillna("").astype(str)
+            elif "manufacturer" not in fallback_portfolio.columns:
+                fallback_portfolio["manufacturer"] = ""
+            if "manufacturer" in fallback_portfolio.columns:
+                fallback_portfolio["manufacturer"] = fallback_portfolio["manufacturer"].fillna("").astype(str)
             fallback_portfolio["cluster"] = fallback_portfolio["eclass"] + "|" + fallback_portfolio["manufacturer"]
             fallback_portfolio = fallback_portfolio[fallback_portfolio["cluster"].str.contains(r"\S+\|\S+", regex=True, na=False)]
         fallback_by_buyer = {lid: grp for lid, grp in fallback_portfolio.groupby("legal_entity_id")}
@@ -666,11 +669,17 @@ def main() -> None:
         customer_secondary_nace = customers.set_index("legal_entity_id")["secondary_nace_code"]
 
     for lid in all_buyers:
-        if lid in warm_in_portfolio:
+        is_warm = lid in warm_ids  # route by task/source, not by presence in portfolio
+        if is_warm:
             if args.mode == "cold_only":
                 continue
-            for _, row in portfolio[portfolio["legal_entity_id"] == lid].iterrows():
-                rows.append({"legal_entity_id": lid, "cluster": row["cluster"]})
+            if lid in warm_in_portfolio:
+                for _, row in portfolio[portfolio["legal_entity_id"] == lid].iterrows():
+                    rows.append({"legal_entity_id": lid, "cluster": row["cluster"]})
+            elif lid in fallback_by_buyer:
+                for _, row in fallback_by_buyer[lid].iterrows():
+                    rows.append({"legal_entity_id": lid, "cluster": row["cluster"]})
+            # else: warm buyer with zero primary rows and no fallback -> no rows (stay on warm path, not cold-start)
         else:
             if args.mode == "warm_only":
                 continue

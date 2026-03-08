@@ -68,16 +68,21 @@ def main() -> None:
         else:
             secondary = secondary.drop_duplicates(key_cols)
 
+    # Iterate over union of buyers so secondary can rescue buyers missing from primary.
+    all_buyers = set(primary["legal_entity_id"].unique()) | set(secondary["legal_entity_id"].unique())
     rows = []
-    for buyer, grp_prim in primary.groupby("legal_entity_id"):
-        taken = set(grp_prim.apply(lambda r: tuple(r[c] for c in key_cols), axis=1))
-        n = len(taken)
+    for buyer in sorted(all_buyers):
+        grp_prim = primary[primary["legal_entity_id"] == buyer]
+        grp_sec = secondary[secondary["legal_entity_id"] == buyer]
+        taken: set[tuple] = set()
         for _, r in grp_prim.iterrows():
+            t = tuple(r[c] for c in key_cols)
+            taken.add(t)
             rows.append(r[key_cols].to_dict())
+        n = len(taken)
         if n >= args.target_per_buyer:
             continue
-        sec_buyer = secondary[secondary["legal_entity_id"] == buyer]
-        for _, r in sec_buyer.iterrows():
+        for _, r in grp_sec.iterrows():
             if n >= args.target_per_buyer:
                 break
             t = tuple(r[c] for c in key_cols)

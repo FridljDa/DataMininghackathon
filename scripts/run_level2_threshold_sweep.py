@@ -1,17 +1,18 @@
 """
-Short deadline sweep for lgbm_two_stage: pending level-2 thresholds plus
-aggressive level-1 warm-cap expansion.
+Focused level-1 experiment set: hybrid (lgbm_two_stage primary + phase3_repro backfill)
+with a small threshold sweep, after routing and hybrid-union fixes.
 
 Uses the run-scoped Snakemake pipeline: each trial gets a generated run_id, builds
 predictions/portfolio/submission under data/12, 13, 14/.../level{level}/{run_id}/,
-including a metadata.json sidecar (created at data/12, propagated through 13 and 14).
-Submits online and archives to data/15_scores/online/runs/level{level}/{approach}/{run_id}/,
-reusing that upstream metadata. No flat sweep_level1/ or sweep_level2/ copies; all runs
-are in the main run archive. The script writes a temporary config per trial and never
-rewrites config.yaml.
+including a metadata.json sidecar. Submits online and archives to
+data/15_scores/online/runs/level{level}/{approach}/{run_id}/. Writes a temporary
+config per trial and never rewrites config.yaml.
 
-Runs trials defined by override YAMLs in a sweep directory: each file is merged
-on top of config.yaml to produce the trial config. See config/sweeps/README.md.
+Trials are defined by override YAMLs in --sweeps-dir (default config/sweeps). Each
+override is merged on top of config.yaml; _sweep.approach and _sweep.level select the
+run. For approach=hybrid_lgbm_phase3, both lgbm_two_stage and phase3_repro are built
+for the same run_id and merged (union of buyers, backfill); override can set
+modelling.enabled_approaches to include hybrid_lgbm_phase3 and phase3_repro.
 
 Usage (from repo root):
   uv run scripts/run_level2_threshold_sweep.py --dry-run
@@ -137,6 +138,10 @@ def _load_override_and_merge(
     config = copy.deepcopy(base_config)
     _deep_merge(config, override)
     _normalize_by_level_in_config(config)
+    # So Snakemake's wildcard_constraints and rules only build this trial's approach and level.
+    mod = config.setdefault("modelling", {})
+    mod["enabled_approaches"] = [approach]
+    mod["enabled_levels"] = [int(level) if level.isdigit() else level]
     return config, level, approach
 
 

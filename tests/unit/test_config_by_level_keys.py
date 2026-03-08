@@ -1,8 +1,9 @@
-"""Regression tests for canonical string-only by_level keys."""
+"""Regression tests for canonical string-only by_level keys and override-file merge."""
 
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -90,3 +91,63 @@ def test_sweep_helpers_normalize_mixed_keys_to_canonical_strings() -> None:
     assert all(isinstance(key, str) for key in submission_by_level)
     assert selection_by_level["1"]["score_threshold"] == -0.05
     assert submission_by_level["1"]["cold_start_top_k"] == 75
+
+
+def test_load_override_and_merge_deep_merges_and_normalizes_by_level() -> None:
+    """Override file is deep-merged onto base config and by_level keys are normalized to strings."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    sweep = _load_sweep_module(project_root)
+    load_override_and_merge = getattr(sweep, "_load_override_and_merge")
+    get_by_level = getattr(sweep, "_get_by_level")
+
+    base_config = {
+        "modelling": {
+            "selection": {
+                "by_level": {
+                    "1": {"score_threshold": 0.0, "top_k_per_buyer": 400, "guardrails": {"min_orders": 0}},
+                    "2": {"score_threshold": 0.0, "top_k_per_buyer": 400, "guardrails": {"min_orders": 0}},
+                }
+            }
+        },
+        "submission": {
+            "by_level": {
+                "1": {"cold_start_top_k": 200},
+                "2": {"cold_start_top_k": 200},
+            }
+        },
+    }
+
+    override_yaml = """
+_sweep:
+  level: "1"
+  approach: lgbm_two_stage
+
+modelling:
+  selection:
+    by_level:
+      "1":
+        score_threshold: -0.02
+        top_k_per_buyer: 1200
+submission:
+  by_level:
+    "1":
+      cold_start_top_k: 500
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write(override_yaml)
+        override_path = Path(f.name)
+    try:
+        trial_config, level, approach = load_override_and_merge(base_config, override_path, "lgbm_two_stage")
+    finally:
+        override_path.unlink(missing_ok=True)
+
+    assert level == "1"
+    assert approach == "lgbm_two_stage"
+    sel_by_level = get_by_level(trial_config, "selection")
+    sub_by_level = get_by_level(trial_config, "submission")
+    assert set(sel_by_level.keys()) == {"1", "2"}
+    assert set(sub_by_level.keys()) == {"1", "2"}
+    assert sel_by_level["1"]["score_threshold"] == -0.02
+    assert sel_by_level["1"]["top_k_per_buyer"] == 1200
+    assert sub_by_level["1"]["cold_start_top_k"] == 500
+    assert sub_by_level["2"]["cold_start_top_k"] == 200

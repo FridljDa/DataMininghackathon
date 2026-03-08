@@ -1,0 +1,20 @@
+# Sweep trial 2: level-1 phase3_repro with tighter guardrails.
+_sweep:
+  level: "1"
+  approach: phase3_repro
+
+modelling:
+  selection:
+    by_level:
+      "1":
+        score_threshold: 0.0
+        top_k_per_buyer: 150
+        guardrails:
+          min_orders: 2
+          min_months: 2
+          high_spend: 200.0
+          min_avg_monthly_spend: 0
+submission:
+  by_level:
+    "1":
+      cold_start_top_k: 50

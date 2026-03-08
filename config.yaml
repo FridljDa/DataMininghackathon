@@ -85,9 +85,6 @@ scoring_parameters:
 modelling:
   enabled_approaches:
   - lgbm_two_stage
-  - lgbm_v3_factorized
-  - pass_through
-  - phase3_repro
   enabled_levels:
   - 1
   - 2
@@ -112,21 +109,14 @@ modelling:
       min_avg_monthly_spend: 0
     by_level:
       1:
-        top_k_per_buyer: 150
-        guardrails:
-          min_orders: 2
-          min_months: 2
-          high_spend: 200
-          min_avg_monthly_spend: 0
-      2:
-        score_threshold: -0.05
+        score_threshold: 0.0
         top_k_per_buyer: 400
         guardrails:
           min_orders: 0
           min_months: 1
           high_spend: 0
           min_avg_monthly_spend: 0
-      '2':
+      2:
         score_threshold: 0.0
         top_k_per_buyer: 400
         guardrails:
@@ -135,8 +125,8 @@ modelling:
           high_spend: 0
           min_avg_monthly_spend: 0
   features_per_sku:
-    top_k_keys: 0
-    top_k_values_per_key: 0
+    top_k_keys: 20
+    top_k_values_per_key: 10
     chunksize: 200000
   missing_value_sanitation:
     default_action: ignore
@@ -214,9 +204,9 @@ modelling:
 submission:
   cold_start_top_k: 200
   by_level:
-    1: {}
-    2: {}
-    '2':
+    1:
+      cold_start_top_k: 50
+    2:
       cold_start_top_k: 200
 portal_credentials:
   team: AAD

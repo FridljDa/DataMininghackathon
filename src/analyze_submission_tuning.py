@@ -90,17 +90,29 @@ def _load_run(run_dir: Path) -> dict | None:
     return {"score_row": row, "meta": meta, "run_id": run_dir.name, "run_dir": run_dir}
 
 
+def _is_run_dir(path: Path) -> bool:
+    """True if path looks like a run dir (has score summary or .archived)."""
+    return (path / "score_summary_live.csv").is_file() or (path / "score_summary.csv").is_file() or (path / ".archived").is_file()
+
+
 def _gather_runs(runs_dir: Path) -> list[dict]:
-    """Gather all valid runs from runs_dir (each subdir = one run)."""
+    """Gather all valid runs from runs_dir. Supports flat (level/run_id) and nested (level/approach/run_id) layouts."""
     runs: list[dict] = []
     if not runs_dir.is_dir():
         return runs
     for path in runs_dir.iterdir():
         if not path.is_dir():
             continue
-        rec = _load_run(path)
-        if rec is not None:
-            runs.append(rec)
+        if _is_run_dir(path):
+            rec = _load_run(path)
+            if rec is not None:
+                runs.append(rec)
+        else:
+            for run_path in path.iterdir():
+                if run_path.is_dir() and _is_run_dir(run_path):
+                    rec = _load_run(run_path)
+                    if rec is not None:
+                        runs.append(rec)
     return runs
 
 

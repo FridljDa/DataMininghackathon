@@ -68,10 +68,22 @@ def main() -> None:
             "Run archive_score_run for at least one approach/level first."
         )
 
-    candidates: list[dict] = []
-    for run_path in runs_dir.iterdir():
-        if not run_path.is_dir():
+    def _is_run_dir(p: Path) -> bool:
+        return (p / "score_summary_live.csv").is_file() or (p / "score_summary.csv").is_file() or (p / ".archived").is_file()
+
+    run_paths: list[Path] = []
+    for path in runs_dir.iterdir():
+        if not path.is_dir():
             continue
+        if _is_run_dir(path):
+            run_paths.append(path)
+        else:
+            for rp in path.iterdir():
+                if rp.is_dir() and _is_run_dir(rp):
+                    run_paths.append(rp)
+
+    candidates: list[dict] = []
+    for run_path in run_paths:
         rec = _load_run_candidate(run_path)
         if rec is not None:
             candidates.append(rec)

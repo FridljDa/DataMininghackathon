@@ -147,6 +147,17 @@ ARCHIVE_SENTINEL_PATTERN = f"{SCORES_DIR}/online/runs/level{{level}}/.last_archi
 SUBMITTED_SENTINEL_PATTERN = f"{DATA_DIR}/14_submission/.submitted_challenge2_{{approach}}_level{{level}}"
 LIVE_SUMMARY_TEMP_PATTERN = f"{DATA_DIR}/14_submission/.score_summary_live_{{approach}}_level{{level}}.csv"
 
+# Run-scoped patterns for sweep: predictions, portfolio, submission, and archive per run_id
+RUN_ID_RE = "[^/]+"
+SCORES_APPROACH_PATTERN_RUN = f"{DATA_DIR}/12_predictions/{{mode}}/{{approach}}/level{{level}}/{{run_id}}/scores.parquet"
+PORTFOLIO_PATTERN_RUN = f"{DATA_DIR}/13_portfolio/{{mode}}/{{approach}}/level{{level}}/{{run_id}}/portfolio.parquet"
+SUBMISSION_PATTERN_RUN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/{{run_id}}/submission.csv"
+SUBMISSION_WARM_PART_PATTERN_RUN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/{{run_id}}/submission_warm.csv"
+SUBMISSION_COLD_PART_PATTERN_RUN = f"{DATA_DIR}/14_submission/{{mode}}/{{approach}}/level{{level}}/{{run_id}}/submission_cold.csv"
+LIVE_SUMMARY_TEMP_PATTERN_RUN = f"{DATA_DIR}/14_submission/.score_summary_live_{{approach}}_level{{level}}_{{run_id}}.csv"
+SUBMITTED_SENTINEL_PATTERN_RUN = f"{DATA_DIR}/14_submission/.submitted_challenge2_{{approach}}_level{{level}}_{{run_id}}"
+ARCHIVE_SENTINEL_RUN_PATTERN = f"{SCORES_DIR}/online/runs/level{{level}}/{{approach}}/{{run_id}}/.archived"
+
 rule all:
     input:
         DAG_SVG,
@@ -442,6 +453,51 @@ rule train_approach:
         "--min-positive-samples-for-regressor {params.min_positive_samples_for_regressor} "
         "--recency-decay-days {params.recency_decay_days} --score-base-constant {params.score_base_constant}"
 
+rule train_approach_run:
+    """Run-scoped: same as train_approach but output under level{level}/{run_id}/ for sweep trials."""
+    input:
+        candidates = FEATURES_SELECTED_PATTERN,
+        plis = PLIS_TRAINING_SPLIT,
+    output:
+        scores = SCORES_APPROACH_PATTERN_RUN,
+    params:
+        val_start = VAL["start"],
+        val_end = VAL["end"],
+        n_min_label = VAL["n_min_label"],
+        alpha = APP["baseline"]["alpha"],
+        beta = APP["baseline"]["beta"],
+        gamma = APP["baseline"]["gamma"],
+        savings_rate = SCORING_PARAMS["savings_rate"],
+        fixed_fee_eur = SCORING_PARAMS["fixed_fee_eur"],
+        val_months = VAL["months"],
+        eta = APP["phase3_repro"]["eta"],
+        tau = APP["phase3_repro"]["tau"],
+        sparse_eta_multiplier = APP["phase3_repro"]["sparse_eta_multiplier"],
+        sparse_tau_multiplier = APP["phase3_repro"]["sparse_tau_multiplier"],
+        use_monthly_lookback_rates = 1 if APP.get("phase3_repro", {}).get("use_monthly_lookback_rates", False) else 0,
+        lgb_params_classifier = lambda w: APP.get(w.approach, {}).get("lgb_params_classifier", APP.get("lgbm_two_stage", {}).get("lgb_params_classifier", "")),
+        lgb_params_regressor = lambda w: APP.get(w.approach, {}).get("lgb_params_regressor", APP.get("lgbm_two_stage", {}).get("lgb_params_regressor", "")),
+        min_positive_samples_for_regressor = lambda w: APP.get("lgbm_two_stage", {}).get("min_positive_samples_for_regressor", 10),
+        recency_decay_days = lambda w: APP.get("phase3_repro", {}).get("recency_decay_days", 365.0),
+        score_base_constant = lambda w: APP.get("pass_through", {}).get("score_base_constant", 1.0),
+    wildcard_constraints:
+        mode = MODE_RE,
+        approach = APPROACH_RE_WITH_SCORES,
+        level = LEVEL_RE,
+        run_id = RUN_ID_RE,
+    shell:
+        "uv run python src/modelling/run.py --approach {wildcards.approach} --level {wildcards.level} "
+        "--candidates {input.candidates} --plis {input.plis} --output {output.scores} "
+        "--val-start {params.val_start} --val-end {params.val_end} --n-min-label {params.n_min_label} "
+        "--alpha {params.alpha} --beta {params.beta} --gamma {params.gamma} "
+        "--savings-rate {params.savings_rate} --fixed-fee-eur {params.fixed_fee_eur} --val-months {params.val_months} "
+        "--eta {params.eta} --tau {params.tau} "
+        "--sparse-eta-multiplier {params.sparse_eta_multiplier} --sparse-tau-multiplier {params.sparse_tau_multiplier} "
+        "--use-monthly-lookback-rates {params.use_monthly_lookback_rates} "
+        "--lgb-params-classifier '{params.lgb_params_classifier}' --lgb-params-regressor '{params.lgb_params_regressor}' "
+        "--min-positive-samples-for-regressor {params.min_positive_samples_for_regressor} "
+        "--recency-decay-days {params.recency_decay_days} --score-base-constant {params.score_base_constant}"
+
 rule select_portfolio:
     """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach and level; level2 portfolio includes manufacturer. Uses level-specific selection when by_level is set. Excludes hybrid_lgbm_phase3 (use rule portfolio_hybrid)."""
     input:
@@ -459,6 +515,30 @@ rule select_portfolio:
         mode = MODE_RE,
         approach = APPROACH_RE_WITH_SCORES,
         level = LEVEL_RE,
+    shell:
+        "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} --level {wildcards.level} "
+        "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
+        "--min-months-guardrail {params.min_months_guardrail} --high-spend-guardrail {params.high_spend_guardrail} "
+        "--min-avg-monthly-spend {params.min_avg_monthly_spend} --top-k-per-buyer {params.top_k_per_buyer}"
+
+rule select_portfolio_run:
+    """Run-scoped: same as select_portfolio but under level{level}/{run_id}/ for sweep trials."""
+    input:
+        scores = SCORES_APPROACH_PATTERN_RUN,
+    output:
+        portfolio = PORTFOLIO_PATTERN_RUN,
+    params:
+        score_threshold = lambda w: _selection_for_level(w.level)["score_threshold"],
+        min_orders_guardrail = lambda w: _selection_for_level(w.level)["min_orders_guardrail"],
+        min_months_guardrail = lambda w: _selection_for_level(w.level)["min_months_guardrail"],
+        high_spend_guardrail = lambda w: _selection_for_level(w.level)["high_spend_guardrail"],
+        min_avg_monthly_spend = lambda w: _selection_for_level(w.level)["min_avg_monthly_spend"],
+        top_k_per_buyer = lambda w: _selection_for_level(w.level)["top_k_per_buyer"],
+    wildcard_constraints:
+        mode = MODE_RE,
+        approach = APPROACH_RE_WITH_SCORES,
+        level = LEVEL_RE,
+        run_id = RUN_ID_RE,
     shell:
         "uv run src/select_portfolio.py --scores {input.scores} --output {output.portfolio} --level {wildcards.level} "
         "--score-threshold {params.score_threshold} --min-orders-guardrail {params.min_orders_guardrail} "
@@ -505,6 +585,28 @@ rule write_submission_warm_only:
             "--level {wildcards.level} --mode warm_only --output {output.submission_warm}"
         )
 
+rule write_submission_warm_only_run:
+    """Run-scoped: warm submission part under level{level}/{run_id}/ for sweep trials."""
+    input:
+        portfolio = PORTFOLIO_PATTERN_RUN,
+        customer = lambda w: MODE_CFG[w.mode]["customer_input"],
+        plis = PLIS_TRAINING_SPLIT,
+    output:
+        submission_warm = SUBMISSION_WARM_PART_PATTERN_RUN,
+    params:
+        buyer_source = lambda w: MODE_CFG[w.mode]["buyer_source"],
+    wildcard_constraints:
+        mode = MODE_RE,
+        approach = APPROACH_RE,
+        level = LEVEL_RE,
+        run_id = RUN_ID_RE,
+    run:
+        arg = "--customer-test" if wildcards.mode == "online" else "--customer-split"
+        shell(
+            "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
+            "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} "
+            "--level {wildcards.level} --mode warm_only --output {output.submission_warm}"
+        )
 
 rule write_submission_cold_only:
     """Write submission rows for cold-start buyers only (NACE/score-based fallback). Uses level-specific cold_start_top_k when submission.by_level is set. For hybrid_lgbm_phase3 uses phase3_repro scores."""
@@ -532,6 +634,32 @@ rule write_submission_cold_only:
             "--cold-start-top-k {params.cold_start_top_k} --mode cold_only --output {output.submission_cold}"
         )
 
+rule write_submission_cold_only_run:
+    """Run-scoped: cold submission part under level{level}/{run_id}/ for sweep trials."""
+    input:
+        portfolio = PORTFOLIO_PATTERN_RUN,
+        customer = lambda w: MODE_CFG[w.mode]["customer_input"],
+        plis = PLIS_TRAINING_SPLIT,
+        nace_codes = INPUTS["nace_codes"],
+        scores = lambda w: f"{DATA_DIR}/12_predictions/{w.mode}/phase3_repro/level{w.level}/{w.run_id}/scores.parquet" if w.approach == "hybrid_lgbm_phase3" else f"{DATA_DIR}/12_predictions/{w.mode}/{w.approach}/level{w.level}/{w.run_id}/scores.parquet",
+    output:
+        submission_cold = SUBMISSION_COLD_PART_PATTERN_RUN,
+    params:
+        buyer_source = lambda w: MODE_CFG[w.mode]["buyer_source"],
+        cold_start_top_k = lambda w: _cold_start_top_k_for_level(w.level),
+    wildcard_constraints:
+        mode = MODE_RE,
+        approach = APPROACH_RE,
+        level = LEVEL_RE,
+        run_id = RUN_ID_RE,
+    run:
+        arg = "--customer-test" if wildcards.mode == "online" else "--customer-split"
+        shell(
+            "uv run src/write_submission_warm.py --portfolio {input.portfolio} "
+            "--buyer-source {params.buyer_source} " + arg + " {input.customer} --plis-training {input.plis} "
+            "--nace-codes {input.nace_codes} --scores {input.scores} --level {wildcards.level} "
+            "--cold-start-top-k {params.cold_start_top_k} --mode cold_only --output {output.submission_cold}"
+        )
 
 rule merge_submission_parts:
     """Concatenate warm and cold submission parts and deduplicate into final submission.csv."""
@@ -553,6 +681,26 @@ rule merge_submission_parts:
         "out.to_csv('{output.submission}', index=False)"
         "\""
 
+rule merge_submission_parts_run:
+    """Run-scoped: merge warm and cold parts under level{level}/{run_id}/ for sweep trials."""
+    input:
+        warm = SUBMISSION_WARM_PART_PATTERN_RUN,
+        cold = SUBMISSION_COLD_PART_PATTERN_RUN,
+    output:
+        submission = SUBMISSION_PATTERN_RUN,
+    wildcard_constraints:
+        mode = MODE_RE,
+        approach = APPROACH_RE,
+        level = LEVEL_RE,
+        run_id = RUN_ID_RE,
+    shell:
+        "uv run python -c \""
+        "import pandas as pd; "
+        "w = pd.read_csv('{input.warm}'); "
+        "c = pd.read_csv('{input.cold}'); "
+        "out = pd.concat([w, c]).drop_duplicates(subset=['legal_entity_id', 'cluster']); "
+        "out.to_csv('{output.submission}', index=False)"
+        "\""
 
 rule write_submission:
     """Write baseline submission CSV with required header (legal_entity_id,cluster). Use 'snakemake data/14_submission/submission_baseline.csv' to run."""
@@ -595,6 +743,38 @@ rule archive_score_run:
         "--min-orders {params.min_orders} --min-months {params.min_months} --high-spend {params.high_spend} "
         "--min-avg-monthly-spend {params.min_avg_monthly_spend} --cold-start-top-k {params.cold_start_top_k} "
         "--selected-features '{params.selected_features}' && touch {output.sentinel}"
+
+rule archive_score_run_run:
+    """Run-scoped: archive live score into runs/level{level}/{approach}/{run_id}/ using pre-generated run_id (sweep)."""
+    input:
+        live_summary = LIVE_SUMMARY_TEMP_PATTERN_RUN,
+        submit_done = SUBMITTED_SENTINEL_PATTERN_RUN,
+    output:
+        sentinel = ARCHIVE_SENTINEL_RUN_PATTERN,
+    params:
+        runs_dir = lambda w: f"{SCORES_DIR}/online/runs/level{w.level}/{w.approach}",
+        train_end = WIN["train_end"],
+        lookback_months = CAND["lookback_months"],
+        score_threshold = lambda w: _selection_for_level(w.level)["score_threshold"],
+        top_k_per_buyer = lambda w: _selection_for_level(w.level)["top_k_per_buyer"],
+        min_orders = lambda w: _selection_for_level(w.level)["min_orders_guardrail"],
+        min_months = lambda w: _selection_for_level(w.level)["min_months_guardrail"],
+        high_spend = lambda w: _selection_for_level(w.level)["high_spend_guardrail"],
+        min_avg_monthly_spend = lambda w: _selection_for_level(w.level)["min_avg_monthly_spend"],
+        cold_start_top_k = lambda w: _cold_start_top_k_for_level(w.level),
+        selected_features = ",".join(FEAT["selected"]),
+    wildcard_constraints:
+        approach = APPROACH_RE,
+        level = LEVEL_RE,
+        run_id = RUN_ID_RE,
+    shell:
+        "uv run src/archive_score_run.py --live-summary {input.live_summary} "
+        "--runs-dir {params.runs_dir} --run-id {wildcards.run_id} --approach {wildcards.approach} --level {wildcards.level} "
+        "--train-end {params.train_end} --lookback-months {params.lookback_months} "
+        "--score-threshold {params.score_threshold} --top-k-per-buyer {params.top_k_per_buyer} "
+        "--min-orders {params.min_orders} --min-months {params.min_months} --high-spend {params.high_spend} "
+        "--min-avg-monthly-spend {params.min_avg_monthly_spend} --cold-start-top-k {params.cold_start_top_k} "
+        "--selected-features '{params.selected_features}'"
 
 rule copy_best_online_run:
     """Select best historic online run per level by total_score and copy that run directory into data/16_scores_best/online/level{level}/best_run/."""
@@ -653,6 +833,23 @@ rule submit_to_portal:
     wildcard_constraints:
         approach = APPROACH_RE,
         level = LEVEL_RE,
+    shell:
+        "uv run src/submit.py --challenge 2 --file {input.submission} --level {wildcards.level} "
+        "--summary-csv {output.summary} && touch {output.sentinel}"
+
+rule submit_to_portal_run:
+    """Run-scoped: upload submission under level{level}/{run_id}/ to portal; write run-scoped summary and sentinel."""
+    input:
+        submission = f"{DATA_DIR}/14_submission/online/{{approach}}/level{{level}}/{{run_id}}/submission.csv",
+    output:
+        summary = LIVE_SUMMARY_TEMP_PATTERN_RUN,
+        sentinel = SUBMITTED_SENTINEL_PATTERN_RUN,
+    resources:
+        portal_submit_slot=1,
+    wildcard_constraints:
+        approach = APPROACH_RE,
+        level = LEVEL_RE,
+        run_id = RUN_ID_RE,
     shell:
         "uv run src/submit.py --challenge 2 --file {input.submission} --level {wildcards.level} "
         "--summary-csv {output.summary} && touch {output.sentinel}"

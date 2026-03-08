@@ -1,16 +1,13 @@
 """
-Run level2-only optimism sweep for lgbm_two_stage.
+Dual-level sweep for lgbm_two_stage: level 1 volume-seeking, level 2 ROI-focused.
 
-We vary score_threshold around zero, keep loose guardrails, and try broader top-k
-values while forcing the stronger cold-start setting seen in recent level2 runs.
+Uses the run-scoped Snakemake pipeline: each trial gets a generated run_id, builds
+predictions/portfolio/submission under data/12, 13, 14/.../level{level}/{run_id}/,
+submits online, and archives to data/15_scores/online/runs/level{level}/{run_id}/.
+No flat sweep_level1/ or sweep_level2/ copies; all runs are in the main run archive.
 
-Each trial patches:
-- modelling.selection.by_level.2
-- submission.by_level.2.cold_start_top_k
-
-Then it runs Snakemake from select_portfolio through merged submission and copies
-the resulting submission to data/17_submission_tuning/sweep_level2/ so all trials
-are kept. Original config values are restored at the end.
+Level 1: aggressive grid (score_threshold, top_k_per_buyer, cold_start_top_k).
+Level 2: smaller grid. Mode is forced to online so every trial goes through the portal.
 
 Usage (from repo root):
   uv run scripts/run_level2_threshold_sweep.py --dry-run
@@ -20,21 +17,72 @@ Usage (from repo root):
 from __future__ import annotations
 
 import argparse
-import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
-LEVEL2_THRESHOLDS = [0.0, -0.005, -0.01, -0.02, -0.03, -0.05, -0.08]
-TOP_K_VALUES = [400, 600, 800]
-GUARDRAILS_L2 = {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0}
-COLD_START_TOP_K = 200
+# Per-level sweep specs. Keys are string level ids "1", "2".
+LEVEL_SPECS = {
+    "1": {
+        "thresholds": [-0.02, -0.05],
+        "top_k_per_buyer": [150, 400],
+        "cold_start_top_k": [50, 200],
+        "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
+    },
+    "2": {
+        "thresholds": [-0.03],
+        "top_k_per_buyer": [400],
+        "cold_start_top_k": [200],
+        "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
+    },
+}
 
 
-def _threshold_filename(thresh: float, top_k: int) -> str:
-    """e.g. -0.01 + 400 -> threshold_m0p01_topk_400"""
-    s = str(thresh).replace("-", "m").replace(".", "p")
-    return f"submission_threshold_{s}_topk_{top_k}.csv"
+def _make_run_id(trial_index: int) -> str:
+    """Generate a unique run_id for a sweep trial (timestamp_shortsha_index)."""
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path.cwd(),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        short_sha = (r.stdout or "").strip() or "norepo"
+    except (OSError, subprocess.TimeoutExpired):
+        short_sha = "norepo"
+    return f"{ts}_{short_sha}_{trial_index}"
+
+
+def _get_by_level(config: dict, section: str) -> dict:
+    """Return by_level dict for section (modelling.selection or submission), normalizing keys to str."""
+    if section == "selection":
+        parent = config.get("modelling", {}).get("selection", {})
+    else:
+        parent = config.get("submission", {})
+    by_level = parent.get("by_level") or {}
+    result = {}
+    for key in ("1", "2"):
+        val = by_level.get(key) or (by_level.get(int(key)) if key.isdigit() else None)
+        if isinstance(val, dict):
+            result[key] = dict(val)
+    return result
+
+
+def _set_by_level(config: dict, section: str, level: str, value: dict | None) -> None:
+    """Set by_level[level] for section using string key level."""
+    if section == "selection":
+        parent = config.setdefault("modelling", {}).setdefault("selection", {})
+    else:
+        parent = config.setdefault("submission", {})
+    by_level = parent.setdefault("by_level", {})
+    if value is not None:
+        by_level[level] = value
+    else:
+        by_level.pop(level, None)
 
 
 def main() -> None:
@@ -45,6 +93,9 @@ def main() -> None:
     parser.add_argument("--cores", type=int, default=1)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+
+    if args.mode != "online":
+        print("Sweep uses online submission; --mode is ignored (online).", file=sys.stderr)
 
     config_path = args.config.resolve()
     if not config_path.is_file():
@@ -60,95 +111,94 @@ def main() -> None:
     with config_path.open() as f:
         config = yaml.safe_load(f)
 
-    sel = config.get("modelling", {}).get("selection", {})
-    by_level = sel.get("by_level", {})
-    original_level2 = dict(by_level.get("2", {})) if isinstance(by_level.get("2"), dict) else {}
-    sub = config.get("submission", {})
-    sub_by_level = sub.get("by_level", {}) if isinstance(sub.get("by_level", {}), dict) else {}
-    original_submission_level2 = (
-        dict(sub_by_level.get("2", {})) if isinstance(sub_by_level.get("2"), dict) else {}
-    )
+    original_selection = _get_by_level(config, "selection")
+    original_submission = _get_by_level(config, "submission")
 
+    trial_index = 0
     if args.dry_run:
-        print("Level2 threshold sweep trials:")
-        for thresh in LEVEL2_THRESHOLDS:
-            for top_k in TOP_K_VALUES:
-                print(
-                    "  "
-                    f"score_threshold={thresh} top_k_per_buyer={top_k} "
-                    f"cold_start_top_k={COLD_START_TOP_K} guardrails={GUARDRAILS_L2}"
-                )
-        print(f"Submissions will be written to data/17_submission_tuning/sweep_level2/")
+        for level in ("1", "2"):
+            spec = LEVEL_SPECS[level]
+            print(f"Level {level} trials (run-scoped, online submit + archive):")
+            for thresh in spec["thresholds"]:
+                for top_k in spec["top_k_per_buyer"]:
+                    for cold in spec["cold_start_top_k"]:
+                        run_id = _make_run_id(trial_index)
+                        trial_index += 1
+                        print(
+                            f"  run_id={run_id} score_threshold={thresh} top_k_per_buyer={top_k} "
+                            f"cold_start_top_k={cold} guardrails={spec['guardrails']}"
+                        )
+                        print(f"    -> data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/")
         return
 
-    out_dir = Path("data/17_submission_tuning/sweep_level2")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    for level in ("1", "2"):
+        spec = LEVEL_SPECS[level]
+        for thresh in spec["thresholds"]:
+            for top_k in spec["top_k_per_buyer"]:
+                for cold_start_top_k in spec["cold_start_top_k"]:
+                    run_id = _make_run_id(trial_index)
+                    trial_index += 1
 
-    submission_path = Path(f"data/14_submission/{args.mode}/{args.approach}/level2/submission.csv")
-    portfolio_path = Path(f"data/13_portfolio/{args.mode}/{args.approach}/level2/portfolio.parquet")
+                    _set_by_level(config, "selection", level, {
+                        "score_threshold": float(thresh),
+                        "top_k_per_buyer": int(top_k),
+                        "guardrails": dict(spec["guardrails"]),
+                    })
+                    _set_by_level(config, "submission", level, {"cold_start_top_k": int(cold_start_top_k)})
+                    if level == "1":
+                        _set_by_level(config, "selection", "2", original_selection.get("2"))
+                        _set_by_level(config, "submission", "2", original_submission.get("2"))
+                    else:
+                        _set_by_level(config, "selection", "1", original_selection.get("1"))
+                        _set_by_level(config, "submission", "1", original_submission.get("1"))
 
-    for thresh in LEVEL2_THRESHOLDS:
-        for top_k in TOP_K_VALUES:
-            sel = config.setdefault("modelling", {}).setdefault("selection", {})
-            by_level = sel.setdefault("by_level", {})
-            by_level["2"] = {
-                "score_threshold": float(thresh),
-                "top_k_per_buyer": int(top_k),
-                "guardrails": GUARDRAILS_L2,
-            }
-            submission_cfg = config.setdefault("submission", {})
-            submission_by_level = submission_cfg.setdefault("by_level", {})
-            submission_by_level["2"] = {"cold_start_top_k": COLD_START_TOP_K}
-            with config_path.open("w") as f:
-                yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                    with config_path.open("w") as f:
+                        yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
-            print(f"Level2 threshold={thresh}, top_k={top_k}, cold_start_top_k={COLD_START_TOP_K} ...")
-            cmd = [
-                "uv",
-                "run",
-                "snakemake",
-                str(portfolio_path),
-                str(submission_path),
-                "--configfile",
-                str(config_path),
-                "--cores",
-                str(args.cores),
-            ]
-            rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
-            if rc != 0:
-                print(f"Snakemake failed for threshold={thresh}, top_k={top_k}", file=sys.stderr)
-                _restore(config_path, config, original_level2, original_submission_level2)
-                sys.exit(rc)
+                    archive_sentinel = Path(f"data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/.archived")
+                    print(f"Level{level} run_id={run_id} threshold={thresh}, top_k={top_k}, cold_start_top_k={cold_start_top_k} ...")
+                    cmd = [
+                        "uv", "run", "snakemake",
+                        str(archive_sentinel),
+                        "--configfile", str(config_path),
+                        "--cores", str(args.cores),
+                    ]
+                    rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
+                    if rc != 0:
+                        print(f"Snakemake failed for level{level} run_id={run_id}", file=sys.stderr)
+                        _restore_all(config_path, config, original_selection, original_submission)
+                        sys.exit(rc)
+                    print(f"  -> {archive_sentinel.parent}")
 
-            dest = out_dir / _threshold_filename(thresh, top_k)
-            if submission_path.is_file():
-                shutil.copy2(submission_path, dest)
-                print(f"  -> {dest}")
-            else:
-                print(f"  WARNING: {submission_path} not found", file=sys.stderr)
+        _restore_all(config_path, config, original_selection, original_submission)
+        print(f"Done level {level}. Restored config by_level for both levels.")
 
-    _restore(config_path, config, original_level2, original_submission_level2)
-    print("Done. Restored config by_level.2.")
+    print("Sweep complete.")
 
 
-def _restore(
+def _restore_all(
     config_path: Path,
     config: dict,
-    original_level2: dict,
-    original_submission_level2: dict,
+    original_selection: dict[str, dict],
+    original_submission: dict[str, dict],
 ) -> None:
-    sel = config.get("modelling", {}).get("selection", {})
-    by_level = sel.get("by_level", {})
-    if original_level2:
-        by_level["2"] = original_level2
-    else:
-        by_level.pop("2", None)
-    submission_cfg = config.get("submission", {})
-    submission_by_level = submission_cfg.get("by_level", {})
-    if original_submission_level2:
-        submission_by_level["2"] = original_submission_level2
-    else:
-        submission_by_level.pop("2", None)
+    """Restore both levels' selection and submission by_level using string keys."""
+    sel = config.setdefault("modelling", {}).setdefault("selection", {})
+    by_level_sel = sel.setdefault("by_level", {})
+    for level in ("1", "2"):
+        val = original_selection.get(level)
+        if val:
+            by_level_sel[level] = val
+        else:
+            by_level_sel.pop(level, None)
+    sub = config.setdefault("submission", {})
+    by_level_sub = sub.setdefault("by_level", {})
+    for level in ("1", "2"):
+        val = original_submission.get(level)
+        if val:
+            by_level_sub[level] = val
+        else:
+            by_level_sub.pop(level, None)
     with config_path.open("w") as f:
         import yaml
         yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)

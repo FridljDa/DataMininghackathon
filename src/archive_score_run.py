@@ -43,6 +43,7 @@ def main() -> None:
     parser.add_argument("--min-avg-monthly-spend", type=float, dest="min_avg_monthly_spend", default=None, help="modelling.selection.guardrails.min_avg_monthly_spend.")
     parser.add_argument("--cold-start-top-k", type=int, dest="cold_start_top_k", default=None, help="submission.cold_start_top_k.")
     parser.add_argument("--selected-features", dest="selected_features", default=None, help="Comma-separated modelling.features.selected list.")
+    parser.add_argument("--run-id", dest="run_id", default=None, help="Pre-generated run id; if set, use it instead of minting timestamp+sha.")
     args = parser.parse_args()
 
     root = Path.cwd()
@@ -52,15 +53,17 @@ def main() -> None:
     if not live_summary_path.is_file():
         raise FileNotFoundError(f"Live summary not found: {live_summary_path}")
 
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    try:
-        short_sha = _run(["git", "rev-parse", "--short", "HEAD"], cwd=root)
-    except (OSError, subprocess.TimeoutExpired):
-        short_sha = "norepo"
-    if not short_sha:
-        short_sha = "norepo"
-
-    run_id = f"{ts}_{short_sha}"
+    if args.run_id:
+        run_id = args.run_id
+    else:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        try:
+            short_sha = _run(["git", "rev-parse", "--short", "HEAD"], cwd=root)
+        except (OSError, subprocess.TimeoutExpired):
+            short_sha = "norepo"
+        if not short_sha:
+            short_sha = "norepo"
+        run_id = f"{ts}_{short_sha}"
 
     run_dir = runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -116,6 +119,9 @@ def main() -> None:
         metadata["config"] = config
 
     (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+    if args.run_id:
+        (run_dir / ".archived").write_text(run_id)
 
     print(f"Archived run {run_id} -> {run_dir}")
 

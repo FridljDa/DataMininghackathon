@@ -1,0 +1,20 @@
+# lgbm_v3_factorized run 4: level-2 very aggressive profile
+_sweep:
+  level: "2"
+  approach: lgbm_v3_factorized
+
+modelling:
+  selection:
+    by_level:
+      "2":
+        score_threshold: -0.06
+        top_k_per_buyer: 180
+        guardrails:
+          min_orders: 0
+          min_months: 0
+          high_spend: 0
+          min_avg_monthly_spend: 0
+submission:
+  by_level:
+    "2":
+      cold_start_top_k: 230

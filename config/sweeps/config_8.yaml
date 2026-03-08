@@ -1,0 +1,24 @@
+# Combined level-2 run 3: precision profile
+_sweep:
+  level: "2"
+  approach: combined_enabled_approaches
+
+modelling:
+  enabled_approaches:
+    - lgbm_two_stage
+    - phase3_repro
+    - combined_enabled_approaches
+  selection:
+    by_level:
+      "2":
+        score_threshold: 0.02
+        top_k_per_buyer: 50
+        guardrails:
+          min_orders: 3
+          min_months: 3
+          high_spend: 300.0
+          min_avg_monthly_spend: 0
+submission:
+  by_level:
+    "2":
+      cold_start_top_k: 90

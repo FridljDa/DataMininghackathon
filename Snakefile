@@ -123,8 +123,11 @@ FEATURES_SELECTED_PATTERN = f"{DATA_DIR}/11_features_selected/{{mode}}/level{{le
 # Per-approach and per-level: scores, portfolio, submission (data/12–14 by {mode}/{approach}/level{level}/)
 ENABLED_APPROACHES = MODELLING["enabled_approaches"]
 ENABLED_LEVELS = MODELLING["enabled_levels"]
-# Hybrid approach has no scores; portfolio is merged from lgbm_two_stage + phase3_repro
-APPROACHES_WITH_SCORES = [a for a in ENABLED_APPROACHES if a != "hybrid_lgbm_phase3"]
+# Synthetic approach: portfolio is merged from all source approaches in config order; no own scores
+COMBINED_APPROACH_NAME = "combined_enabled_approaches"
+APPROACHES_WITH_SCORES = [a for a in ENABLED_APPROACHES if a != COMBINED_APPROACH_NAME]
+SOURCE_APPROACHES_FOR_COMBINED = APPROACHES_WITH_SCORES  # config order = merge priority
+FIRST_SCORED_APPROACH = APPROACHES_WITH_SCORES[0] if APPROACHES_WITH_SCORES else None
 APPROACH_RE = "|".join(ENABLED_APPROACHES)
 APPROACH_RE_WITH_SCORES = "|".join(APPROACHES_WITH_SCORES)
 LEVEL_RE = "|".join(str(l) for l in ENABLED_LEVELS)
@@ -175,7 +178,7 @@ rule all:
         expand(FEATURE_ANALYSIS_SUMMARY_PATTERN, mode=MODES, level=ENABLED_LEVELS),
         expand(FEATURE_ANALYSIS_PLOTS_PATTERN, mode=MODES, level=ENABLED_LEVELS),
         expand(FEATURE_ANALYSIS_SUGGESTIONS_PATTERN, mode=MODES, level=ENABLED_LEVELS),
-        expand(SCORES_APPROACH_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
+        expand(SCORES_APPROACH_PATTERN, mode=MODES, approach=APPROACHES_WITH_SCORES, level=ENABLED_LEVELS),
         expand(PORTFOLIO_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(SUBMISSION_PATTERN, mode=MODES, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
         expand(ARCHIVE_SENTINEL_PATTERN, approach=ENABLED_APPROACHES, level=ENABLED_LEVELS),
@@ -415,7 +418,7 @@ rule feature_selection:
         "--output {output.features_selected} --level {wildcards.level}"
 
 rule train_approach:
-    """Run a modelling approach (baseline or lgbm_two_stage); outputs data/12_predictions/{mode}/{approach}/level{level}/scores.parquet. Excludes hybrid_lgbm_phase3 (no training)."""
+    """Run a modelling approach (baseline or lgbm_two_stage); outputs data/12_predictions/{mode}/{approach}/level{level}/scores.parquet. Excludes synthetic combined approach (no training)."""
     input:
         candidates = FEATURES_SELECTED_PATTERN,
         plis = PLIS_TRAINING_SPLIT,
@@ -522,7 +525,7 @@ rule train_approach_run:
         "--selected-features '{params.selected_features}'"
 
 rule select_portfolio:
-    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach and level; level2 portfolio includes manufacturer. Uses level-specific selection when by_level is set. Excludes hybrid_lgbm_phase3 (use rule portfolio_hybrid). Writes selection_diagnostics.json for tuning."""
+    """Apply EU threshold, guardrails and per-buyer cap K to produce portfolio.parquet per approach and level; level2 portfolio includes manufacturer. Uses level-specific selection when by_level is set. Excludes synthetic combined approach (use rule portfolio_combined). Writes selection_diagnostics.json for tuning."""
     input:
         scores = SCORES_APPROACH_PATTERN,
     output:
@@ -575,44 +578,61 @@ rule select_portfolio_run:
         "--diagnostics {output.diagnostics} "
         "&& cp {input.metadata} {output.metadata}"
 
-rule portfolio_hybrid:
-    """Merge lgbm_two_stage (primary) and phase3_repro (secondary) portfolios up to target_per_buyer per buyer. Enable by adding hybrid_lgbm_phase3 to modelling.enabled_approaches."""
+rule portfolio_combined:
+    """Merge all source approaches (config order) into one portfolio up to target_per_buyer per buyer. Enable by adding combined_enabled_approaches to modelling.enabled_approaches (requires 2+ scored approaches)."""
     input:
-        primary = f"{DATA_DIR}/13_portfolio/{{mode}}/lgbm_two_stage/level{{level}}/portfolio.parquet",
-        secondary = f"{DATA_DIR}/13_portfolio/{{mode}}/phase3_repro/level{{level}}/portfolio.parquet",
-        scores_secondary = f"{DATA_DIR}/12_predictions/{{mode}}/phase3_repro/level{{level}}/scores.parquet",
+        portfolios = lambda w: [
+            f"{DATA_DIR}/13_portfolio/{w.mode}/{a}/level{w.level}/portfolio.parquet"
+            for a in SOURCE_APPROACHES_FOR_COMBINED
+        ],
+        scores = lambda w: [
+            f"{DATA_DIR}/12_predictions/{w.mode}/{a}/level{w.level}/scores.parquet"
+            for a in SOURCE_APPROACHES_FOR_COMBINED
+        ],
     output:
-        portfolio = f"{DATA_DIR}/13_portfolio/{{mode}}/hybrid_lgbm_phase3/level{{level}}/portfolio.parquet",
+        portfolio = f"{DATA_DIR}/13_portfolio/{{mode}}/{COMBINED_APPROACH_NAME}/level{{level}}/portfolio.parquet",
     params:
-        target_per_buyer = 400,
+        target_per_buyer = lambda w: _selection_for_level(w.level)["top_k_per_buyer"],
     wildcard_constraints:
         mode = MODE_RE,
         level = LEVEL_RE,
-    shell:
-        "uv run src/merge_portfolio_hybrid.py --primary {input.primary} --secondary {input.secondary} "
-        "--scores-secondary {input.scores_secondary} --output {output.portfolio} --level {wildcards.level} "
-        "--target-per-buyer {params.target_per_buyer}"
+    run:
+        port_list = " ".join(input.portfolios)
+        score_list = " ".join(input.scores)
+        shell(
+            f"uv run src/merge_portfolios.py --portfolios {port_list} --scores {score_list} "
+            f"--output {output.portfolio} --level {wildcards.level} --target-per-buyer {params.target_per_buyer}"
+        )
 
-rule portfolio_hybrid_run:
-    """Run-scoped: merge lgbm_two_stage and phase3_repro portfolios for the same run_id (sweep trials)."""
+rule portfolio_combined_run:
+    """Run-scoped: merge all source approaches for the same run_id (sweep trials)."""
     input:
-        primary = f"{DATA_DIR}/13_portfolio/{{mode}}/lgbm_two_stage/level{{level}}/{{run_id}}/portfolio.parquet",
-        secondary = f"{DATA_DIR}/13_portfolio/{{mode}}/phase3_repro/level{{level}}/{{run_id}}/portfolio.parquet",
-        scores_secondary = f"{DATA_DIR}/12_predictions/{{mode}}/phase3_repro/level{{level}}/{{run_id}}/scores.parquet",
-        metadata = f"{DATA_DIR}/13_portfolio/{{mode}}/lgbm_two_stage/level{{level}}/{{run_id}}/metadata.json",
+        portfolios = lambda w: [
+            f"{DATA_DIR}/13_portfolio/{w.mode}/{a}/level{w.level}/{w.run_id}/portfolio.parquet"
+            for a in SOURCE_APPROACHES_FOR_COMBINED
+        ],
+        scores = lambda w: [
+            f"{DATA_DIR}/12_predictions/{w.mode}/{a}/level{w.level}/{w.run_id}/scores.parquet"
+            for a in SOURCE_APPROACHES_FOR_COMBINED
+        ],
+        metadata = lambda w: f"{DATA_DIR}/13_portfolio/{w.mode}/{SOURCE_APPROACHES_FOR_COMBINED[0]}/level{w.level}/{w.run_id}/metadata.json",
     output:
-        portfolio = f"{DATA_DIR}/13_portfolio/{{mode}}/hybrid_lgbm_phase3/level{{level}}/{{run_id}}/portfolio.parquet",
-        metadata = f"{DATA_DIR}/13_portfolio/{{mode}}/hybrid_lgbm_phase3/level{{level}}/{{run_id}}/metadata.json",
+        portfolio = f"{DATA_DIR}/13_portfolio/{{mode}}/{COMBINED_APPROACH_NAME}/level{{level}}/{{run_id}}/portfolio.parquet",
+        metadata = f"{DATA_DIR}/13_portfolio/{{mode}}/{COMBINED_APPROACH_NAME}/level{{level}}/{{run_id}}/metadata.json",
     params:
-        target_per_buyer = 400,
+        target_per_buyer = lambda w: _selection_for_level(w.level)["top_k_per_buyer"],
     wildcard_constraints:
         mode = MODE_RE,
         level = LEVEL_RE,
         run_id = RUN_ID_RE,
-    shell:
-        "uv run src/merge_portfolio_hybrid.py --primary {input.primary} --secondary {input.secondary} "
-        "--scores-secondary {input.scores_secondary} --output {output.portfolio} --level {wildcards.level} "
-        "--target-per-buyer {params.target_per_buyer} && cp {input.metadata} {output.metadata}"
+    run:
+        port_list = " ".join(input.portfolios)
+        score_list = " ".join(input.scores)
+        shell(
+            f"uv run src/merge_portfolios.py --portfolios {port_list} --scores {score_list} "
+            f"--output {output.portfolio} --level {wildcards.level} --target-per-buyer {params.target_per_buyer} "
+            f"&& cp {input.metadata} {output.metadata}"
+        )
 
 rule write_submission_warm_only:
     """Write submission rows for warm buyers only (portfolio items per buyer)."""
@@ -661,13 +681,13 @@ rule write_submission_warm_only_run:
         )
 
 rule write_submission_cold_only:
-    """Write submission rows for cold-start buyers only (NACE/score-based fallback). Uses level-specific cold_start_top_k when submission.by_level is set. For hybrid_lgbm_phase3 uses phase3_repro scores."""
+    """Write submission rows for cold-start buyers only (NACE/score-based fallback). Uses level-specific cold_start_top_k when submission.by_level is set. For combined_enabled_approaches uses first scored approach's scores."""
     input:
         portfolio = PORTFOLIO_PATTERN,
         customer = lambda w: MODE_CFG[w.mode]["customer_input"],
         plis = PLIS_TRAINING_SPLIT,
         nace_codes = INPUTS["nace_codes"],
-        scores = lambda w: f"{DATA_DIR}/12_predictions/{w.mode}/phase3_repro/level{w.level}/scores.parquet" if w.approach == "hybrid_lgbm_phase3" else f"{DATA_DIR}/12_predictions/{w.mode}/{w.approach}/level{w.level}/scores.parquet",
+        scores = lambda w: f"{DATA_DIR}/12_predictions/{w.mode}/{FIRST_SCORED_APPROACH}/level{w.level}/scores.parquet" if w.approach == COMBINED_APPROACH_NAME else f"{DATA_DIR}/12_predictions/{w.mode}/{w.approach}/level{w.level}/scores.parquet",
     output:
         submission_cold = SUBMISSION_COLD_PART_PATTERN,
     params:
@@ -694,7 +714,7 @@ rule write_submission_cold_only_run:
         customer = lambda w: MODE_CFG[w.mode]["customer_input"],
         plis = PLIS_TRAINING_SPLIT,
         nace_codes = INPUTS["nace_codes"],
-        scores = lambda w: f"{DATA_DIR}/12_predictions/{w.mode}/phase3_repro/level{w.level}/{w.run_id}/scores.parquet" if w.approach == "hybrid_lgbm_phase3" else f"{DATA_DIR}/12_predictions/{w.mode}/{w.approach}/level{w.level}/{w.run_id}/scores.parquet",
+        scores = lambda w: f"{DATA_DIR}/12_predictions/{w.mode}/{FIRST_SCORED_APPROACH}/level{w.level}/{w.run_id}/scores.parquet" if w.approach == COMBINED_APPROACH_NAME else f"{DATA_DIR}/12_predictions/{w.mode}/{w.approach}/level{w.level}/{w.run_id}/scores.parquet",
     output:
         submission_cold = SUBMISSION_COLD_PART_PATTERN_RUN,
     params:

@@ -1,0 +1,11 @@
+{
+  "n_scores_rows": 298848,
+  "n_scores_buyers": 48,
+  "n_above_threshold": 4287,
+  "n_buyers_above_threshold": 47,
+  "n_buyers_zero_above_threshold": 1,
+  "n_after_guardrails": 4287,
+  "n_buyers_after_guardrails": 47,
+  "n_portfolio_rows": 4287,
+  "n_portfolio_buyers": 47
+}

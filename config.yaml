@@ -85,7 +85,9 @@ scoring_parameters:
 modelling:
   enabled_approaches:
   - lgbm_two_stage
-  - phase3_reproc
+  - phase3_repro
+  - lgbm_v3_factorized
+  - combined_enabled_approaches
   enabled_levels:
   - 1
   - 2

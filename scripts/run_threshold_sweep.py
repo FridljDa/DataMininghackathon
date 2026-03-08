@@ -118,6 +118,10 @@ def main() -> None:
         str(submission),
         "--configfile",
         str(config_path),
+        "--cores",
+        "1",
+        "--resources",
+        "portal_submit_slot=1",
     ]
     print(f"Trial {args.trial_index}: level={level} threshold={score_threshold} top_k={top_k_per_buyer}")
     print(" ".join(cmd))

@@ -79,6 +79,106 @@ def test_archive_score_run_writes_flattened_run_folder_only(tmp_path: Path, proj
     assert not (run_dir / "score_details.parquet").exists()
 
 
+def test_archive_score_run_uses_upstream_metadata_when_provided(tmp_path: Path, project_root: Path) -> None:
+    """When --metadata is provided, archive copies upstream metadata and adds archived_at."""
+    live_summary = tmp_path / "score_summary_live.csv"
+    live_summary.write_text(
+        "total_score,total_savings,total_fees,num_hits,num_predictions,spend_capture_rate,total_ground_spend,submission_id\n"
+        "100.0,200.0,100.0,5,10,0.5,1000.0,sub-456\n",
+        encoding="utf-8",
+    )
+    upstream_meta = tmp_path / "metadata.json"
+    upstream_meta.write_text(
+        json.dumps({
+            "commit": "abc123",
+            "branch": "main",
+            "dirty": False,
+            "created_at": "2026-03-08T07:00:00Z",
+            "approach": "lgbm_two_stage",
+            "level": 1,
+            "config": {"score_threshold": -0.05, "top_k_per_buyer": 400},
+        }, indent=2),
+        encoding="utf-8",
+    )
+    runs_dir = tmp_path / "runs" / "level1"
+
+    result = _run(
+        [
+            "uv", "run", "src/archive_score_run.py",
+            "--live-summary", str(live_summary),
+            "--runs-dir", str(runs_dir),
+            "--run-id", "20260308_072447_ec1a9a4_0",
+            "--metadata", str(upstream_meta),
+        ],
+        cwd=project_root,
+    )
+    assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
+
+    run_dir = runs_dir / "20260308_072447_ec1a9a4_0"
+    assert run_dir.is_dir()
+    assert (run_dir / "metadata.json").exists()
+    meta = json.loads((run_dir / "metadata.json").read_text())
+    assert meta.get("commit") == "abc123"
+    assert meta.get("approach") == "lgbm_two_stage"
+    assert meta.get("level") == 1
+    assert meta.get("config", {}).get("score_threshold") == -0.05
+    assert "archived_at" in meta
+
+
+# ---------------------------------------------------------------------------
+# run_metadata (shared metadata builder for run-scoped artifacts)
+# ---------------------------------------------------------------------------
+
+
+def test_run_metadata_build_produces_expected_keys() -> None:
+    """build_run_metadata produces commit, branch, dirty, created_at, and optional config."""
+    from src.run_metadata import build_run_metadata
+
+    meta = build_run_metadata(
+        run_id="20260308_abc_0",
+        approach="lgbm_two_stage",
+        level=1,
+        train_end="2025-12-31",
+        score_threshold=-0.05,
+        top_k_per_buyer=400,
+        selected_features=["n_orders", "CV_gap"],
+    )
+    assert "commit" in meta
+    assert "branch" in meta
+    assert "dirty" in meta
+    assert "created_at" in meta
+    assert meta.get("approach") == "lgbm_two_stage"
+    assert meta.get("level") == 1
+    assert "config" in meta
+    assert meta["config"].get("train_end") == "2025-12-31"
+    assert meta["config"].get("score_threshold") == -0.05
+    assert meta["config"].get("selected_features") == ["n_orders", "CV_gap"]
+
+
+def test_write_run_metadata_script_writes_file(project_root: Path, tmp_path: Path) -> None:
+    """write_run_metadata.py writes a valid metadata.json to --output."""
+    out = tmp_path / "run_dir" / "metadata.json"
+    result = _run(
+        [
+            "uv", "run", "src/write_run_metadata.py",
+            "--output", str(out),
+            "--run-id", "20260308_abc_1",
+            "--approach", "lgbm_two_stage",
+            "--level", "1",
+            "--train-end", "2025-12-31",
+            "--score-threshold", "-0.05",
+            "--selected-features", "n_orders,CV_gap",
+        ],
+        cwd=project_root,
+    )
+    assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    assert out.exists()
+    meta = json.loads(out.read_text())
+    assert meta.get("approach") == "lgbm_two_stage"
+    assert meta.get("level") == 1
+    assert meta.get("config", {}).get("score_threshold") == -0.05
+
+
 # ---------------------------------------------------------------------------
 # submit.py _append_live_submission_history
 # ---------------------------------------------------------------------------

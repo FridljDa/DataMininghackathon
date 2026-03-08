@@ -1,6 +1,8 @@
 """
 Archive live score summary into a timestamp+sha run folder.
-Writes score_summary_live.csv and metadata.json (with approach, level, and config snapshot).
+Writes score_summary_live.csv and metadata.json. When --metadata is provided (run-scoped
+sweep), copies and optionally augments that upstream metadata; otherwise builds metadata
+from CLI (commit, branch, approach, level, config snapshot).
 """
 
 from __future__ import annotations
@@ -25,12 +27,72 @@ def _run(cmd: list[str], cwd: Path | None = None) -> str:
     return (result.stdout or "").strip()
 
 
+def _build_metadata_from_args(args: argparse.Namespace, root: Path) -> dict:
+    """Build metadata dict from CLI args (used when no upstream metadata)."""
+    try:
+        commit = _run(["git", "rev-parse", "HEAD"], cwd=root)
+        branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
+        porcelain = _run(["git", "status", "--porcelain"], cwd=root)
+        dirty = bool(porcelain)
+    except (OSError, subprocess.TimeoutExpired):
+        commit = ""
+        branch = ""
+        dirty = False
+
+    created = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    metadata: dict = {
+        "commit": commit,
+        "branch": branch,
+        "dirty": dirty,
+        "created_at": created,
+    }
+    if args.approach is not None:
+        metadata["approach"] = args.approach
+    if args.level is not None:
+        metadata["level"] = args.level
+
+    config: dict = {}
+    if args.train_end is not None:
+        config["train_end"] = args.train_end
+    if args.lookback_months is not None:
+        config["lookback_months"] = args.lookback_months
+    if args.score_threshold is not None:
+        config["score_threshold"] = args.score_threshold
+    if args.top_k_per_buyer is not None:
+        config["top_k_per_buyer"] = args.top_k_per_buyer
+    if (
+        args.min_orders is not None
+        or args.min_months is not None
+        or args.high_spend is not None
+        or args.min_avg_monthly_spend is not None
+    ):
+        config["guardrails"] = {}
+        if args.min_orders is not None:
+            config["guardrails"]["min_orders"] = args.min_orders
+        if args.min_months is not None:
+            config["guardrails"]["min_months"] = args.min_months
+        if args.high_spend is not None:
+            config["guardrails"]["high_spend"] = args.high_spend
+        if args.min_avg_monthly_spend is not None:
+            config["guardrails"]["min_avg_monthly_spend"] = args.min_avg_monthly_spend
+    if args.cold_start_top_k is not None:
+        config["cold_start_top_k"] = args.cold_start_top_k
+    if args.selected_features is not None:
+        config["selected_features"] = [
+            s.strip() for s in args.selected_features.split(",") if s.strip()
+        ]
+    if config:
+        metadata["config"] = config
+    return metadata
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Archive live score summary into a timestamp+sha run folder (score_summary_live.csv, metadata.json)."
     )
     parser.add_argument("--live-summary", required=True, dest="live_summary", help="Path to live score summary CSV from portal.")
     parser.add_argument("--runs-dir", required=True, dest="runs_dir", help="Base directory for run folders (e.g. data/15_scores/online/runs/level1).")
+    parser.add_argument("--metadata", default=None, help="Path to upstream metadata.json (run-scoped); if set, copy and optionally augment instead of building from CLI.")
     parser.add_argument("--approach", default=None, help="Modelling approach used (e.g. lgbm_two_stage, baseline).")
     parser.add_argument("--level", type=int, default=None, help="Level (1 or 2).")
     parser.add_argument("--train-end", dest="train_end", default=None, help="modelling.windows.train_end.")
@@ -70,53 +132,12 @@ def main() -> None:
 
     shutil.copy2(live_summary_path, run_dir / "score_summary_live.csv")
 
-    try:
-        commit = _run(["git", "rev-parse", "HEAD"], cwd=root)
-        branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
-        porcelain = _run(["git", "status", "--porcelain"], cwd=root)
-        dirty = bool(porcelain)
-    except (OSError, subprocess.TimeoutExpired):
-        commit = ""
-        branch = ""
-        dirty = False
-
-    created = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    metadata = {
-        "commit": commit,
-        "branch": branch,
-        "dirty": dirty,
-        "created_at": created,
-    }
-    if args.approach is not None:
-        metadata["approach"] = args.approach
-    if args.level is not None:
-        metadata["level"] = args.level
-
-    config: dict = {}
-    if args.train_end is not None:
-        config["train_end"] = args.train_end
-    if args.lookback_months is not None:
-        config["lookback_months"] = args.lookback_months
-    if args.score_threshold is not None:
-        config["score_threshold"] = args.score_threshold
-    if args.top_k_per_buyer is not None:
-        config["top_k_per_buyer"] = args.top_k_per_buyer
-    if args.min_orders is not None or args.min_months is not None or args.high_spend is not None or args.min_avg_monthly_spend is not None:
-        config["guardrails"] = {}
-        if args.min_orders is not None:
-            config["guardrails"]["min_orders"] = args.min_orders
-        if args.min_months is not None:
-            config["guardrails"]["min_months"] = args.min_months
-        if args.high_spend is not None:
-            config["guardrails"]["high_spend"] = args.high_spend
-        if args.min_avg_monthly_spend is not None:
-            config["guardrails"]["min_avg_monthly_spend"] = args.min_avg_monthly_spend
-    if args.cold_start_top_k is not None:
-        config["cold_start_top_k"] = args.cold_start_top_k
-    if args.selected_features is not None:
-        config["selected_features"] = [s.strip() for s in args.selected_features.split(",") if s.strip()]
-    if config:
-        metadata["config"] = config
+    metadata_path = Path(args.metadata) if args.metadata else None
+    if metadata_path is not None and metadata_path.is_file():
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["archived_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    else:
+        metadata = _build_metadata_from_args(args, root)
 
     (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
 

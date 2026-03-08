@@ -24,7 +24,7 @@ Guardrails can stay at current defaults or use the tighter set (`min_orders: 2`,
 ## Workflow (reuse existing pipeline)
 
 1. **Ensure scores exist**  
-   Run the DAG up to and including `train_approach` so that `data/12_predictions/{mode}/{approach}/level{level}/scores.parquet` exist for the approaches you care about.
+   Run the DAG up to and including `train_approach` so that `data/12_predictions/{mode}/{approach}/level{level}/scores.parquet` exist for the approaches you care about. For **run-scoped** sweeps (e.g. `run_level2_threshold_sweep.py`), each run produces `scores.parquet` and `metadata.json` under `data/12_predictions/.../level{level}/{run_id}/`; that metadata is propagated to `data/13_portfolio` and `data/14_submission` and reused when archiving to `data/15_scores/online/runs/...`.
 
 2. **Per trial**  
    Set level-specific selection in `config.yaml` under `modelling.selection.by_level`:

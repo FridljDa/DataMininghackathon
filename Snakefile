@@ -776,24 +776,15 @@ rule archive_score_run:
         "--selected-features '{params.selected_features}' && touch {output.sentinel}"
 
 rule archive_score_run_run:
-    """Run-scoped: archive live score into runs/level{level}/{approach}/{run_id}/ using pre-generated run_id (sweep)."""
+    """Run-scoped: archive live score into runs/level{level}/{approach}/{run_id}/ using pre-generated run_id (sweep); uses upstream metadata from data/14 (online only)."""
     input:
         live_summary = LIVE_SUMMARY_TEMP_PATTERN_RUN,
         submit_done = SUBMITTED_SENTINEL_PATTERN_RUN,
+        metadata = lambda w: f"{DATA_DIR}/14_submission/online/{{approach}}/level{{level}}/{{run_id}}/metadata.json".format(approach=w.approach, level=w.level, run_id=w.run_id),
     output:
         sentinel = ARCHIVE_SENTINEL_RUN_PATTERN,
     params:
         runs_dir = lambda w: f"{SCORES_DIR}/online/runs/level{w.level}/{w.approach}",
-        train_end = WIN["train_end"],
-        lookback_months = CAND["lookback_months"],
-        score_threshold = lambda w: _selection_for_level(w.level)["score_threshold"],
-        top_k_per_buyer = lambda w: _selection_for_level(w.level)["top_k_per_buyer"],
-        min_orders = lambda w: _selection_for_level(w.level)["min_orders_guardrail"],
-        min_months = lambda w: _selection_for_level(w.level)["min_months_guardrail"],
-        high_spend = lambda w: _selection_for_level(w.level)["high_spend_guardrail"],
-        min_avg_monthly_spend = lambda w: _selection_for_level(w.level)["min_avg_monthly_spend"],
-        cold_start_top_k = lambda w: _cold_start_top_k_for_level(w.level),
-        selected_features = ",".join(FEAT["selected"]),
     wildcard_constraints:
         approach = APPROACH_RE,
         level = LEVEL_RE,
@@ -801,11 +792,7 @@ rule archive_score_run_run:
     shell:
         "uv run src/archive_score_run.py --live-summary {input.live_summary} "
         "--runs-dir {params.runs_dir} --run-id {wildcards.run_id} --approach {wildcards.approach} --level {wildcards.level} "
-        "--train-end {params.train_end} --lookback-months {params.lookback_months} "
-        "--score-threshold {params.score_threshold} --top-k-per-buyer {params.top_k_per_buyer} "
-        "--min-orders {params.min_orders} --min-months {params.min_months} --high-spend {params.high_spend} "
-        "--min-avg-monthly-spend {params.min_avg_monthly_spend} --cold-start-top-k {params.cold_start_top_k} "
-        "--selected-features '{params.selected_features}'"
+        "--metadata {input.metadata}"
 
 rule copy_best_online_run:
     """Select best historic online run per level by total_score and copy that run directory into data/16_scores_best/online/level{level}/best_run/."""

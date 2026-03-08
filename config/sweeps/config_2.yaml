@@ -1,17 +1,13 @@
-# Focused level-1 trial 2: hybrid, slightly lower threshold.
+# Final level-1 run 2: lgbm_two_stage, threshold -0.03
 _sweep:
   level: "1"
-  approach: hybrid_lgbm_phase3
+  approach: lgbm_two_stage
 
 modelling:
-  enabled_approaches:
-    - lgbm_two_stage
-    - phase3_repro
-    - hybrid_lgbm_phase3
   selection:
     by_level:
       "1":
-        score_threshold: -0.01
+        score_threshold: -0.03
         top_k_per_buyer: 400
         guardrails:
           min_orders: 0
@@ -21,4 +17,4 @@ modelling:
 submission:
   by_level:
     "1":
-      cold_start_top_k: 50
+      cold_start_top_k: 200

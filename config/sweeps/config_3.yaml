@@ -1,4 +1,4 @@
-# Final level-1 run 1: lgbm_two_stage, threshold -0.01
+# Final level-1 run 3: lgbm_two_stage, threshold -0.05
 _sweep:
   level: "1"
   approach: lgbm_two_stage
@@ -7,7 +7,7 @@ modelling:
   selection:
     by_level:
       "1":
-        score_threshold: -0.01
+        score_threshold: -0.05
         top_k_per_buyer: 400
         guardrails:
           min_orders: 0

@@ -1,13 +1,16 @@
-# Final level-1 run 1: lgbm_two_stage, threshold -0.01
+# Final level-1 run 4: phase3_repro hedge, threshold 0
 _sweep:
   level: "1"
-  approach: lgbm_two_stage
+  approach: phase3_repro
 
 modelling:
+  enabled_approaches:
+    - lgbm_two_stage
+    - phase3_repro
   selection:
     by_level:
       "1":
-        score_threshold: -0.01
+        score_threshold: 0.0
         top_k_per_buyer: 400
         guardrails:
           min_orders: 0

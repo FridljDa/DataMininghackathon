@@ -1,9 +1,13 @@
-# Final level-1 run 1: lgbm_two_stage, threshold -0.01
+# Final level-1 run 5: hybrid_lgbm_phase3, threshold -0.01
 _sweep:
   level: "1"
-  approach: lgbm_two_stage
+  approach: hybrid_lgbm_phase3
 
 modelling:
+  enabled_approaches:
+    - lgbm_two_stage
+    - phase3_repro
+    - hybrid_lgbm_phase3
   selection:
     by_level:
       "1":

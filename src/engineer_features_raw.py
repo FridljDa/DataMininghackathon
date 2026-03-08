@@ -78,6 +78,10 @@ def _read_features_per_sku_chunked(
     chunksize: int,
 ) -> tuple[pd.DataFrame, list[str]]:
     """Read CSV in chunks; keep rows with sku in relevant_skus. Return (sku_attrs with top-K key/values only, list of column names)."""
+    # Fast opt-out: allow config to disable SKU-attribute feature generation.
+    if top_k_keys <= 0 or top_k_values_per_key <= 0:
+        return pd.DataFrame(columns=["sku", "key", "value"]), []
+
     required = list(FEATURES_PER_SKU_COLS)
     chunks = []
     key_counts: dict[str, int] = {}

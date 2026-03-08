@@ -127,7 +127,7 @@ modelling:
           high_spend: 0
           min_avg_monthly_spend: 0
       '2':
-        score_threshold: -0.03
+        score_threshold: 0.0
         top_k_per_buyer: 400
         guardrails:
           min_orders: 0
@@ -135,8 +135,8 @@ modelling:
           high_spend: 0
           min_avg_monthly_spend: 0
   features_per_sku:
-    top_k_keys: 20
-    top_k_values_per_key: 10
+    top_k_keys: 0
+    top_k_values_per_key: 0
     chunksize: 200000
   missing_value_sanitation:
     default_action: ignore
@@ -216,6 +216,8 @@ submission:
   by_level:
     1: {}
     2: {}
+    '2':
+      cold_start_top_k: 200
 portal_credentials:
   team: AAD
   password: uniteaad

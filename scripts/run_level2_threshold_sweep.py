@@ -1,6 +1,7 @@
 """
 Run level2-only negative-threshold sweep: selection-only experiments for lgbm_two_stage
-with score_threshold in (-0.01, -0.03, -0.05, -0.10, -0.20), top_k=400, guardrails 0/1/0.
+with score_threshold in (-0.01, -0.03, -0.05, -0.10, -0.20),
+top_k in (400, 600, 800), guardrails 0/1/0.
 
 Each trial patches config modelling.selection.by_level.2, runs Snakemake from select_portfolio
 through merged submission, and copies the submission to data/17_submission_tuning/sweep_level2/
@@ -8,7 +9,7 @@ so all trials are kept. Restores original by_level.2 at the end.
 
 Usage (from repo root):
   uv run scripts/run_level2_threshold_sweep.py --dry-run   # print trials only
-  uv run scripts/run_level2_threshold_sweep.py             # run all 5 trials, save submissions
+  uv run scripts/run_level2_threshold_sweep.py             # run all 15 trials, save submissions
 """
 
 from __future__ import annotations
@@ -20,14 +21,14 @@ import sys
 from pathlib import Path
 
 LEVEL2_THRESHOLDS = [-0.01, -0.03, -0.05, -0.10, -0.20]
-TOP_K = 400
+TOP_K_VALUES = [400, 600, 800]
 GUARDRAILS_L2 = {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0}
 
 
-def _threshold_filename(thresh: float) -> str:
-    """e.g. -0.01 -> threshold_m0.01"""
+def _threshold_filename(thresh: float, top_k: int) -> str:
+    """e.g. -0.01 + 400 -> threshold_m0p01_topk_400"""
     s = str(thresh).replace("-", "m").replace(".", "p")
-    return f"submission_threshold_{s}.csv"
+    return f"submission_threshold_{s}_topk_{top_k}.csv"
 
 
 def main() -> None:
@@ -59,7 +60,8 @@ def main() -> None:
     if args.dry_run:
         print("Level2 threshold sweep trials:")
         for thresh in LEVEL2_THRESHOLDS:
-            print(f"  score_threshold={thresh} top_k_per_buyer={TOP_K} guardrails={GUARDRAILS_L2}")
+            for top_k in TOP_K_VALUES:
+                print(f"  score_threshold={thresh} top_k_per_buyer={top_k} guardrails={GUARDRAILS_L2}")
         print(f"Submissions will be written to data/17_submission_tuning/sweep_level2/")
         return
 
@@ -70,40 +72,41 @@ def main() -> None:
     portfolio_path = Path(f"data/13_portfolio/{args.mode}/{args.approach}/level2/portfolio.parquet")
 
     for thresh in LEVEL2_THRESHOLDS:
-        sel = config.setdefault("modelling", {}).setdefault("selection", {})
-        by_level = sel.setdefault("by_level", {})
-        by_level["2"] = {
-            "score_threshold": float(thresh),
-            "top_k_per_buyer": TOP_K,
-            "guardrails": GUARDRAILS_L2,
-        }
-        with config_path.open("w") as f:
-            yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        for top_k in TOP_K_VALUES:
+            sel = config.setdefault("modelling", {}).setdefault("selection", {})
+            by_level = sel.setdefault("by_level", {})
+            by_level["2"] = {
+                "score_threshold": float(thresh),
+                "top_k_per_buyer": int(top_k),
+                "guardrails": GUARDRAILS_L2,
+            }
+            with config_path.open("w") as f:
+                yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
-        print(f"Level2 threshold={thresh} ...")
-        cmd = [
-            "snakemake",
-            str(portfolio_path),
-            str(submission_path),
-            "--configfile",
-            str(config_path),
-            "--cores",
-            "4",
-            "--resources",
-            "portal_submit_slot=1",
-        ]
-        rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
-        if rc != 0:
-            print(f"Snakemake failed for threshold={thresh}", file=sys.stderr)
-            _restore(config_path, config, original_level2)
-            sys.exit(rc)
+            print(f"Level2 threshold={thresh}, top_k={top_k} ...")
+            cmd = [
+                "snakemake",
+                str(portfolio_path),
+                str(submission_path),
+                "--configfile",
+                str(config_path),
+                "--cores",
+                "4",
+                "--resources",
+                "portal_submit_slot=1",
+            ]
+            rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
+            if rc != 0:
+                print(f"Snakemake failed for threshold={thresh}, top_k={top_k}", file=sys.stderr)
+                _restore(config_path, config, original_level2)
+                sys.exit(rc)
 
-        dest = out_dir / _threshold_filename(thresh)
-        if submission_path.is_file():
-            shutil.copy2(submission_path, dest)
-            print(f"  -> {dest}")
-        else:
-            print(f"  WARNING: {submission_path} not found", file=sys.stderr)
+            dest = out_dir / _threshold_filename(thresh, top_k)
+            if submission_path.is_file():
+                shutil.copy2(submission_path, dest)
+                print(f"  -> {dest}")
+            else:
+                print(f"  WARNING: {submission_path} not found", file=sys.stderr)
 
     _restore(config_path, config, original_level2)
     print("Done. Restored config by_level.2.")

@@ -86,7 +86,7 @@ modelling:
   enabled_approaches:
   - lgbm_two_stage
   - lgbm_v3_factorized
-  #- pass_through
+  - pass_through
   - phase3_repro
   enabled_levels:
   - 1
@@ -127,7 +127,7 @@ modelling:
           high_spend: 0
           min_avg_monthly_spend: 0
       '2':
-        score_threshold: -0.01
+        score_threshold: -0.05
         top_k_per_buyer: 400
         guardrails:
           min_orders: 0

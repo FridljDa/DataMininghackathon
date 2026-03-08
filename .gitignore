@@ -26,6 +26,7 @@
 !/data/16_scores_best/**
 !/data/17_submission_tuning/**
 !/data/12_predictions
+!/data/17_submission_tuning
 .idea
 /.snakemake/
 .env

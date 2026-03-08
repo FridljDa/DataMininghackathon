@@ -1,0 +1,5 @@
+approach,submission_path,n_predictions,n_buyers,avg_predictions_per_buyer,median_predictions_per_buyer,duplicate_rate,top_cluster_share,n_warm_buyers_submitted,n_cold_buyers_submitted,n_unknown_task_buyers_submitted,warm_buyer_share,cold_buyer_share,avg_predictions_per__warm_buyer,avg_predictions_per__cold_buyer
+lgbm_two_stage,data/14_submission/online/lgbm_two_stage/level2/submission.csv,14512,100,145.12,200.0,0.0,0.005168136714443219,48,52,0,0.48,0.52,85.66666666666667,200.0
+lgbm_v3_factorized,data/14_submission/online/lgbm_v3_factorized/level2/submission.csv,2465,100,24.65,29.0,0.0,0.034482758620689655,48,52,0,0.48,0.52,19.9375,29.0
+pass_through,data/14_submission/online/pass_through/level2/submission.csv,29400,100,294.0,200.0,0.0,0.0033673469387755102,48,52,0,0.48,0.52,395.8333333333333,200.0
+phase3_repro,data/14_submission/online/phase3_repro/level2/submission.csv,29400,100,294.0,200.0,0.0,0.0032312925170068026,48,52,0,0.48,0.52,395.8333333333333,200.0

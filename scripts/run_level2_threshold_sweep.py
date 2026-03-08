@@ -29,9 +29,16 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Per-level sweep specs. Keep only the pending level-2 trials to avoid rerunning
-# already-tested configs close to submission deadline.
+# Per-level sweep specs. Keep only the remaining high-value trials close to the
+# submission deadline: pending level-2 thresholds plus the next level-1
+# threshold checks on the best-performing 400/200 base.
 LEVEL_SPECS = {
+    "1": {
+        "thresholds": [-0.02, -0.05],
+        "top_k_per_buyer": [400],
+        "cold_start_top_k": [200],
+        "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
+    },
     "2": {
         "thresholds": [-0.03, -0.05],
         "top_k_per_buyer": [400],
@@ -140,7 +147,7 @@ def main() -> None:
 
     trial_index = 0
     if args.dry_run:
-        for level in ("2",):
+        for level in ("2", "1"):
             spec = LEVEL_SPECS[level]
             print(f"Level {level} trials (run-scoped, online submit + archive):")
             for thresh in spec["thresholds"]:
@@ -155,7 +162,7 @@ def main() -> None:
                         print(f"    -> data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/")
         return
 
-    for level in ("2",):
+    for level in ("2", "1"):
         spec = LEVEL_SPECS[level]
         for thresh in spec["thresholds"]:
             for top_k in spec["top_k_per_buyer"]:

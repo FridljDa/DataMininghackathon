@@ -648,6 +648,8 @@ rule submit_to_portal:
     output:
         summary = LIVE_SUMMARY_TEMP_PATTERN,
         sentinel = SUBMITTED_SENTINEL_PATTERN,
+    resources:
+        portal_submit_slot=1,
     wildcard_constraints:
         approach = APPROACH_RE,
         level = LEVEL_RE,

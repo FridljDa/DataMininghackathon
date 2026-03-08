@@ -11,7 +11,7 @@ uv sync
 uv run snakemake --cores 1
 ```
 
-That command runs the default `all` target in `Snakefile`. The pipeline runs every approach listed in `modelling.enabled_approaches` (e.g. baseline, lgbm_two_stage, pass_through), producing scores, portfolio, submission, and scores per approach; see `docs/modelling.md` for the candidate set and selection policy.
+That command runs the default `all` target in `Snakefile`. The pipeline runs every approach listed in `modelling.enabled_approaches` (e.g. baseline, lgbm_two_stage, pass_through), producing scores, portfolio, submission, and scores per approach; see `docs/modelling.md` for the candidate set and selection policy. If you run with `--cores` greater than 1 and the target includes online submissions, add `--resources portal_submit_slot=1` so only one portal submission runs at a time (e.g. `uv run snakemake --cores 4 --resources portal_submit_slot=1`).
 
 To force generate everything, run 
 ```bash
@@ -57,7 +57,7 @@ To see which commit achieved a given score, open the run folder’s `metadata.js
 
 ## Submit Predictions
 
-The pipeline produces one submission per enabled approach under `data/14_submission/online/<approach>/submission.csv`. The default `snakemake` target uploads each of these to the Unite evaluator (challenge 2). To upload a specific approach manually:
+The pipeline produces one submission per enabled approach under `data/14_submission/online/<approach>/submission.csv`. The default `snakemake` target uploads each of these to the Unite evaluator (challenge 2). When running Snakemake targets that include `submit_to_portal` with `--cores` > 1, pass `--resources portal_submit_slot=1` so submissions run one at a time (portal uploads cannot be parallelized). To upload a specific approach manually:
 
 ```bash
 # Challenge 1 (parquet) — if your pipeline produces parquet

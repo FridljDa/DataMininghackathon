@@ -4,9 +4,9 @@ suggested_features:
 - avg_monthly_orders_pair_tenure
 - avg_monthly_spend_pair_tenure
 - avg_price_per_unit
-- buyer_tenure_months
 - delta_trend
 - eclass_n_buyers_global
+- effective_lookback_months
 - first_order_year
 - history_cohort
 - last_order_month_cos
@@ -60,24 +60,6 @@ meta:
     reason: numeric n_unique=1 < 2
   - feature: has_secondary_nace
     reason: numeric n_unique=1 < 2
-  - feature: pair_tenure_months
-    reason: redundant with first_order_year
-  - feature: w_e_b
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: avg_monthly_spend_buyer_tenure
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: avg_monthly_spend_in_lookback
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: lookback_spend
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: historical_purchase_value_total
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: historical_purchase_value_sqrt
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: avg_spend_per_order
-    reason: redundant with avg_monthly_spend_pair_tenure
-  - feature: s_median_line
-    reason: redundant with avg_monthly_spend_pair_tenure
   - feature: has_multi_year_history
     reason: redundant with active_year_span
   - feature: m_observed
@@ -98,8 +80,22 @@ meta:
     reason: redundant with active_year_span
   - feature: order_value_cv
     reason: redundant with active_year_span
-  - feature: effective_lookback_months
-    reason: redundant with buyer_tenure_months
+  - feature: w_e_b
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: avg_monthly_spend_in_lookback
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: avg_monthly_spend_buyer_tenure
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: lookback_spend
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: historical_purchase_value_total
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: historical_purchase_value_sqrt
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: avg_spend_per_order
+    reason: redundant with avg_monthly_spend_pair_tenure
+  - feature: s_median_line
+    reason: redundant with avg_monthly_spend_pair_tenure
   - feature: years_since_last_order
     reason: redundant with last_order_year
   - feature: delta_recency
@@ -108,3 +104,7 @@ meta:
     reason: redundant with last_order_year
   - feature: n_distinct_manufacturers
     reason: redundant with top_manufacturer_share
+  - feature: buyer_tenure_months
+    reason: redundant with effective_lookback_months
+  - feature: pair_tenure_months
+    reason: redundant with first_order_year

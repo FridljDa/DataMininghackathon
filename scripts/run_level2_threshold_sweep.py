@@ -1,5 +1,6 @@
 """
-Short deadline sweep for lgbm_two_stage: level 2 only, pending thresholds only.
+Short deadline sweep for lgbm_two_stage: pending level-2 thresholds plus
+aggressive level-1 warm-cap expansion.
 
 Uses the run-scoped Snakemake pipeline: each trial gets a generated run_id, builds
 predictions/portfolio/submission under data/12, 13, 14/.../level{level}/{run_id}/,
@@ -9,10 +10,9 @@ reusing that upstream metadata. No flat sweep_level1/ or sweep_level2/ copies; a
 are in the main run archive. The script writes a temporary config per trial and never
 rewrites config.yaml.
 
-Only runs the remaining level-2 trials that have not already been covered by the
-online tuning history: thresholds below the tested `0.0` baseline while keeping
-the current best-performing level-2 shape (`top_k_per_buyer=400`,
-`cold_start_top_k=200`, relaxed guardrails).
+Runs the remaining high-value deadline trials as an explicit ordered list of
+per-run configs. This avoids accidental cartesian-product expansion and makes
+the last-hour run plan easy to edit safely.
 
 Usage (from repo root):
   uv run scripts/run_level2_threshold_sweep.py --dry-run
@@ -29,23 +29,37 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Per-level sweep specs. Keep only the remaining high-value trials close to the
-# submission deadline: pending level-2 thresholds plus the next level-1
-# threshold checks on the best-performing 400/200 base.
-LEVEL_SPECS = {
-    "1": {
-        "thresholds": [-0.02, -0.05],
-        "top_k_per_buyer": [400],
-        "cold_start_top_k": [200],
+# Explicit ordered trial plan for the deadline push.
+TRIAL_SPECS = [
+    {
+        "level": "2",
+        "score_threshold": -0.03,
+        "top_k_per_buyer": 400,
+        "cold_start_top_k": 200,
         "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
     },
-    "2": {
-        "thresholds": [-0.03, -0.05],
-        "top_k_per_buyer": [400],
-        "cold_start_top_k": [200],
+    {
+        "level": "2",
+        "score_threshold": -0.05,
+        "top_k_per_buyer": 400,
+        "cold_start_top_k": 200,
         "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
     },
-}
+    {
+        "level": "1",
+        "score_threshold": 0.0,
+        "top_k_per_buyer": 800,
+        "cold_start_top_k": 200,
+        "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
+    },
+    {
+        "level": "1",
+        "score_threshold": 0.0,
+        "top_k_per_buyer": 1000,
+        "cold_start_top_k": 200,
+        "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
+    },
+]
 
 
 def _make_run_id(trial_index: int) -> str:
@@ -147,70 +161,80 @@ def main() -> None:
 
     trial_index = 0
     if args.dry_run:
-        for level in ("2", "1"):
-            spec = LEVEL_SPECS[level]
-            print(f"Level {level} trials (run-scoped, online submit + archive):")
-            for thresh in spec["thresholds"]:
-                for top_k in spec["top_k_per_buyer"]:
-                    for cold in spec["cold_start_top_k"]:
-                        run_id = _make_run_id(trial_index)
-                        trial_index += 1
-                        print(
-                            f"  run_id={run_id} score_threshold={thresh} top_k_per_buyer={top_k} "
-                            f"cold_start_top_k={cold} guardrails={spec['guardrails']}"
-                        )
-                        print(f"    -> data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/")
+        for trial in TRIAL_SPECS:
+            level = str(trial["level"])
+            score_threshold = float(trial["score_threshold"])
+            top_k = int(trial["top_k_per_buyer"])
+            cold_start_top_k = int(trial["cold_start_top_k"])
+            run_id = _make_run_id(trial_index)
+            trial_index += 1
+            print(
+                f"Level {level} run_id={run_id} score_threshold={score_threshold} "
+                f"top_k_per_buyer={top_k} cold_start_top_k={cold_start_top_k} "
+                f"guardrails={trial['guardrails']}"
+            )
+            print(f"  -> data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/")
         return
 
-    for level in ("2", "1"):
-        spec = LEVEL_SPECS[level]
-        for thresh in spec["thresholds"]:
-            for top_k in spec["top_k_per_buyer"]:
-                for cold_start_top_k in spec["cold_start_top_k"]:
-                    run_id = _make_run_id(trial_index)
-                    trial_index += 1
+    last_level: str | None = None
+    for trial in TRIAL_SPECS:
+        level = str(trial["level"])
+        score_threshold = float(trial["score_threshold"])
+        top_k = int(trial["top_k_per_buyer"])
+        cold_start_top_k = int(trial["cold_start_top_k"])
+        run_id = _make_run_id(trial_index)
+        trial_index += 1
 
-                    trial_config = _build_trial_config(
-                        base_config,
-                        level,
-                        {
-                            "score_threshold": float(thresh),
-                            "top_k_per_buyer": int(top_k),
-                            "guardrails": dict(spec["guardrails"]),
-                        },
-                        {"cold_start_top_k": int(cold_start_top_k)},
-                        original_selection,
-                        original_submission,
-                    )
+        if last_level is not None and level != last_level:
+            print(f"Done level {last_level}.")
 
-                    archive_sentinel = Path(f"data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/.archived")
-                    print(f"Level{level} run_id={run_id} threshold={thresh}, top_k={top_k}, cold_start_top_k={cold_start_top_k} ...")
+        trial_config = _build_trial_config(
+            base_config,
+            level,
+            {
+                "score_threshold": score_threshold,
+                "top_k_per_buyer": top_k,
+                "guardrails": dict(trial["guardrails"]),
+            },
+            {"cold_start_top_k": cold_start_top_k},
+            original_selection,
+            original_submission,
+        )
 
-                    with tempfile.NamedTemporaryFile(
-                        mode="w",
-                        suffix=".yaml",
-                        delete=False,
-                        prefix="sweep_config_",
-                    ) as tmp:
-                        yaml.safe_dump(trial_config, tmp, default_flow_style=False, allow_unicode=True, sort_keys=False)
-                        tmp.flush()
-                        tmp_path = Path(tmp.name)
-                    try:
-                        cmd = [
-                            "uv", "run", "snakemake",
-                            str(archive_sentinel),
-                            "--configfile", str(tmp_path),
-                            "--cores", str(args.cores),
-                        ]
-                        rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
-                        if rc != 0:
-                            print(f"Snakemake failed for level{level} run_id={run_id}", file=sys.stderr)
-                            sys.exit(rc)
-                        print(f"  -> {archive_sentinel.parent}")
-                    finally:
-                        tmp_path.unlink(missing_ok=True)
+        archive_sentinel = Path(f"data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/.archived")
+        print(
+            f"Level{level} run_id={run_id} threshold={score_threshold}, "
+            f"top_k={top_k}, cold_start_top_k={cold_start_top_k} ..."
+        )
 
-        print(f"Done level {level}.")
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".yaml",
+            delete=False,
+            prefix="sweep_config_",
+        ) as tmp:
+            yaml.safe_dump(trial_config, tmp, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            tmp.flush()
+            tmp_path = Path(tmp.name)
+        try:
+            cmd = [
+                "uv", "run", "snakemake",
+                str(archive_sentinel),
+                "--configfile", str(tmp_path),
+                "--cores", str(args.cores),
+            ]
+            rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
+            if rc != 0:
+                print(f"Snakemake failed for level{level} run_id={run_id}", file=sys.stderr)
+                sys.exit(rc)
+            print(f"  -> {archive_sentinel.parent}")
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        last_level = level
+
+    if last_level is not None:
+        print(f"Done level {last_level}.")
 
     print("Sweep complete.")
 

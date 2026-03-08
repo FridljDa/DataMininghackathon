@@ -1,0 +1,53 @@
+{
+  "commit": "e766ad7ca22cb5a5a6167fac674e3fefe31aacfb",
+  "branch": "main",
+  "dirty": true,
+  "created_at": "2026-03-08T08:34:46Z",
+  "approach": "lgbm_two_stage",
+  "level": 2,
+  "config": {
+    "train_end": "2025-12-31",
+    "lookback_months": 60,
+    "score_threshold": -0.05,
+    "top_k_per_buyer": 400,
+    "guardrails": {
+      "min_orders": 0,
+      "min_months": 1,
+      "high_spend": 0.0,
+      "min_avg_monthly_spend": 0.0
+    },
+    "cold_start_top_k": 200,
+    "selected_features": [
+      "CV_gap",
+      "avg_price_per_unit",
+      "avg_monthly_orders_pair_tenure",
+      "avg_monthly_spend_pair_tenure",
+      "avg_spend_per_order",
+      "buyer_tenure_months",
+      "delta_vs_expected_gap",
+      "first_order_year",
+      "is_overdue",
+      "last_order_month_cos",
+      "last_order_month_sin",
+      "last_order_quarter_cos",
+      "last_order_quarter_sin",
+      "log_employees",
+      "n_orders",
+      "historical_purchase_value_total",
+      "nace_2",
+      "nace_3",
+      "nace_code",
+      "nace_mismatch",
+      "nace_section",
+      "q4_share",
+      "rho_freq",
+      "secondary_nace_2",
+      "secondary_nace_code",
+      "years_since_last_order",
+      "top_manufacturer_share",
+      "n_distinct_manufacturers",
+      "eclass_n_buyers_global",
+      "avg_price_per_unit"
+    ]
+  }
+}

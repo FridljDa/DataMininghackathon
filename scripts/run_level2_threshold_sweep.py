@@ -1,14 +1,18 @@
 """
-Dual-level sweep for lgbm_two_stage: level 1 volume-seeking, level 2 ROI-focused.
+Short deadline sweep for lgbm_two_stage: level 2 only, pending thresholds only.
 
 Uses the run-scoped Snakemake pipeline: each trial gets a generated run_id, builds
 predictions/portfolio/submission under data/12, 13, 14/.../level{level}/{run_id}/,
-submits online, and archives to data/15_scores/online/runs/level{level}/{run_id}/.
-No flat sweep_level1/ or sweep_level2/ copies; all runs are in the main run archive.
-The script writes a temporary config per trial and never rewrites config.yaml.
+including a metadata.json sidecar (created at data/12, propagated through 13 and 14).
+Submits online and archives to data/15_scores/online/runs/level{level}/{approach}/{run_id}/,
+reusing that upstream metadata. No flat sweep_level1/ or sweep_level2/ copies; all runs
+are in the main run archive. The script writes a temporary config per trial and never
+rewrites config.yaml.
 
-Level 1: aggressive grid (score_threshold, top_k_per_buyer, cold_start_top_k).
-Level 2: smaller grid. Mode is forced to online so every trial goes through the portal.
+Only runs the remaining level-2 trials that have not already been covered by the
+online tuning history: thresholds below the tested `0.0` baseline while keeping
+the current best-performing level-2 shape (`top_k_per_buyer=400`,
+`cold_start_top_k=200`, relaxed guardrails).
 
 Usage (from repo root):
   uv run scripts/run_level2_threshold_sweep.py --dry-run
@@ -25,16 +29,11 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Per-level sweep specs. Keys are string level ids "1", "2".
+# Per-level sweep specs. Keep only the pending level-2 trials to avoid rerunning
+# already-tested configs close to submission deadline.
 LEVEL_SPECS = {
-    "1": {
-        "thresholds": [0.0, -0.02, -0.05],
-        "top_k_per_buyer": [400],
-        "cold_start_top_k": [50, 200],
-        "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
-    },
     "2": {
-        "thresholds": [0.0, -0.03, -0.05],
+        "thresholds": [-0.03, -0.05],
         "top_k_per_buyer": [400],
         "cold_start_top_k": [200],
         "guardrails": {"min_orders": 0, "min_months": 1, "high_spend": 0, "min_avg_monthly_spend": 0},
@@ -141,7 +140,7 @@ def main() -> None:
 
     trial_index = 0
     if args.dry_run:
-        for level in ("1", "2"):
+        for level in ("2",):
             spec = LEVEL_SPECS[level]
             print(f"Level {level} trials (run-scoped, online submit + archive):")
             for thresh in spec["thresholds"]:
@@ -156,7 +155,7 @@ def main() -> None:
                         print(f"    -> data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/")
         return
 
-    for level in ("1", "2"):
+    for level in ("2",):
         spec = LEVEL_SPECS[level]
         for thresh in spec["thresholds"]:
             for top_k in spec["top_k_per_buyer"]:

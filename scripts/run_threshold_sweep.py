@@ -1,10 +1,12 @@
 """
-Run one or all trials of the threshold/top_k sweep by patching config.yaml
-and running Snakemake from select_portfolio through merged submission.
+Run one or all trials of the threshold/top_k sweep by patching config and
+running Snakemake from select_portfolio through merged submission.
 
 Sweep matrix: score_threshold in (0.0, -0.01, -0.05, -0.10, -0.20),
 top_k_per_buyer in (150, 300, 400), level in (1, 2).
 One trial = one (level, threshold, top_k) combination.
+
+Uses a temporary config file per trial so the repo config.yaml is not modified.
 
 Usage:
   uv run scripts/run_threshold_sweep.py --dry-run           # list trials
@@ -15,8 +17,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import copy
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 # Sweep matrix (includes -0.03 for Next Optimism level2 sweep)
@@ -34,6 +38,17 @@ def _trials():
 
 def _trial_list():
     return list(_trials())
+
+
+def _normalized_selection_by_level(sel: dict) -> dict[str, dict]:
+    """Return selection by_level with only string keys '1' and '2'."""
+    by_level = sel.get("by_level") or {}
+    result: dict[str, dict] = {}
+    for key in ("1", "2"):
+        val = by_level.get(key) or (by_level.get(int(key)) if key.isdigit() else None)
+        if isinstance(val, dict):
+            result[key] = dict(val)
+    return result
 
 
 def main() -> None:
@@ -83,6 +98,7 @@ def main() -> None:
         sys.exit(1)
 
     level, score_threshold, top_k_per_buyer = trials[args.trial_index]
+    level_str = str(level)
     config_path = args.config.resolve()
     if not config_path.is_file():
         print(f"Config not found: {config_path}", file=sys.stderr)
@@ -95,38 +111,49 @@ def main() -> None:
         sys.exit(1)
 
     with config_path.open() as f:
-        config = yaml.safe_load(f)
+        base_config = yaml.safe_load(f)
 
-    sel = config.setdefault("modelling", {}).setdefault("selection", {})
-    by_level = sel.setdefault("by_level", {})
-    by_level[str(level)] = {
+    sel = base_config.setdefault("modelling", {}).setdefault("selection", {})
+    by_level = _normalized_selection_by_level(sel)
+    by_level[level_str] = {
         "score_threshold": float(score_threshold),
         "top_k_per_buyer": int(top_k_per_buyer),
-        "guardrails": sel.get("guardrails") or {},
+        "guardrails": dict(sel.get("guardrails") or {}),
     }
+    trial_config = copy.deepcopy(base_config)
+    trial_config["modelling"]["selection"]["by_level"] = by_level
 
-    with config_path.open("w") as f:
-        yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".yaml",
+        delete=False,
+        prefix="sweep_config_",
+    ) as tmp:
+        yaml.safe_dump(trial_config, tmp, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        tmp.flush()
+        tmp_path = Path(tmp.name)
 
-    # Run from select_portfolio through merge for this mode/approach/level
-    data_dir = Path("data")
-    portfolio = data_dir / "13_portfolio" / args.mode / args.approach / f"level{level}" / "portfolio.parquet"
-    submission = data_dir / "14_submission" / args.mode / args.approach / f"level{level}" / "submission.csv"
-    cmd = [
-        "snakemake",
-        str(portfolio),
-        str(submission),
-        "--configfile",
-        str(config_path),
-        "--cores",
-        "1",
-        "--resources",
-        "portal_submit_slot=1",
-    ]
-    print(f"Trial {args.trial_index}: level={level} threshold={score_threshold} top_k={top_k_per_buyer}")
-    print(" ".join(cmd))
-    rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
-    sys.exit(rc)
+    try:
+        data_dir = Path("data")
+        portfolio = data_dir / "13_portfolio" / args.mode / args.approach / f"level{level}" / "portfolio.parquet"
+        submission = data_dir / "14_submission" / args.mode / args.approach / f"level{level}" / "submission.csv"
+        cmd = [
+            "snakemake",
+            str(portfolio),
+            str(submission),
+            "--configfile",
+            str(tmp_path),
+            "--cores",
+            "1",
+            "--resources",
+            "portal_submit_slot=1",
+        ]
+        print(f"Trial {args.trial_index}: level={level} threshold={score_threshold} top_k={top_k_per_buyer}")
+        print(" ".join(cmd))
+        rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
+        sys.exit(rc)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

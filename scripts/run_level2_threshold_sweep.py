@@ -17,8 +17,10 @@ Usage (from repo root):
 from __future__ import annotations
 
 import argparse
+import copy
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -57,14 +59,11 @@ def _make_run_id(trial_index: int) -> str:
     return f"{ts}_{short_sha}_{trial_index}"
 
 
-def _get_by_level(config: dict, section: str) -> dict:
-    """Return by_level dict for section (modelling.selection or submission), normalizing keys to str."""
-    if section == "selection":
-        parent = config.get("modelling", {}).get("selection", {})
-    else:
-        parent = config.get("submission", {})
-    by_level = parent.get("by_level") or {}
-    result = {}
+def _normalized_by_level(by_level: dict | None) -> dict[str, dict]:
+    """Return by_level with only string keys '1' and '2', merging int and str sources."""
+    result: dict[str, dict] = {}
+    if not by_level:
+        return result
     for key in ("1", "2"):
         val = by_level.get(key) or (by_level.get(int(key)) if key.isdigit() else None)
         if isinstance(val, dict):
@@ -72,17 +71,42 @@ def _get_by_level(config: dict, section: str) -> dict:
     return result
 
 
-def _set_by_level(config: dict, section: str, level: str, value: dict | None) -> None:
-    """Set by_level[level] for section using string key level."""
+def _get_by_level(config: dict, section: str) -> dict[str, dict]:
+    """Return normalized by_level for section (modelling.selection or submission)."""
     if section == "selection":
-        parent = config.setdefault("modelling", {}).setdefault("selection", {})
+        parent = config.get("modelling", {}).get("selection", {})
     else:
-        parent = config.setdefault("submission", {})
-    by_level = parent.setdefault("by_level", {})
-    if value is not None:
-        by_level[level] = value
-    else:
-        by_level.pop(level, None)
+        parent = config.get("submission", {})
+    return _normalized_by_level(parent.get("by_level"))
+
+
+def _set_by_level_canonical(parent: dict, by_level: dict[str, dict]) -> None:
+    """Set parent['by_level'] to the given dict (string keys only). Replaces any existing by_level."""
+    parent["by_level"] = dict(by_level)
+
+
+def _build_trial_config(
+    base_config: dict,
+    level: str,
+    selection_overrides: dict,
+    submission_overrides: dict,
+    original_selection: dict[str, dict],
+    original_submission: dict[str, dict],
+) -> dict:
+    """Build a config dict for one trial: normalized by_level with trial overrides, other level restored."""
+    config = copy.deepcopy(base_config)
+    sel = config.setdefault("modelling", {}).setdefault("selection", {})
+    sub = config.setdefault("submission", {})
+
+    selection_by_level = dict(original_selection)
+    selection_by_level[level] = selection_overrides
+    _set_by_level_canonical(sel, selection_by_level)
+
+    submission_by_level = dict(original_submission)
+    submission_by_level[level] = submission_overrides
+    _set_by_level_canonical(sub, submission_by_level)
+
+    return config
 
 
 def main() -> None:
@@ -109,10 +133,10 @@ def main() -> None:
         sys.exit(1)
 
     with config_path.open() as f:
-        config = yaml.safe_load(f)
+        base_config = yaml.safe_load(f)
 
-    original_selection = _get_by_level(config, "selection")
-    original_submission = _get_by_level(config, "submission")
+    original_selection = _get_by_level(base_config, "selection")
+    original_submission = _get_by_level(base_config, "submission")
 
     trial_index = 0
     if args.dry_run:
@@ -139,69 +163,49 @@ def main() -> None:
                     run_id = _make_run_id(trial_index)
                     trial_index += 1
 
-                    _set_by_level(config, "selection", level, {
-                        "score_threshold": float(thresh),
-                        "top_k_per_buyer": int(top_k),
-                        "guardrails": dict(spec["guardrails"]),
-                    })
-                    _set_by_level(config, "submission", level, {"cold_start_top_k": int(cold_start_top_k)})
-                    if level == "1":
-                        _set_by_level(config, "selection", "2", original_selection.get("2"))
-                        _set_by_level(config, "submission", "2", original_submission.get("2"))
-                    else:
-                        _set_by_level(config, "selection", "1", original_selection.get("1"))
-                        _set_by_level(config, "submission", "1", original_submission.get("1"))
-
-                    with config_path.open("w") as f:
-                        yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                    trial_config = _build_trial_config(
+                        base_config,
+                        level,
+                        {
+                            "score_threshold": float(thresh),
+                            "top_k_per_buyer": int(top_k),
+                            "guardrails": dict(spec["guardrails"]),
+                        },
+                        {"cold_start_top_k": int(cold_start_top_k)},
+                        original_selection,
+                        original_submission,
+                    )
 
                     archive_sentinel = Path(f"data/15_scores/online/runs/level{level}/{args.approach}/{run_id}/.archived")
                     print(f"Level{level} run_id={run_id} threshold={thresh}, top_k={top_k}, cold_start_top_k={cold_start_top_k} ...")
-                    cmd = [
-                        "uv", "run", "snakemake",
-                        str(archive_sentinel),
-                        "--configfile", str(config_path),
-                        "--cores", str(args.cores),
-                    ]
-                    rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
-                    if rc != 0:
-                        print(f"Snakemake failed for level{level} run_id={run_id}", file=sys.stderr)
-                        _restore_all(config_path, config, original_selection, original_submission)
-                        sys.exit(rc)
-                    print(f"  -> {archive_sentinel.parent}")
 
-        _restore_all(config_path, config, original_selection, original_submission)
-        print(f"Done level {level}. Restored config by_level for both levels.")
+                    with tempfile.NamedTemporaryFile(
+                        mode="w",
+                        suffix=".yaml",
+                        delete=False,
+                        prefix="sweep_config_",
+                    ) as tmp:
+                        yaml.safe_dump(trial_config, tmp, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                        tmp.flush()
+                        tmp_path = Path(tmp.name)
+                    try:
+                        cmd = [
+                            "uv", "run", "snakemake",
+                            str(archive_sentinel),
+                            "--configfile", str(tmp_path),
+                            "--cores", str(args.cores),
+                        ]
+                        rc = subprocess.run(cmd, cwd=Path.cwd()).returncode
+                        if rc != 0:
+                            print(f"Snakemake failed for level{level} run_id={run_id}", file=sys.stderr)
+                            sys.exit(rc)
+                        print(f"  -> {archive_sentinel.parent}")
+                    finally:
+                        tmp_path.unlink(missing_ok=True)
+
+        print(f"Done level {level}.")
 
     print("Sweep complete.")
-
-
-def _restore_all(
-    config_path: Path,
-    config: dict,
-    original_selection: dict[str, dict],
-    original_submission: dict[str, dict],
-) -> None:
-    """Restore both levels' selection and submission by_level using string keys."""
-    sel = config.setdefault("modelling", {}).setdefault("selection", {})
-    by_level_sel = sel.setdefault("by_level", {})
-    for level in ("1", "2"):
-        val = original_selection.get(level)
-        if val:
-            by_level_sel[level] = val
-        else:
-            by_level_sel.pop(level, None)
-    sub = config.setdefault("submission", {})
-    by_level_sub = sub.setdefault("by_level", {})
-    for level in ("1", "2"):
-        val = original_submission.get(level)
-        if val:
-            by_level_sub[level] = val
-        else:
-            by_level_sub.pop(level, None)
-    with config_path.open("w") as f:
-        import yaml
-        yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
 if __name__ == "__main__":

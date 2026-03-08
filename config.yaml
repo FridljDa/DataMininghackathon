@@ -119,11 +119,23 @@ modelling:
       2:
         score_threshold: 0.0
         top_k_per_buyer: 400
+        guardrails: &id001
+          min_orders: 0
+          min_months: 1
+          high_spend: 0
+          min_avg_monthly_spend: 0
+      '1':
+        score_threshold: -0.02
+        top_k_per_buyer: 400
         guardrails:
           min_orders: 0
           min_months: 1
           high_spend: 0
           min_avg_monthly_spend: 0
+      '2':
+        score_threshold: 0.0
+        top_k_per_buyer: 400
+        guardrails: *id001
   features_per_sku:
     top_k_keys: 20
     top_k_values_per_key: 10
@@ -207,6 +219,10 @@ submission:
     1:
       cold_start_top_k: 50
     2:
+      cold_start_top_k: 200
+    '1':
+      cold_start_top_k: 50
+    '2':
       cold_start_top_k: 200
 portal_credentials:
   team: AAD

@@ -85,6 +85,7 @@ scoring_parameters:
 modelling:
   enabled_approaches:
   - lgbm_two_stage
+  - phase3_reproc
   enabled_levels:
   - 1
   - 2
@@ -101,28 +102,28 @@ modelling:
     min_lookback_spend: 0
   selection:
     score_threshold: 0.0
-    top_k_per_buyer: 400
+    top_k_per_buyer: 150
     guardrails:
-      min_orders: 0
-      min_months: 1
-      high_spend: 0
+      min_orders: 2
+      min_months: 2
+      high_spend: 200.0
       min_avg_monthly_spend: 0
     by_level:
       '1':
         score_threshold: 0.0
-        top_k_per_buyer: 400
+        top_k_per_buyer: 150
         guardrails:
-          min_orders: 0
-          min_months: 1
-          high_spend: 0
+          min_orders: 2
+          min_months: 2
+          high_spend: 200.0
           min_avg_monthly_spend: 0
       '2':
         score_threshold: 0.0
-        top_k_per_buyer: 400
+        top_k_per_buyer: 60
         guardrails:
-          min_orders: 0
-          min_months: 1
-          high_spend: 0
+          min_orders: 2
+          min_months: 2
+          high_spend: 200.0
           min_avg_monthly_spend: 0
   features_per_sku:
     top_k_keys: 20
@@ -202,12 +203,12 @@ modelling:
       use_monthly_lookback_rates: false
       recency_decay_days: 365.0
 submission:
-  cold_start_top_k: 200
+  cold_start_top_k: 50
   by_level:
     '1':
-      cold_start_top_k: 200
+      cold_start_top_k: 50
     '2':
-      cold_start_top_k: 200
+      cold_start_top_k: 30
 portal_credentials:
   team: AAD
   password: uniteaad
